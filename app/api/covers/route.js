@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { searchCover } from '@/lib/spotify';
-import { coverKey } from '@/lib/keys';
+import { coverKey, coverTargetFor } from '@/lib/keys';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 /** Keys accepted per call; the client asks again for whatever is still missing. */
 const MAX_KEYS = 80;
 /** Cache misses actually searched per call, bounding both latency and rate limit. */
-const MAX_SEARCH = 24;
+const MAX_SEARCH = 30;
 /** Searches in flight at once. */
 const CONCURRENCY = 6;
 
@@ -24,9 +24,13 @@ async function inBatches(items, size, fn) {
 /**
  * Resolve artwork for a batch of list rows.
  *
- * Cache first: imported history has no images, so the misses are filled by
- * name search and written back — nulls included, so an album Spotify cannot
- * find is not searched again on every scroll.
+ * Cache first: imported history has no images, so misses are filled by name
+ * search and written back — nulls included, so something Spotify cannot find
+ * is not searched again on every scroll.
+ *
+ * The client sends whole rows and the target is derived here through the same
+ * shared helper it uses, so the keys in the response are the keys it will
+ * look up.
  */
 export async function POST(req) {
   if (!currentUserId()) {
@@ -40,40 +44,35 @@ export async function POST(req) {
     return NextResponse.json({ error: 'bad json' }, { status: 400 });
   }
 
-  const kind = body?.mode === 'artists' ? 'artist' : 'album';
+  const mode = body?.mode === 'artists' ? 'artists' : 'tracks';
   if (!Array.isArray(body?.items)) {
     return NextResponse.json({ error: 'items must be an array' }, { status: 400 });
   }
 
-  // Artist rows share one key per artist; album rows key on the pair.
   const wanted = [...new Map(
     body.items
       .filter((i) => i?.artist)
-      .map((i) => {
-        const album = kind === 'artist' ? '' : (i.album || '');
-        return [coverKey(i.artist, album), { artist: i.artist, album }];
-      })
-  ).values()]
-    .filter((i) => kind === 'artist' || i.album)
-    .slice(0, MAX_KEYS);
+      .map((i) => coverTargetFor(mode, i))
+      .filter((t) => t.kind === 'artist' || t.name)
+      .map((t) => [coverKey(t), t])
+  ).values()].slice(0, MAX_KEYS);
 
   if (!wanted.length) return NextResponse.json({ covers: {}, pending: 0 });
 
   // Composite `in` isn't expressible through PostgREST, so filter by artist
-  // and narrow the pairs in memory — the over-fetch is a handful of rows.
+  // and narrow the rest in memory — the over-fetch is a handful of rows.
   const { data: cached, error } = await db
     .from('covers')
-    .select('artist, album, image_url')
-    .eq('kind', kind)
+    .select('kind, artist, name, image_url')
     .in('artist', [...new Set(wanted.map((w) => w.artist))]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const known = new Map((cached || []).map((c) => [coverKey(c.artist, c.album), c.image_url]));
+  const known = new Map((cached || []).map((c) => [coverKey(c), c.image_url]));
   const covers = {};
   const misses = [];
 
   for (const w of wanted) {
-    const key = coverKey(w.artist, w.album);
+    const key = coverKey(w);
     if (known.has(key)) covers[key] = known.get(key);
     else misses.push(w);
   }
@@ -81,11 +80,11 @@ export async function POST(req) {
   const searching = misses.slice(0, MAX_SEARCH);
   const found = await inBatches(searching, CONCURRENCY, async (w) => {
     try {
-      return { ...w, image_url: await searchCover(kind, w.artist, w.album) };
+      return { ...w, image_url: await searchCover(w.kind, w.artist, w.name) };
     } catch (e) {
       // Rate limit or a bad response: leave it unresolved rather than caching
-      // a null we'd never retry.
-      console.error('cover search failed', w.artist, w.album, e.message);
+      // a null we would never retry.
+      console.error('cover search failed', w.kind, w.artist, w.name, e.message);
       return null;
     }
   });
@@ -95,12 +94,13 @@ export async function POST(req) {
     const now = new Date().toISOString();
     const { error: upErr } = await db.from('covers').upsert(
       resolved.map((r) => ({
-        kind, artist: r.artist, album: r.album, image_url: r.image_url, fetched_at: now,
+        kind: r.kind, artist: r.artist, name: r.name,
+        image_url: r.image_url, fetched_at: now,
       })),
-      { onConflict: 'kind,artist,album' }
+      { onConflict: 'kind,artist,name' }
     );
     if (upErr) console.error('cover cache write failed', upErr.message);
-    for (const r of resolved) covers[coverKey(r.artist, r.album)] = r.image_url;
+    for (const r of resolved) covers[coverKey(r)] = r.image_url;
   }
 
   return NextResponse.json({ covers, pending: misses.length - searching.length });

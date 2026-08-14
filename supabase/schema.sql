@@ -36,13 +36,16 @@ create index if not exists plays_user_artist on plays (user_id, artist);
 -- Shared across users and immutable, so it lives here rather than on plays.
 -- Imported history carries no images; those are filled by searching Spotify
 -- once. Misses are stored as null so a fruitless search isn't repeated.
+--
+-- Tracks are keyed too, not just albums: YouTube history carries no album at
+-- all, so those rows have nothing to look up by and would go coverless.
 create table if not exists covers (
-  kind       text not null,               -- 'album' | 'artist'
+  kind       text not null,               -- 'album' | 'artist' | 'track'
   artist     text not null,
-  album      text not null default '',    -- '' for artist covers
+  name       text not null default '',    -- album, track, or '' for an artist
   image_url  text,
   fetched_at timestamptz not null default now(),
-  primary key (kind, artist, album)
+  primary key (kind, artist, name)
 );
 
 -- Row level security: everything goes through the service role on the
@@ -209,19 +212,20 @@ as $$
          or (p_source = 'spotify' and p.source <> 'youtube'));
 $$;
 
--- ---------- months that hold plays: powers the month picker ----------
--- Listening isn't continuous, so this lists the months that actually have
--- something rather than every month between the first and the last.
-create or replace function play_months(
+-- ---------- days that hold plays: powers the year/month/day picker ----------
+-- Listening isn't continuous, so this lists the days that actually have
+-- something. The client derives years and months from the same list, which is
+-- what stops the picker ever offering an empty date.
+create or replace function play_calendar(
   p_user uuid,
   p_tz text default 'Asia/Seoul',
   p_source text default 'all'
 )
-returns table (ym text, plays bigint)
+returns table (day date, plays bigint)
 language sql stable
 set search_path = public, pg_temp
 as $$
-  select to_char(p.played_at at time zone p_tz, 'YYYY-MM') as ym,
+  select (p.played_at at time zone p_tz)::date as day,
          count(*) as plays
   from plays p
   where p.user_id = p_user

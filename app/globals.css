@@ -1,9 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap');
 
+/* Light is the base; dark redefines only the tokens, so every rule below
+   works in both without being written twice. The [data-theme] attribute is
+   the explicit choice and wins over the system preference in both directions. */
 :root {
   --paper:#EFEDF4; --card:#FBFAFE; --ink:#191327; --mute:#6B6480;
   --line:#DCD7E8; --indigo:#4B3BFF; --pink:#FF5C93; --teal:#00A08C;
+  --shadow:rgba(25,19,39,.14); --overlay:rgba(25,19,39,.32);
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#131019; --card:#1C1826; --ink:#EFEDF4; --mute:#9A93AD;
+    --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
+    --shadow:rgba(0,0,0,.5); --overlay:rgba(0,0,0,.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:#131019; --card:#1C1826; --ink:#EFEDF4; --mute:#9A93AD;
+  --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
+  --shadow:rgba(0,0,0,.5); --overlay:rgba(0,0,0,.6);
+}
+
+html { color-scheme:light dark }
+:root[data-theme="light"] { color-scheme:light }
+:root[data-theme="dark"]  { color-scheme:dark }
 
 * { box-sizing:border-box; margin:0; padding:0 }
 html { -webkit-text-size-adjust:100% }
@@ -20,8 +42,8 @@ body {
 /* ---------- nav ---------- */
 .nav { display:flex; gap:6px; padding:14px 0 0; overflow-x:auto; scrollbar-width:none }
 .nav::-webkit-scrollbar { display:none }
-.nav .pill.act { background:var(--indigo); border-color:var(--indigo); color:#fff }
-.nav .pill.act:hover:not(:disabled) { color:#fff; opacity:.88 }
+.nav .pill.act { background:var(--indigo); border-color:var(--indigo); color:var(--card) }
+.nav .pill.act:hover:not(:disabled) { color:var(--card); opacity:.88 }
 .nav .pill.act:disabled { background:var(--mute); border-color:var(--mute); cursor:default }
 .nav .pill.danger { color:var(--pink) }
 .nav .pill.danger:hover { border-color:var(--pink); color:var(--pink) }
@@ -57,7 +79,7 @@ h1 em { font-style:normal; color:var(--indigo) }
 /* ---------- controls ---------- */
 .controls {
   position:sticky; top:0; z-index:5; background:var(--paper);
-  padding:12px 0 10px; box-shadow:0 8px 12px -8px rgba(25,19,39,.14);
+  padding:12px 0 10px; box-shadow:0 8px 12px -8px var(--shadow);
 }
 .row { display:flex; gap:6px; margin-bottom:6px; overflow-x:auto; scrollbar-width:none }
 .row::-webkit-scrollbar { display:none }
@@ -72,14 +94,38 @@ h1 em { font-style:normal; color:var(--indigo) }
   flex:0 0 26px; font-size:10px; letter-spacing:.08em; color:var(--mute);
   font-weight:600;
 }
-select.sel {
-  appearance:none; padding-right:26px;
-  background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),
-                   linear-gradient(135deg,var(--mute) 50%,transparent 50%);
-  background-position:calc(100% - 14px) 52%, calc(100% - 9px) 52%;
-  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+
+/* ---------- custom date picker ----------
+   Built out of the same pill vocabulary as everything else rather than a
+   native <select>, which cannot be styled consistently across platforms. */
+.pick { position:relative; flex:0 0 auto }
+.pick > button { min-width:74px; text-align:left }
+.pick > button::after {
+  content:''; display:inline-block; margin-left:6px; vertical-align:middle;
+  border:3.5px solid transparent; border-top-color:currentColor;
+  transform:translateY(2px);
 }
-select.sel:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+.pick[data-open=true] > button { border-color:var(--indigo); color:var(--ink) }
+
+.menu {
+  position:absolute; z-index:40; top:calc(100% + 5px); left:0;
+  min-width:100%; max-height:264px; overflow-y:auto;
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 10px 26px -10px var(--shadow); padding:5px;
+}
+.menu button {
+  display:flex; justify-content:space-between; gap:12px; align-items:baseline;
+  width:100%; font:inherit; font-size:13px; white-space:nowrap;
+  padding:7px 10px; border:none; border-radius:8px;
+  background:none; color:var(--ink); cursor:pointer; text-align:left;
+}
+.menu button:hover { background:var(--paper) }
+.menu button[aria-selected=true] { background:var(--indigo); color:var(--card); font-weight:600 }
+.menu button em { font-style:normal; font-size:11px; color:var(--mute) }
+.menu button[aria-selected=true] em { color:var(--card); opacity:.8 }
+.menu button:focus-visible { outline:2px solid var(--pink); outline-offset:-2px }
+
+.scrim { position:fixed; inset:0; z-index:30; background:transparent; border:none }
 .picked {
   flex:0 0 auto; align-self:center; font-size:12px;
   font-weight:600; color:var(--indigo); white-space:nowrap;
@@ -93,8 +139,8 @@ button.pill, a.pill {
   transition:background .12s, color .12s, border-color .12s;
 }
 button.pill:hover, a.pill:hover { border-color:var(--indigo); color:var(--ink) }
-button.pill[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:#fff }
-.row.sorts button.pill[aria-pressed=true] { background:var(--indigo); border-color:var(--indigo) }
+button.pill[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:var(--paper) }
+.row.sorts button.pill[aria-pressed=true] { background:var(--indigo); border-color:var(--indigo); color:var(--card) }
 button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
 
 /* ---------- list ---------- */
@@ -177,7 +223,7 @@ ol.dual .strip { height:11px; margin-top:4px }
 .btn {
   display:inline-block; font:inherit; font-weight:600; font-size:14px;
   padding:11px 20px; border:none; border-radius:999px;
-  background:var(--indigo); color:#fff; cursor:pointer; text-decoration:none;
+  background:var(--indigo); color:var(--card); cursor:pointer; text-decoration:none;
 }
 .btn:disabled { background:var(--mute); cursor:default }
 .btn.ghost { background:transparent; color:var(--indigo); border:1.5px solid var(--indigo) }

@@ -10,17 +10,6 @@ const SORTS = [
   ['weeks', '들은 주', '주'],
   ['minutes', '들은 시간', '분'],
 ];
-const PERIODS = [
-  ['today', '오늘'],
-  ['yday', '어제'],
-  ['week', '이번주'],
-  ['lastweek', '지난주'],
-  ['month', '이번달'],
-  ['d30', '30일'],
-  ['d90', '90일'],
-  ['year', '올해'],
-  ['all', '전체'],
-];
 const VIZ = [['count', '횟수'], ['span', '기간'], ['both', '둘 다']];
 const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube']];
 
@@ -32,9 +21,8 @@ const FETCH_LIMIT = 5000;
 const COVER_BATCH = 60;
 
 const DAY = 864e5;
-/* Ranking is reckoned in Korean time, so the windows have to be too — a
-   UTC "today" would cut the day at 09:00 local. KST has no DST, so a fixed
-   offset is exact. */
+/* Ranking is reckoned in Korean time, so the windows have to be too. KST has
+   no DST, which is what makes a fixed offset exact rather than approximate. */
 const KST = 9 * 3600e3;
 
 const kstMidnight = (ts) => {
@@ -42,79 +30,36 @@ const kstMidnight = (ts) => {
   k.setUTCHours(0, 0, 0, 0);
   return k.getTime() - KST;
 };
-const kstWeekStart = (ts) => {           // weeks start Monday
-  const m = kstMidnight(ts);
-  const dow = new Date(m + KST).getUTCDay();   // 0 = Sunday
-  return m - ((dow + 6) % 7) * DAY;
-};
-const kstMonthShift = (ts, months) => {
-  const k = new Date(ts + KST);
-  return Date.UTC(k.getUTCFullYear(), k.getUTCMonth() + months, 1) - KST;
-};
-const kstYearShift = (ts, years) => {
-  const k = new Date(ts + KST);
-  return Date.UTC(k.getUTCFullYear() + years, 0, 1) - KST;
-};
-
-/** A specific calendar month, e.g. "2026-03", cut on Korean day boundaries. */
-const MONTH_PREFIX = 'm:';
-const monthLabel = (ym) => {
-  const [y, m] = ym.split('-');
-  return `${y}년 ${Number(m)}월`;
-};
-
 
 /**
- * Window for a period, plus the equivalent window right before it so the list
- * can show movement. "전체" has no before, so it gets none.
+ * The selected window, plus the equivalent one right before it so the list can
+ * show movement. `sel` is {y, m, d} with the narrower fields optional: a year
+ * alone means the whole year, a year and month the whole month, and null means
+ * all of history.
  */
-function rangeFor(period) {
-  const now = Date.now();
-  const midnight = kstMidnight(now);
+function rangeFor(sel) {
   const iso = (ms) => new Date(ms).toISOString();
   const win = (a, b, pa, pb) => ({
     from: iso(a), to: iso(b),
     prevFrom: pa == null ? null : iso(pa),
     prevTo: pb == null ? null : iso(pb),
   });
+  const at = (y, m, d) => Date.UTC(y, m, d) - KST;
 
-  // A month picked from the calendar, compared against the month before it.
-  if (period.startsWith(MONTH_PREFIX)) {
-    const [y, m] = period.slice(MONTH_PREFIX.length).split('-').map(Number);
-    const start = Date.UTC(y, m - 1, 1) - KST;
-    return win(start, Date.UTC(y, m, 1) - KST, Date.UTC(y, m - 2, 1) - KST, start);
-  }
+  if (!sel?.y) return win(0, kstMidnight(Date.now()) + DAY, null, null);
+  const { y, m, d } = sel;
 
-  switch (period) {
-    case 'today':    return win(midnight, midnight + DAY, midnight - DAY, midnight);
-    case 'yday':     return win(midnight - DAY, midnight, midnight - 2 * DAY, midnight - DAY);
-    case 'week': {
-      const s = kstWeekStart(now);
-      return win(s, s + 7 * DAY, s - 7 * DAY, s);
-    }
-    case 'lastweek': {
-      const s = kstWeekStart(now) - 7 * DAY;
-      return win(s, s + 7 * DAY, s - 7 * DAY, s);
-    }
-    case 'month': {
-      const s = kstMonthShift(now, 0);
-      return win(s, kstMonthShift(now, 1), kstMonthShift(now, -1), s);
-    }
-    case 'd30': {
-      const s = midnight - 29 * DAY;
-      return win(s, midnight + DAY, s - 30 * DAY, s);
-    }
-    case 'd90': {
-      const s = midnight - 89 * DAY;
-      return win(s, midnight + DAY, s - 90 * DAY, s);
-    }
-    case 'year': {
-      const s = kstYearShift(now, 0);
-      return win(s, midnight + DAY, kstYearShift(now, -1), s);
-    }
-    default:         return win(0, midnight + DAY, null, null);
-  }
+  if (m == null) return win(at(y, 0, 1), at(y + 1, 0, 1), at(y - 1, 0, 1), at(y, 0, 1));
+  if (d == null) return win(at(y, m - 1, 1), at(y, m, 1), at(y, m - 2, 1), at(y, m - 1, 1));
+  return win(at(y, m - 1, d), at(y, m - 1, d + 1), at(y, m - 1, d - 1), at(y, m - 1, d));
 }
+
+const selLabel = (sel) => {
+  if (!sel?.y) return '전체 기간';
+  if (sel.m == null) return `${sel.y}년`;
+  if (sel.d == null) return `${sel.y}년 ${sel.m}월`;
+  return `${sel.y}년 ${sel.m}월 ${sel.d}일`;
+};
 
 function fmt(value, key) {
   const n = Number(value);
@@ -135,6 +80,49 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString('ko-KR');
 }
 
+/**
+ * A dropdown built from the same pill vocabulary as the rest of the controls.
+ * A native <select> can't be styled to match across platforms, and this list
+ * also has to carry a play count beside each option.
+ */
+function Picker({ value, label, options, onChange, disabled }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+
+  return (
+    <>
+      {open && (
+        <button className="scrim" aria-hidden="true" tabIndex={-1} onClick={() => setOpen(false)} />
+      )}
+      <div className="pick" data-open={open}>
+        <button
+          className="pill"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {label}
+        </button>
+        {open && (
+          <div className="menu" role="listbox">
+            {options.map((o) => (
+              <button
+                key={String(o.value)}
+                role="option"
+                aria-selected={o.value === value}
+                onClick={() => { onChange(o.value); setOpen(false); }}
+              >
+                <span>{o.label}</span>
+                {o.count != null && <em>{Number(o.count).toLocaleString()}</em>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 
 /**
  * How long an item stayed in rotation, drawn against the whole range. A short
@@ -174,11 +162,12 @@ function Delta({ value }) {
 }
 
 export default function Dashboard() {
-  const [period, setPeriod] = useState('all');
+  const [sel, setSel] = useState(null);          // null = all time
   const [mode, setMode] = useState('tracks');
   const [sort, setSort] = useState('plays');
   const [viz, setViz] = useState('count');
   const [src, setSrc] = useState('all');
+  const [theme, setTheme] = useState('light');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -186,28 +175,77 @@ export default function Dashboard() {
   const [syncMsg, setSyncMsg] = useState(null);
   const [visible, setVisible] = useState(PAGE);
   const [covers, setCovers] = useState({});
-  const [months, setMonths] = useState([]);
+  const [calendar, setCalendar] = useState([]);
 
-  // The month list doesn't depend on the selected period, so hold onto it
-  // instead of letting the picker blink empty on every reload. It does depend
-  // on the source, so an empty list must still clear it — data is null while
-  // loading, which is what keeps the blink away.
+  // The theme is applied before paint by a script in the layout; this only
+  // reads back what it decided, so the toggle starts on the right label.
   useEffect(() => {
-    if (data?.months) setMonths(data.months);
-  }, [data]);
+    setTheme(document.documentElement.dataset.theme
+      || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch {}
+  }
+
+  // The calendar doesn't depend on the selected window, so hold onto it rather
+  // than letting the pickers blink empty on every reload. It does depend on the
+  // source, so an empty list must still clear it — data is null while loading,
+  // which is what keeps the blink away.
+  useEffect(() => { if (data?.calendar) setCalendar(data.calendar); }, [data]);
 
   // Any change to what's listed or how it's ordered starts the list over.
-  useEffect(() => { setVisible(PAGE); }, [period, mode, sort, src]);
+  useEffect(() => { setVisible(PAGE); }, [sel, mode, sort, src]);
+
+  /* ---- picker options, derived from days that actually hold plays ---- */
+  const years = useMemo(() => {
+    const m = new Map();
+    for (const c of calendar) {
+      const y = Number(c.day.slice(0, 4));
+      m.set(y, (m.get(y) || 0) + Number(c.plays));
+    }
+    return [...m].sort((a, b) => b[0] - a[0])
+      .map(([y, n]) => ({ value: y, label: `${y}년`, count: n }));
+  }, [calendar]);
+
+  const months = useMemo(() => {
+    if (!sel?.y) return [];
+    const m = new Map();
+    for (const c of calendar) {
+      if (Number(c.day.slice(0, 4)) !== sel.y) continue;
+      const mo = Number(c.day.slice(5, 7));
+      m.set(mo, (m.get(mo) || 0) + Number(c.plays));
+    }
+    return [
+      { value: null, label: '연 전체' },
+      ...[...m].sort((a, b) => b[0] - a[0])
+        .map(([mo, n]) => ({ value: mo, label: `${mo}월`, count: n })),
+    ];
+  }, [calendar, sel?.y]);
+
+  const days = useMemo(() => {
+    if (!sel?.y || sel.m == null) return [];
+    const out = [];
+    for (const c of calendar) {
+      if (Number(c.day.slice(0, 4)) !== sel.y || Number(c.day.slice(5, 7)) !== sel.m) continue;
+      const d = Number(c.day.slice(8, 10));
+      out.push({ value: d, label: `${d}일`, count: Number(c.plays) });
+    }
+    return [{ value: null, label: '월 전체' }, ...out.sort((a, b) => b.value - a.value)];
+  }, [calendar, sel?.y, sel?.m]);
 
   const fetchStats = useCallback(async (signal) => {
-    const { from, to, prevFrom, prevTo } = rangeFor(period);
+    const { from, to, prevFrom, prevTo } = rangeFor(sel);
     const qs = new URLSearchParams({ mode, from, to, limit: String(FETCH_LIMIT), source: src });
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [period, mode, src]);
+  }, [sel, mode, src]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -218,9 +256,7 @@ export default function Dashboard() {
       .catch((e) => {
         if (e.name !== 'AbortError') setError(e.message || '통계를 불러오지 못했습니다.');
       })
-      .finally(() => {
-        if (!ctl.signal.aborted) setLoading(false);
-      });
+      .finally(() => { if (!ctl.signal.aborted) setLoading(false); });
     return () => ctl.abort();
   }, [fetchStats]);
 
@@ -261,11 +297,10 @@ export default function Dashboard() {
   }, [data, cmp]);
 
   // Fetch artwork for rows on screen, a batch at a time. Covers are cached
-  // server-side, so this settles quickly and stays quiet on later visits.
+  // server-side and keys carry their kind, so this settles quickly and nothing
+  // has to be discarded when the mode changes.
   const shown = useMemo(() => rows.slice(0, visible), [rows, visible]);
   const inFlight = useRef(false);
-
-  useEffect(() => { setCovers({}); }, [mode]);
 
   useEffect(() => {
     if (inFlight.current || !shown.length) return;
@@ -275,7 +310,7 @@ export default function Dashboard() {
       const k = coverKeyFor(mode, r);
       if (k in covers || seen.has(k)) continue;
       seen.add(k);
-      missing.push({ artist: r.artist, album: r.album });
+      missing.push({ artist: r.artist, album: r.album, track: r.track });
       if (missing.length >= COVER_BATCH) break;
     }
     if (!missing.length) return;
@@ -290,8 +325,8 @@ export default function Dashboard() {
       .then((r) => r.json())
       .then((json) => {
         if (cancelled || !json?.covers) return;
-        // Record every key asked for, so an unresolved one isn't re-requested
-        // in a loop; a later visit picks it up from the server cache.
+        // Record every key asked for, so an unresolved one isn't requested in a
+        // loop; a later visit picks it up from the server cache.
         const merged = { ...json.covers };
         for (const m of missing) {
           const k = coverKeyFor(mode, m);
@@ -318,6 +353,9 @@ export default function Dashboard() {
         <a className="pill" href="/import">가져오기</a>
         <button className="pill act" onClick={refresh} disabled={syncing}>
           {syncing ? '갱신 중…' : '지금 갱신'}
+        </button>
+        <button className="pill" onClick={toggleTheme} aria-label="화면 밝기 전환">
+          {theme === 'dark' ? '라이트' : '다크'}
         </button>
         <a className="pill danger" href="/api/auth/logout">로그아웃</a>
       </nav>
@@ -350,31 +388,28 @@ export default function Dashboard() {
         <div className="grp">
           <span className="lbl">기간</span>
           <div className="row">
-            {PERIODS.map(([v, label]) => (
-              <button key={v} className="pill" aria-pressed={period === v} onClick={() => setPeriod(v)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grp">
-          <span className="lbl">달</span>
-          <div className="row">
-            <select
-              className="pill sel"
-              value={period.startsWith(MONTH_PREFIX) ? period : ''}
-              onChange={(e) => e.target.value && setPeriod(e.target.value)}
-            >
-              <option value="">월 선택…</option>
-              {months.map(({ ym, plays }) => (
-                <option key={ym} value={MONTH_PREFIX + ym}>
-                  {monthLabel(ym)} ({Number(plays).toLocaleString()}회)
-                </option>
-              ))}
-            </select>
-            {period.startsWith(MONTH_PREFIX) && (
-              <span className="picked">{monthLabel(period.slice(MONTH_PREFIX.length))} 통계</span>
-            )}
+            <button className="pill" aria-pressed={!sel} onClick={() => setSel(null)}>전체</button>
+            <Picker
+              value={sel?.y ?? null}
+              label={sel?.y ? `${sel.y}년` : '연도'}
+              options={years}
+              onChange={(y) => setSel({ y, m: null, d: null })}
+            />
+            <Picker
+              value={sel?.m ?? null}
+              label={sel?.m ? `${sel.m}월` : '월'}
+              options={months}
+              disabled={!sel?.y}
+              onChange={(m) => setSel((p) => ({ ...p, m, d: null }))}
+            />
+            <Picker
+              value={sel?.d ?? null}
+              label={sel?.d ? `${sel.d}일` : '일'}
+              options={days}
+              disabled={!sel?.y || sel.m == null}
+              onChange={(d) => setSel((p) => ({ ...p, d }))}
+            />
+            <span className="picked">{selLabel(sel)}</span>
           </div>
         </div>
         <div className="grp">

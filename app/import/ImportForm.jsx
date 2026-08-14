@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { consume, flush } from '@/lib/youtube';
+import { blankStats, consume, flush } from '@/lib/youtube';
 
 const BATCH = 1500;
 
@@ -96,7 +96,8 @@ export default function ImportForm() {
     setProgress(0);
     setMessage('파일을 읽는 중…');
 
-    const opts = { includePlainYouTube: plainYouTube };
+    const stats = blankStats();
+    const opts = { includePlainYouTube: plainYouTube, stats };
     const reader = file.stream().getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
@@ -141,10 +142,18 @@ export default function ImportForm() {
     }
 
     if (!total && !found) {
+      // Say which stage discarded everything: "found nothing" alone gives no
+      // way to tell a wrong file from a format this parser no longer matches.
       setStatus('error');
       setMessage(
-        '음악 재생 기록을 찾지 못했습니다. Takeout에서 "YouTube 및 YouTube Music → 기록"을 받으셨는지, ' +
-        '일반 YouTube 영상만 있는 건 아닌지 확인해 주세요.'
+        stats.cells === 0
+          ? '이 파일에서 활동 기록을 찾지 못했습니다. Takeout의 watch-history.html이 맞는지 확인해 주세요.'
+          : `기록 ${stats.cells.toLocaleString()}개를 읽었지만 넣을 수 있는 음악이 없습니다. ` +
+            `(음악 아님 ${stats.product.toLocaleString()} · 링크 없음 ${stats.nolink.toLocaleString()} · ` +
+            `이름 없음 ${stats.noname.toLocaleString()} · 날짜 못읽음 ${stats.nodate.toLocaleString()}) ` +
+            (stats.product === stats.cells
+              ? 'YouTube Music 항목이 하나도 없습니다 — 위의 “일반 YouTube 영상도 포함”을 켜고 다시 시도해 보세요.'
+              : '')
       );
       return;
     }

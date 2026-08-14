@@ -85,12 +85,18 @@ alter table covers enable row level security;
 -- hours figure meaningless once most of the history came from YouTube; a
 -- typical track is assumed instead, so 40 plays reads as about 100 minutes.
 -- A round number on purpose: it is an assumption, not a measurement.
+-- Only imported history carries a measured duration. Live rows store the
+-- track's full length because recently-played never says how long it ran,
+-- which quietly assumes every play finished; YouTube Takeout gives nothing at
+-- all. Both unmeasured sources use the same 2.5 minutes a play, so 40 plays
+-- reads as about 100 minutes. A round number on purpose: it is an assumption,
+-- not a measurement, and more precision would only look like more truth.
 create or replace function play_ms(p_ms integer, p_source text)
 returns integer
 language sql immutable
 set search_path = public, pg_temp
 as $$
-  select case when p_source = 'youtube' then 150000 else coalesce(p_ms, 0) end;
+  select case when p_source = 'import' then coalesce(p_ms, 0) else 150000 end;
 $$;
 
 -- ---------- title normalisation ----------
@@ -159,7 +165,8 @@ create or replace function top_items(
   p_mode text default 'tracks',
   p_tz   text default 'Asia/Seoul',
   p_limit int default 250,
-  p_source text default 'all'
+  p_source text default 'all',
+  p_days boolean default false
 )
 returns table (
   artist   text,
@@ -170,7 +177,8 @@ returns table (
   weeks    bigint,
   minutes  bigint,
   first_at timestamptz,
-  last_at  timestamptz
+  last_at  timestamptz,
+  day_nums integer[]
 )
 language sql stable
 -- search_path is pinned so the function always resolves `plays` in this
@@ -191,7 +199,13 @@ as $$
     count(distinct to_char(p.played_at at time zone p_tz, 'IYYY-IW')) as weeks,
     (sum(play_ms(p.ms_played, p.source)) / 60000)::bigint   as minutes,
     min(p.played_at)                                        as first_at,
-    max(p.played_at)                                        as last_at
+    max(p.played_at)                                        as last_at,
+    -- The days an item actually played. Drawn from the endpoints alone the
+    -- span strip fills solid and hides every gap. Only one graph mode needs
+    -- it and it is the largest thing in the payload, so it is opt-in.
+    case when p_days then
+      array_agg(distinct ((p.played_at at time zone p_tz)::date - date '1970-01-01'))
+    end                                                     as day_nums
   from plays p
   where p.user_id = p_user
     and p.played_at >= p_from

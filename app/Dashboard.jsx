@@ -33,11 +33,23 @@ const kstMidnight = (ts) => {
   return k.getTime() - KST;
 };
 
+/** Days in a Gregorian month. */
+const monthDays = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+/** Weeks are counted within the month: 1st-7th, 8th-14th, and so on. */
+const weekSpan = (y, m, w) => {
+  const start = (w - 1) * 7 + 1;
+  return [start, Math.min(w * 7, monthDays(y, m))];
+};
+const weekCount = (y, m) => Math.ceil(monthDays(y, m) / 7);
+const WEEK_LABELS = ['첫째주', '둘째주', '셋째주', '넷째주', '다섯째주'];
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
 /**
  * The selected window, plus the equivalent one right before it so the list can
- * show movement. `sel` is {y, m, d} with the narrower fields optional: a year
- * alone means the whole year, a year and month the whole month, and null means
- * all of history.
+ * show movement. `sel` is {y, m, w, d} with the narrower fields optional: a
+ * year alone means the whole year, a year and month the whole month, a week
+ * means that block of seven days, and null means all of history.
  */
 function rangeFor(sel) {
   const iso = (ms) => new Date(ms).toISOString();
@@ -49,19 +61,42 @@ function rangeFor(sel) {
   const at = (y, m, d) => Date.UTC(y, m, d) - KST;
 
   if (!sel?.y) return win(0, kstMidnight(Date.now()) + DAY, null, null);
-  const { y, m, d } = sel;
+  const { y, m, w, d } = sel;
 
   if (m == null) return win(at(y, 0, 1), at(y + 1, 0, 1), at(y - 1, 0, 1), at(y, 0, 1));
-  if (d == null) return win(at(y, m - 1, 1), at(y, m, 1), at(y, m - 2, 1), at(y, m - 1, 1));
-  return win(at(y, m - 1, d), at(y, m - 1, d + 1), at(y, m - 1, d - 1), at(y, m - 1, d));
+
+  if (d != null) {
+    const a = at(y, m - 1, d);
+    return win(a, a + DAY, a - DAY, a);
+  }
+  const [s0, s1] = w == null ? [] : weekSpan(y, m, w);
+  // A short month has fewer weeks than a long one, so a week carried over from
+  // the previous month can land past its end. Fall back to the whole month
+  // rather than producing a range that runs backwards.
+  if (w != null && s0 <= s1) {
+    const a = at(y, m - 1, s0);
+    // Compared against the seven days immediately before, which may cross into
+    // the previous month — that is the honest neighbouring window.
+    return win(a, at(y, m - 1, s1 + 1), a - 7 * DAY, a);
+  }
+  return win(at(y, m - 1, 1), at(y, m, 1), at(y, m - 2, 1), at(y, m - 1, 1));
 }
 
-const selLabel = (sel) => {
+/** "2024년 12월 1일 ~ 12월 7일" — states exactly what is being counted. */
+function rangeLabel(sel) {
   if (!sel?.y) return '전체 기간';
-  if (sel.m == null) return `${sel.y}년`;
-  if (sel.d == null) return `${sel.y}년 ${sel.m}월`;
-  return `${sel.y}년 ${sel.m}월 ${sel.d}일`;
-};
+  const { from, to } = rangeFor(sel);
+  const a = new Date(new Date(from).getTime() + KST);
+  // `to` is exclusive; step back a day to name the last day actually included.
+  const b = new Date(new Date(to).getTime() + KST - DAY);
+  const head = `${a.getUTCFullYear()}년 ${a.getUTCMonth() + 1}월 ${a.getUTCDate()}일`;
+  const sameDay = a.getTime() === b.getTime();
+  if (sameDay) return `${head} (${WEEKDAYS[a.getUTCDay()]})`;
+  const tail = a.getUTCFullYear() === b.getUTCFullYear()
+    ? `${b.getUTCMonth() + 1}월 ${b.getUTCDate()}일`
+    : `${b.getUTCFullYear()}년 ${b.getUTCMonth() + 1}월 ${b.getUTCDate()}일`;
+  return `${head} ~ ${tail}`;
+}
 
 function fmt(value, key) {
   const n = Number(value);
@@ -133,30 +168,63 @@ function Picker({ value, label, options, onChange, disabled }) {
  */
 function Strip({ days, item }) {
   if (!days.length) return null;
-  const first = new Date(item.first_at).getTime();
-  const last = new Date(item.last_at).getTime();
-  const spanDays = Math.max(1, Math.round((last - first) / DAY) + 1);
+  const spanDays = Math.max(1,
+    Math.round((new Date(item.last_at) - new Date(item.first_at)) / DAY) + 1);
   const density = Number(item.days) / spanDays;
   const cls = density > 0.6 ? 'max' : density > 0.25 ? 'hi' : 'on';
 
-  // Drawn as a fixed number of cells rather than one per day. A cell per day
-  // collapsed once the range grew: 626 days at a 1px gap spend every pixel of
-  // a phone-width row on gaps, leaving the bars themselves sub-pixel and the
-  // whole strip invisible.
+  // A fixed number of cells rather than one per day: at 626 days a 1px gap
+  // spends every pixel of a phone-width row, leaving the bars sub-pixel.
   const t0 = new Date(days[0].day).getTime();
   const t1 = new Date(days[days.length - 1].day).getTime();
   const span = Math.max(1, t1 - t0);
   const cells = Math.min(STRIP_CELLS, days.length);
-  const at = (t) => Math.round(((t - t0) / span) * (cells - 1));
-  const from = Math.max(0, Math.min(cells - 1, at(first)));
-  const to = Math.max(from, Math.min(cells - 1, at(last)));
+  const slot = (t) => Math.max(0, Math.min(cells - 1,
+    Math.round(((t - t0) / span) * (cells - 1))));
+
+  // Painted from the days it actually played. Filling first-to-last solid
+  // was wrong: a track heard in March and again in August looked like it
+  // never left rotation, when the truth is two marks and a long gap.
+  const on = new Set();
+  if (item.day_nums?.length) {
+    for (const n of item.day_nums) on.add(slot(n * DAY));
+  } else {
+    // No day list (the graph was switched on after loading) — fall back to
+    // the endpoints so the row still shows its span.
+    const a = slot(new Date(item.first_at).getTime());
+    const b = slot(new Date(item.last_at).getTime());
+    for (let i = a; i <= b; i++) on.add(i);
+  }
 
   return (
     <div className="strip" aria-hidden="true">
       {Array.from({ length: cells }, (_, i) => (
-        <i key={i} className={i >= from && i <= to ? cls : undefined} />
+        <i key={i} className={on.has(i) ? cls : undefined} />
       ))}
     </div>
+  );
+}
+
+/** Wordmark. Bars first, which is what the app actually measures. */
+function Logo() {
+  const bars = [
+    [0, 13, 'var(--teal)'], [5.5, 9, 'var(--indigo)'],
+    [11, 17, 'var(--pink)'], [16.5, 5, 'var(--indigo)'],
+  ];
+  return (
+    <svg className="logo" viewBox="0 0 168 22" role="img" aria-label="playcounters">
+      {bars.map(([x, h, fill]) => (
+        <rect key={x} x={x} y={19 - h} width="3.6" height={h} rx="1.4" fill={fill} />
+      ))}
+      <text
+        x="27" y="18"
+        fontFamily="Bricolage Grotesque, sans-serif"
+        fontSize="20" fontWeight="800" letterSpacing="-0.6"
+        fill="currentColor"
+      >
+        playcounters
+      </text>
+    </svg>
   );
 }
 
@@ -238,26 +306,57 @@ export default function Dashboard() {
     ];
   }, [calendar, sel?.y]);
 
-  const days = useMemo(() => {
+  /** Days in the selected month that hold plays, with their weekday. */
+  const monthDaysWithPlays = useMemo(() => {
     if (!sel?.y || sel.m == null) return [];
     const out = [];
     for (const c of calendar) {
       if (Number(c.day.slice(0, 4)) !== sel.y || Number(c.day.slice(5, 7)) !== sel.m) continue;
       const d = Number(c.day.slice(8, 10));
-      out.push({ value: d, label: `${d}일`, count: Number(c.plays) });
+      const dow = new Date(Date.UTC(sel.y, sel.m - 1, d)).getUTCDay();
+      out.push({ value: d, label: `${d}일 (${WEEKDAYS[dow]})`, count: Number(c.plays), dow });
     }
-    return [{ value: null, label: '월 전체' }, ...out.sort((a, b) => b.value - a.value)];
+    return out.sort((a, b) => a.value - b.value);
   }, [calendar, sel?.y, sel?.m]);
+
+  const weeks = useMemo(() => {
+    if (!sel?.y || sel.m == null) return [];
+    const totals = new Map();
+    for (const d of monthDaysWithPlays) {
+      const w = Math.min(Math.ceil(d.value / 7), WEEK_LABELS.length);
+      totals.set(w, (totals.get(w) || 0) + d.count);
+    }
+    const out = [{ value: null, label: '월 전체' }];
+    for (let w = 1; w <= weekCount(sel.y, sel.m); w++) {
+      if (!totals.has(w)) continue;
+      const [a, b] = weekSpan(sel.y, sel.m, w);
+      out.push({ value: w, label: `${WEEK_LABELS[w - 1]} (${a}~${b}일)`, count: totals.get(w) });
+    }
+    return out;
+  }, [monthDaysWithPlays, sel?.y, sel?.m]);
+
+  const days = useMemo(() => {
+    if (!sel?.y || sel.m == null) return [];
+    const inWeek = sel.w == null
+      ? monthDaysWithPlays
+      : monthDaysWithPlays.filter((d) => {
+          const [a, b] = weekSpan(sel.y, sel.m, sel.w);
+          return d.value >= a && d.value <= b;
+        });
+    return [{ value: null, label: sel.w == null ? '월 전체' : '주 전체' },
+      ...inWeek.map(({ value, label, count }) => ({ value, label, count }))];
+  }, [monthDaysWithPlays, sel?.y, sel?.m, sel?.w]);
 
   const fetchStats = useCallback(async (signal) => {
     const { from, to, prevFrom, prevTo } = rangeFor(sel);
     const qs = new URLSearchParams({ mode, from, to, limit: String(FETCH_LIMIT), source: src });
+    if (viz !== 'count') qs.set('days', '1');
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [sel, mode, src]);
+  }, [sel, mode, src, viz]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -373,8 +472,9 @@ export default function Dashboard() {
       </nav>
 
       <header>
+        <h1><Logo /></h1>
         <p className="eyebrow">{data?.user?.display_name ?? 'Spotify'}</p>
-        <h1>내가 <em>진짜</em><br />들은 것</h1>
+        <p className="range">{rangeLabel(sel)}</p>
 
         <p className="synced">
           마지막 갱신{' '}
@@ -405,14 +505,21 @@ export default function Dashboard() {
               value={sel?.y ?? null}
               label={sel?.y ? `${sel.y}년` : '연도'}
               options={years}
-              onChange={(y) => setSel({ y, m: null, d: null })}
+              onChange={(y) => setSel({ y, m: null, w: null, d: null })}
             />
             <Picker
               value={sel?.m ?? null}
               label={sel?.m ? `${sel.m}월` : '월'}
               options={months}
               disabled={!sel?.y}
-              onChange={(m) => setSel((p) => ({ ...p, m, d: null }))}
+              onChange={(m) => setSel((p) => ({ ...p, m, w: null, d: null }))}
+            />
+            <Picker
+              value={sel?.w ?? null}
+              label={sel?.w ? WEEK_LABELS[sel.w - 1] : '주'}
+              options={weeks}
+              disabled={!sel?.y || sel.m == null}
+              onChange={(w) => setSel((p) => ({ ...p, w, d: null }))}
             />
             <Picker
               value={sel?.d ?? null}
@@ -421,7 +528,6 @@ export default function Dashboard() {
               disabled={!sel?.y || sel.m == null}
               onChange={(d) => setSel((p) => ({ ...p, d }))}
             />
-            <span className="picked">{selLabel(sel)}</span>
           </div>
         </div>
         <div className="grp">

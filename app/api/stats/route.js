@@ -16,6 +16,9 @@ export async function GET(req) {
   const mode = q.get('mode') === 'artists' ? 'artists' : 'tracks';
   // Spotify and YouTube aren't measured the same way, so they can be read apart.
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
+  // The per-item day list is the largest thing here and only the span graph
+  // needs it, so it is opt-in rather than always sent.
+  const withDays = q.get('days') === '1';
   const from = q.get('from') || '1970-01-01T00:00:00Z';
   const to   = q.get('to')   || new Date(Date.now() + 864e5).toISOString();
 
@@ -33,7 +36,7 @@ export async function GET(req) {
   const [items, daily, total, prev, calendar, user] = await Promise.all([
     db.rpc('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
-      p_limit: limit, p_source: src,
+      p_limit: limit, p_source: src, p_days: withDays,
     }),
     db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src }),
     db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_source: src }),

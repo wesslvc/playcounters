@@ -61,12 +61,15 @@ header { padding:20px 0 22px }
   font-size:11px; letter-spacing:.16em; text-transform:uppercase;
   color:var(--mute); font-weight:600; margin-bottom:10px;
 }
-h1 {
-  font-family:"Bricolage Grotesque",sans-serif; font-weight:800;
-  font-size:clamp(28px,7.5vw,44px); line-height:1.03;
-  letter-spacing:-.02em; margin-bottom:18px;
+h1 { line-height:0; margin-bottom:14px }
+.logo { display:block; width:clamp(190px,52vw,250px); height:auto; color:var(--ink) }
+
+/* What is actually being counted, stated rather than inferred from the pills. */
+.range {
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
+  font-size:clamp(17px,4.4vw,21px); letter-spacing:-.01em;
+  color:var(--indigo); margin:2px 0 14px;
 }
-h1 em { font-style:normal; color:var(--indigo) }
 
 .totals { display:flex; flex-wrap:wrap; border-top:1.5px solid var(--ink) }
 .tot { flex:1 1 25%; min-width:80px; padding:12px 0 4px; border-bottom:1px solid var(--line) }

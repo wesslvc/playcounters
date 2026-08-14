@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
-import { searchCover } from '@/lib/spotify';
+import { findArtwork } from '@/lib/artwork';
 import { coverKey, coverTargetFor } from '@/lib/keys';
 
 export const dynamic = 'force-dynamic';
@@ -14,12 +14,10 @@ const MAX_SEARCH = 24;
 const CONCURRENCY = 4;
 
 /**
- * Spotify's rate limit is easy to walk into here: most YouTube rows carry no
- * album, so nearly every one needs its own track search, and a miss costs two
- * requests because of the loose retry. Once limited, stop searching entirely
- * until the window passes and say so, rather than having each scroll throw
- * another burst at a closed door. Per-instance, which is enough to break the
- * feedback loop.
+ * Kept from the Spotify era and still worth having: if the source ever starts
+ * refusing, stop searching until the window passes and say so, rather than
+ * having each scroll throw another burst at a closed door. Per-instance, which
+ * is enough to break the feedback loop.
  */
 let pausedUntil = 0;
 
@@ -101,7 +99,7 @@ export async function POST(req) {
 
   const found = await inBatches(searching, CONCURRENCY, async (w) => {
     try {
-      const { url, stage } = await searchCover(w.kind, w.artist, w.name);
+      const { url, stage } = await findArtwork(w.kind, w.artist, w.name);
       tally[stage] = (tally[stage] ?? 0) + 1;
       return { ...w, image_url: url };
     } catch (e) {

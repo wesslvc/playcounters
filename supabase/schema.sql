@@ -160,19 +160,24 @@ create or replace function daily_totals(
   p_to   timestamptz,
   p_tz   text default 'Asia/Seoul'
 )
-returns table (day date, plays bigint, minutes bigint)
+-- Imported history carries Spotify's real ms_played. Live rows can't: the
+-- recently-played endpoint says what was played, not for how long, so track
+-- length stands in. Keeping the two apart lets the total say which half is
+-- measured and which is inferred instead of quietly blending them.
+returns table (day date, plays bigint, minutes bigint, est_minutes bigint)
 language sql stable
 set search_path = public, pg_temp
 as $$
   select
-    (played_at at time zone p_tz)::date as day,
-    count(*)                            as plays,
-    (sum(ms_played) / 60000)::bigint    as minutes
-  from plays
-  where user_id = p_user
-    and played_at >= p_from
-    and played_at <  p_to
-    and ms_played >= 30000
+    (p.played_at at time zone p_tz)::date as day,
+    count(*)                              as plays,
+    (coalesce(sum(p.ms_played) filter (where p.source <> 'live'), 0) / 60000)::bigint as minutes,
+    (coalesce(sum(p.ms_played) filter (where p.source =  'live'), 0) / 60000)::bigint as est_minutes
+  from plays p
+  where p.user_id = p_user
+    and p.played_at >= p_from
+    and p.played_at <  p_to
+    and p.ms_played >= 30000
   group by 1
   order by 1;
 $$;

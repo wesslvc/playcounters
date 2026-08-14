@@ -303,6 +303,7 @@ export default function Dashboard() {
   const max = rows.length ? Number(rows[0][sort]) : 0;
   const unit = SORTS.find((s) => s[0] === sort)[2];
   const s = data?.summary;
+  const estHours = (s?.estMinutes ?? 0) / 60;
   const syncedAt = data?.user?.last_synced_at;
   const showCount = viz === 'count' || viz === 'both';
   const showSpan = viz === 'span' || viz === 'both';
@@ -331,14 +332,21 @@ export default function Dashboard() {
         {syncMsg && <p className="syncmsg">{syncMsg}</p>}
 
         <div className="totals">
-          {[
-            [s ? s.plays.toLocaleString() : '—', '재생'],
-            [s ? Math.round(s.minutes / 60).toLocaleString() : '—', '시간'],
-            [s ? s.items.toLocaleString() : '—', mode === 'tracks' ? '곡' : '가수'],
-            [s ? s.days.toLocaleString() : '—', '들은 날'],
-          ].map(([v, l]) => (
-            <div className="tot" key={l}><b>{v}</b><span>{l}</span></div>
-          ))}
+          <div className="tot"><b>{s ? s.plays.toLocaleString() : '—'}</b><span>재생</span></div>
+          <div className="tot">
+            <b>
+              {s ? Math.round(s.minutes / 60).toLocaleString() : '—'}
+              {/* Live rows have no real listen time, so their hours are an
+                  inference. Shown apart rather than folded into the total. */}
+              {s && estHours >= 0.1 && <i className="est">+{estHours.toFixed(1)}</i>}
+            </b>
+            <span>시간{s && estHours >= 0.1 ? ' (+추정)' : ''}</span>
+          </div>
+          <div className="tot">
+            <b>{s ? s.items.toLocaleString() : '—'}</b>
+            <span>{mode === 'tracks' ? '곡' : '가수'}</span>
+          </div>
+          <div className="tot"><b>{s ? s.days.toLocaleString() : '—'}</b><span>들은 날</span></div>
         </div>
       </header>
 
@@ -482,8 +490,15 @@ export default function Dashboard() {
       )}
 
       <p className="foot">
-        30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.<br />
-        날짜는 한국 시간 기준입니다.
+        30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.
+        날짜는 한국 시간 기준입니다.<br />
+        {estHours >= 0.1 && (
+          <>
+            <b>+{estHours.toFixed(1)}시간</b>은 추정치입니다 — 실시간으로 모은
+            재생은 Spotify가 재생 길이를 알려주지 않아 곡 길이로 대신 셉니다.
+            중간에 넘긴 곡도 끝까지 들은 것으로 잡힙니다.
+          </>
+        )}
       </p>
     </div>
   );

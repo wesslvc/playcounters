@@ -53,6 +53,10 @@ h1 em { font-style:normal; color:var(--indigo) }
   font-weight:700; font-size:23px; letter-spacing:-.01em;
 }
 .tot span { font-size:11px; color:var(--mute) }
+.tot b i.est {
+  font-style:normal; font-family:"IBM Plex Sans KR",sans-serif;
+  font-size:12px; font-weight:600; color:var(--teal); margin-left:3px;
+}
 
 /* ---------- controls ---------- */
 .controls {

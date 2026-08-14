@@ -243,7 +243,7 @@ $$;
 -- Spreads a Recap window's total listening time across the entries the export
 -- did keep, and turns the result back into a play count. A track Recap named
 -- keeps its own minutes; everything else divides what remains in proportion to
--- how many entries it holds — the export's counts are wrong in size but not in
+-- how many entries it holds -- the export's counts are wrong in size but not in
 -- shape, so their ratios are the best guide available to the missing plays.
 --
 -- Writes both halves onto each play: est_plays is what that one logged entry
@@ -251,23 +251,54 @@ $$;
 -- rather than multiplying by an average afterwards is what lets an anchored
 -- track report back exactly the minutes Recap printed.
 --
--- Returns the factor applied outside every calibrated window.
+-- Outside a calibrated window there is no total to pin anything to. Two things
+-- still carry across from the window that was measured:
+--
+--  * How far the gap heuristic runs from the truth -- it reads about 21% high
+--    against Recap on this history. That is a property of the heuristic rather
+--    than of the year, so each entry keeps its own gap-derived length and is
+--    scaled by it. A long listen stays long; a skip stays a skip. A flat
+--    per-entry average was worse: it threw away the one thing the export does
+--    record.
+--
+--  * What an anchored track's entries turned out to be worth. Recap proved one
+--    logged entry of Lose My Mind stood for 2.9 plays, because it was listened
+--    to on repeat and the export collapsed the repeats. The same song listened
+--    to the same way in the months either side is the only evidence available
+--    for that stretch, and it beats assuming the loops stopped at the window
+--    edge. Applied only where the in-window sample is big enough to mean
+--    something.
+--
+-- What this cannot do is recover loops for unanchored tracks outside a window.
+-- No measurement exists that could: a song looped for forty minutes and a song
+-- played once before walking away leave the same single entry and the same
+-- forty-minute gap. Those keep their corrected gap durations and nothing more.
+--
+-- Returns the duration bias measured against Recap.
 create or replace function apply_youtube_estimate(p_user uuid)
 returns numeric
 language plpgsql
 set search_path = public, pg_temp
 as $$
 declare
-  global_factor numeric := 1;
-  default_min   numeric;
+  bias        numeric;
+  default_min numeric;
 begin
   -- Reset, so a re-run is not cumulative.
   update plays set est_plays = 1, est_ms = 0
    where user_id = p_user and source = 'youtube';
 
+  -- Nothing measured means nothing to estimate from. Leaving est_plays 1 and
+  -- est_ms 0 is what makes the estimate flag a no-op for this user rather than
+  -- silently swapping their recorded durations for an invented average.
+  if not exists (select 1 from yt_estimate where user_id = p_user) then
+    return 1;
+  end if;
+
   select coalesce(avg(avg_track_min), 2.85) into default_min
   from yt_estimate where user_id = p_user;
 
+  ---------------------------------------------------------------- in-window
   with cal as (
     select * from yt_estimate where user_id = p_user
   ),
@@ -310,27 +341,59 @@ begin
      and p.artist_key = e.artist_key and p.track_key = e.track_key
      and p.played_at >= e.window_start and p.played_at < e.window_end;
 
-  -- Nothing measures the years Recap didn't cover, so they take one factor:
-  -- whatever the calibrated windows worked out to on average. Weaker than a
-  -- calibration and stated as such, but closer than leaving them at face value.
-  select coalesce(sum(est_plays) / nullif(count(*), 0), 1) into global_factor
-  from plays
-  where user_id = p_user and source = 'youtube'
-    and exists (select 1 from yt_estimate y
-                 where y.user_id = p_user
-                   and plays.played_at >= y.window_start
-                   and plays.played_at <  y.window_end);
+  ---------------------------------------------------------------- outside
+  -- Measured on unanchored entries only: an anchor's minutes come from Recap
+  -- naming that one track, which says nothing about the heuristic's accuracy.
+  select coalesce(sum(p.est_ms) / nullif(sum(p.ms_played), 0), 1) into bias
+  from plays p
+  join yt_estimate y
+    on y.user_id = p_user
+   and p.played_at >= y.window_start and p.played_at < y.window_end
+  where p.user_id = p_user and p.source = 'youtube'
+    and not exists (select 1 from yt_anchor a
+                     where a.user_id = p_user
+                       and a.artist_key = p.artist_key
+                       and a.track_key  = p.track_key);
 
+  with rate as (
+    -- What one logged entry of an anchored track was worth, per track.
+    select p.artist_key, p.track_key,
+           avg(p.est_plays) as plays_per_entry,
+           avg(p.est_ms)    as ms_per_entry
+    from plays p
+    join yt_estimate y
+      on y.user_id = p_user
+     and p.played_at >= y.window_start and p.played_at < y.window_end
+    where p.user_id = p_user and p.source = 'youtube'
+      and exists (select 1 from yt_anchor a
+                   where a.user_id = p_user
+                     and a.artist_key = p.artist_key
+                     and a.track_key  = p.track_key)
+    group by 1, 2
+    -- A rate read off a handful of entries is noise, and it would be multiplied
+    -- across however many entries the untouched stretch holds.
+    having count(*) >= 10
+  )
+  -- The rate is a per-track lookup, so it goes in a scalar subquery. Joining it
+  -- in the FROM list cross-joins: an unanchored entry then matches no row at
+  -- all and keeps est_ms 0, which reads as "never played" rather than "not
+  -- anchored".
   update plays p
-     set est_plays = global_factor,
-         est_ms    = global_factor * default_min * 60000
+     set est_ms = coalesce(
+           (select r.ms_per_entry from rate r
+             where r.artist_key = p.artist_key and r.track_key = p.track_key),
+           p.ms_played * bias),
+         est_plays = greatest(0.01, coalesce(
+           (select r.plays_per_entry from rate r
+             where r.artist_key = p.artist_key and r.track_key = p.track_key),
+           p.ms_played * bias / (default_min * 60000)))
    where p.user_id = p_user and p.source = 'youtube'
      and not exists (select 1 from yt_estimate y
                       where y.user_id = p_user
                         and p.played_at >= y.window_start
                         and p.played_at <  y.window_end);
 
-  return global_factor;
+  return bias;
 end;
 $$;
 

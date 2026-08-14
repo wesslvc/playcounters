@@ -14,6 +14,12 @@ const fmtDate = (d) => {
  * Daily plays as a column chart. Every day between first and last gets a slot
  * so the gaps are visible — a run of silence is part of the shape, and a chart
  * that only plots the days something played would hide it.
+ *
+ * A long history needs more days than there are pixels, so several days share
+ * a column. That column takes the busiest day in its span rather than their
+ * sum: the caption underneath names a single day's record, and summing made
+ * the tallest bar disagree with it — a quiet stretch of many days could out-
+ * rank the actual peak.
  */
 function DailyChart({ daily }) {
   if (!daily.length) return null;
@@ -27,7 +33,7 @@ function DailyChart({ daily }) {
   for (const d of daily) {
     const t = new Date(d.day + 'T00:00:00Z').getTime();
     const i = span === 0 ? 0 : Math.round(((t - t0) / (span * DAY)) * (cells - 1));
-    buckets[i] += Number(d.plays);
+    buckets[i] = Math.max(buckets[i], Number(d.plays));
   }
   const peak = Math.max(...buckets, 1);
 
@@ -71,6 +77,9 @@ export default function Detail({ target, source, onClose }) {
 
   if (!target) return null;
   const s = data?.summary;
+  const best = data?.daily?.length
+    ? data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a))
+    : null;
   const hours = s ? s.minutes / 60 : 0;
 
   return (
@@ -107,10 +116,8 @@ export default function Detail({ target, source, onClose }) {
 
             <DailyChart daily={data.daily} />
             <p className="note">
-              하루 최대 {Math.max(...data.daily.map((d) => Number(d.plays)), 0)}회 ·
-              {' '}가장 많이 들은 날{' '}
-              {fmtDate(data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a),
-                data.daily[0])?.day)}
+              막대는 하루 재생 횟수입니다. 가장 많이 들은 날{' '}
+              <b>{fmtDate(best?.day)}</b> — {Number(best?.plays ?? 0).toLocaleString()}회
             </p>
           </>
         )}

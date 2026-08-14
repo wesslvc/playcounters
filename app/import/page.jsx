@@ -75,6 +75,10 @@ export default function ImportPage() {
 
   return (
     <div className="wrap">
+      <nav className="nav">
+        <a className="pill" href="/">← 홈</a>
+      </nav>
+
       <header>
         <p className="eyebrow">가져오기</p>
         <h1>예전 기록<br />합치기</h1>

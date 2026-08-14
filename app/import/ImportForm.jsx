@@ -135,6 +135,15 @@ export default function ImportForm() {
       const last = consume(buffer, opts);
       pending.push(...last.rows, ...flush(last.remainder, opts));
       await drain(true);
+
+      // Durations come from the gap between consecutive plays, so they can
+      // only be worked out once every row is in.
+      setMessage('재생 시간 계산 중…');
+      await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'youtube', finalize: true }),
+      });
     } catch (e) {
       setStatus('error');
       setMessage(`업로드가 중단됐습니다: ${e.message}. 다시 올리면 이어서 진행됩니다.`);
@@ -214,9 +223,9 @@ export default function ImportForm() {
           disabled={busy}
         />
         <p className="note" style={{ marginTop: 10 }}>
-          Takeout에는 <b>재생 시간이 들어 있지 않습니다.</b> 그래서 유튜브 기록은
-          재생 횟수와 들은 날에는 반영되지만 &ldquo;시간&rdquo; 합계에는 0으로 잡힙니다.
-          30초 규칙도 적용할 수 없어, 잠깐 넘긴 곡도 1회로 셉니다.
+          Takeout에는 재생 시간이 없지만, <b>다음 곡이 시작된 시각</b>으로
+          역산합니다. 그래서 유튜브 기록에도 Spotify와 똑같이 30초 규칙이
+          적용되고, 넘긴 곡은 순위에서 빠집니다.
         </p>
       </div>
 

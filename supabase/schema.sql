@@ -80,6 +80,11 @@ alter table covers enable row level security;
 -- ============================================================
 
 -- ---------- counted duration ----------
+-- Takeout records when each track started and nothing else, but the next
+-- entry's start time is when this one stopped — so the gap between consecutive
+-- plays recovers the duration the export withholds. recompute_youtube_ms fills
+-- it in after an import; past a ten-minute gap the session simply ended and a
+-- typical track length stands in.
 -- Live rows carry the track's own length. recently-played only surfaces a
 -- play once it has run past 30 seconds, so these are never skips, and a real
 -- duration keeps per-track variation that an average would flatten. It still
@@ -207,7 +212,9 @@ as $$
   where p.user_id = p_user
     and p.played_at >= p_from
     and p.played_at <  p_to
-    -- >=30s is the rule stats.fm and .fmbot use; youtube has no duration.
+    -- >=30s is the rule stats.fm and .fmbot use. YouTube is exempt: Takeout
+    -- already collapses repeats, so filtering it further compounds an
+    -- undercount with another one.
     and (p.ms_played >= 30000 or p.source = 'youtube')
     and (p_source = 'all'
          or (p_source = 'youtube' and p.source =  'youtube')

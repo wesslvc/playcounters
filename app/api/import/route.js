@@ -76,7 +76,17 @@ export async function POST(req) {
     return NextResponse.json({ error: 'bad json' }, { status: 400 });
   }
 
-  const { batch, source = 'spotify' } = body ?? {};
+  const { batch, source = 'spotify', finalize = false } = body ?? {};
+
+  // Takeout gives no durations; they're recovered afterwards from the gap
+  // between consecutive plays, which needs the whole import in place first.
+  if (finalize) {
+    if (source !== 'youtube') return NextResponse.json({ ok: true, updated: 0 });
+    const { data, error } = await db.rpc('recompute_youtube_ms', { p_user: userId });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, updated: Number(data ?? 0) });
+  }
+
   if (!Array.isArray(batch)) {
     return NextResponse.json({ error: 'batch must be an array' }, { status: 400 });
   }

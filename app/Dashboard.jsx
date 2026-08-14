@@ -421,25 +421,19 @@ export default function Dashboard() {
   // when the previous list was short enough to be complete.
   const prevComplete = (data?.prev?.length ?? 0) < limit;
 
-  // Fetch artwork for rows on screen, a batch at a time. Covers are cached
-  // server-side and keys carry their kind, so this settles quickly and nothing
-  // has to be discarded when the mode changes.
+  // Fetch artwork for rows on screen, a batch at a time.
+  //
+  // Only what the server actually answers is recorded. It caps how many misses
+  // it will search per call and stops entirely while rate limited, so treating
+  // every requested key as resolved — which is what used to happen — buried
+  // those rows permanently behind a null they would never retry. Unanswered
+  // keys are simply left unknown and asked for again on the next tick.
   const shown = rows;
   const inFlight = useRef(false);
-  const [coverTick, setCoverTick] = useState(0);
-  const pausedUntil = useRef(0);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (inFlight.current || !shown.length) return;
-
-    // Spotify rate-limits artwork search, and nearly every YouTube row needs
-    // its own lookup. When the server reports a pause, wait it out and try
-    // again rather than firing another burst on the next scroll.
-    const wait = pausedUntil.current - Date.now();
-    if (wait > 0) {
-      const t = setTimeout(() => setCoverTick((n) => n + 1), wait + 250);
-      return () => clearTimeout(t);
-    }
 
     const missing = [];
     const seen = new Set();
@@ -453,6 +447,7 @@ export default function Dashboard() {
     if (!missing.length) return;
 
     let cancelled = false;
+    let timer;
     inFlight.current = true;
     fetch('/api/covers', {
       method: 'POST',
@@ -461,29 +456,23 @@ export default function Dashboard() {
     })
       .then((r) => r.json())
       .then((json) => {
-        if (cancelled || !json) return;
-        if (json.retryAfter) {
-          pausedUntil.current = Date.now() + json.retryAfter * 1000;
-          // Keep whatever did resolve, but leave the rest unknown so they are
-          // asked for again — marking them missing here would blank those rows
-          // for the whole session over a temporary limit.
-          if (json.covers) setCovers((c) => ({ ...c, ...json.covers }));
-          setCoverTick((n) => n + 1);
-          return;
+        if (cancelled) return;
+        const got = json?.covers ?? {};
+        if (Object.keys(got).length) setCovers((c) => ({ ...c, ...got }));
+        // Nothing new landed but work remains: come back rather than spin.
+        // A rate limit says exactly how long to wait; otherwise pace it.
+        if (json?.retryAfter || json?.pending) {
+          const wait = json.retryAfter ? json.retryAfter * 1000 : 600;
+          timer = setTimeout(() => setTick((t) => t + 1), wait);
         }
-        const merged = { ...(json.covers || {}) };
-        // Record every key asked for, so an unresolved one isn't requested in
-        // a loop; a later visit picks it up from the server cache.
-        for (const m of missing) {
-          const k = coverKeyFor(mode, m);
-          if (!(k in merged)) merged[k] = null;
-        }
-        setCovers((c) => ({ ...c, ...merged }));
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) timer = setTimeout(() => setTick((t) => t + 1), 3000);
+      })
       .finally(() => { inFlight.current = false; });
-    return () => { cancelled = true; };
-  }, [shown, covers, mode, coverTick]);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [shown, covers, mode, tick]);
 
   const max = rows.length ? Number(rows[0][sort]) : 0;
   const unit = SORTS.find((s) => s[0] === sort)[2];

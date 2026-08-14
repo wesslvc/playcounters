@@ -62,10 +62,7 @@ export async function GET(req) {
     months: months.error ? [] : (months.data ?? []),
     summary: {
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
-      // Measured, from imported history's real ms_played.
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
-      // Inferred, from live rows where track length stands in for listen time.
-      estMinutes: days.reduce((s, d) => s + Number(d.est_minutes), 0),
       days:    days.length,
       // The real distinct count; `shown` is how much of it the list holds.
       items:   total.error ? rows.length : Number(total.data),

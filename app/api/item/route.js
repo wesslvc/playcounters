@@ -27,9 +27,11 @@ export async function GET(req) {
   if (!artist) return NextResponse.json({ error: 'artist required' }, { status: 400 });
   const track = q.get('track') || null;
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
+  const estimate = q.get('estimate') === '1';
 
   const { data, error } = await db.rpc('item_daily', {
     p_user: userId, p_artist: artist, p_track: track, p_tz: TZ, p_source: src,
+    p_estimate: estimate,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -38,7 +40,10 @@ export async function GET(req) {
     artist,
     track,
     daily: days,
+    estimate,
     summary: {
+      // YouTube plays in the mix mean the figures carry an estimate.
+      yt:      days.some((d) => d.yt),
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
       days:    days.length,

@@ -258,6 +258,22 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   border-radius:10px; padding:9px 11px; margin:14px 0 2px;
 }
 .caveat b { color:var(--ink); font-weight:600 }
+
+/* ---------- estimate marks ----------
+   YouTube's export drops repeat plays, so those figures are reconstructed. The
+   mark says which ones, rather than letting a recovered number pass as a
+   counted one. Lighter than the value it sits beside — it qualifies the
+   number, it isn't part of it. */
+.estnote {
+  font-size:12px; line-height:1.6; color:var(--mute);
+  background:var(--card); border:1px solid var(--line);
+  border-radius:10px; padding:9px 11px; margin:0 0 16px;
+}
+.estnote b { color:var(--indigo); font-weight:700 }
+.val .est {
+  font-style:normal; font-weight:600; color:var(--mute);
+  margin-right:1px; font-size:14px;
+}
 .linkish {
   font:inherit; font-weight:600; color:var(--indigo);
   background:none; border:none; padding:0; cursor:pointer;

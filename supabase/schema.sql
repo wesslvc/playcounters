@@ -5,102 +5,6 @@
 
 create extension if not exists "pgcrypto";
 
--- ---------- users ----------
-create table if not exists users (
-  id             uuid primary key default gen_random_uuid(),
-  spotify_id     text unique not null,
-  display_name   text,
-  avatar_url     text,
-  refresh_token  text not null,
-  last_synced_at timestamptz,
-  last_played_at timestamptz,          -- cursor for /api/sync
-  created_at     timestamptz not null default now()
-);
-
--- ---------- plays ----------
-create table if not exists plays (
-  user_id    uuid not null references users(id) on delete cascade,
-  played_at  timestamptz not null,
-  track      text not null,
-  artist     text not null,
-  album      text,
-  ms_played  integer not null default 0,
-  source     text not null default 'live',   -- 'live' | 'import' | 'youtube'
-  primary key (user_id, played_at)
-);
-
--- Grouping on norm_artist()/norm_track() meant running both over every row on
--- every request. They're immutable, so the results are stored once at write
--- time and indexed instead — 3.8s to 0.46s on ~40k rows.
-alter table plays
-  add column if not exists artist_key text
-    generated always as (norm_artist(artist)) stored,
-  add column if not exists track_key text
-    generated always as (norm_track(track, artist)) stored;
-
-create index if not exists plays_user_time  on plays (user_id, played_at desc);
-create index if not exists plays_user_artist on plays (user_id, artist);
-create index if not exists plays_norm_keys  on plays (user_id, artist_key, track_key);
-create index if not exists plays_user_time_src on plays (user_id, played_at, source);
-
--- ---------- cover art ----------
--- Shared across users and immutable, so it lives here rather than on plays.
--- Imported history carries no images; those are filled by searching Spotify
--- once. Misses are stored as null so a fruitless search isn't repeated.
---
--- Tracks are keyed too, not just albums: YouTube history carries no album at
--- all, so those rows have nothing to look up by and would go coverless.
-create table if not exists covers (
-  kind       text not null,               -- 'album' | 'artist' | 'track'
-  artist     text not null,
-  name       text not null default '',    -- album, track, or '' for an artist
-  image_url  text,
-  fetched_at timestamptz not null default now(),
-  primary key (kind, artist, name)
-);
-
--- Row level security: everything goes through the service role on the
--- server, so no anon policies are needed. RLS on = nothing leaks if the
--- publishable key is ever used from the browser.
-alter table users enable row level security;
-alter table plays enable row level security;
-alter table covers enable row level security;
-
--- ============================================================
---  Reading functions
---
---  p_source: 'all' | 'spotify' (live + import) | 'youtube'
---
---  YouTube Takeout records that something played but never for how long, so
---  youtube rows carry ms_played 0. The >=30s rule therefore cannot apply to
---  them — it would discard every one — and they contribute nothing to the
---  minutes total rather than inventing a duration. p_source exists because
---  the two platforms are not measured the same way and shouldn't be forced
---  into one number without the reader's say-so.
--- ============================================================
-
--- ---------- counted duration ----------
--- Takeout records when each track started and nothing else, but the next
--- entry's start time is when this one stopped — so the gap between consecutive
--- plays recovers the duration the export withholds. recompute_youtube_ms fills
--- it in after an import; past a ten-minute gap the session simply ended and a
--- typical track length stands in.
--- Live rows carry the track's own length. recently-played only surfaces a
--- play once it has run past 30 seconds, so these are never skips, and a real
--- duration keeps per-track variation that an average would flatten. It still
--- assumes the play finished, so it is an upper bound, not a measurement.
---
--- YouTube Takeout records no duration and offers no such guarantee, so those
--- rows get a flat 2.5 minutes a play: 40 plays reads as about 100 minutes.
--- A round number on purpose — more precision would only look like more truth.
-create or replace function play_ms(p_ms integer, p_source text)
-returns integer
-language sql immutable
-set search_path = public, pg_temp
-as $$
-  select case when p_source = 'youtube' then 150000 else coalesce(p_ms, 0) end;
-$$;
-
 -- ---------- title normalisation ----------
 -- The same recording reaches us under different titles: Spotify writes
 -- "Lose My Mind (feat. Doja Cat) [From F1(R) The Movie]", YouTube writes
@@ -159,7 +63,297 @@ as $$
   from s4;
 $$;
 
+-- ---------- users ----------
+create table if not exists users (
+  id             uuid primary key default gen_random_uuid(),
+  spotify_id     text unique not null,
+  display_name   text,
+  avatar_url     text,
+  refresh_token  text not null,
+  last_synced_at timestamptz,
+  last_played_at timestamptz,          -- cursor for /api/sync
+  created_at     timestamptz not null default now()
+);
+
+-- ---------- plays ----------
+create table if not exists plays (
+  user_id    uuid not null references users(id) on delete cascade,
+  played_at  timestamptz not null,
+  track      text not null,
+  artist     text not null,
+  album      text,
+  ms_played  integer not null default 0,
+  source     text not null default 'live',   -- 'live' | 'import' | 'youtube'
+  primary key (user_id, played_at)
+);
+
+-- Grouping on norm_artist()/norm_track() meant running both over every row on
+-- every request. They're immutable, so the results are stored once at write
+-- time and indexed instead — 3.8s to 0.46s on ~40k rows.
+alter table plays
+  add column if not exists artist_key text
+    generated always as (norm_artist(artist)) stored,
+  add column if not exists track_key text
+    generated always as (norm_track(track, artist)) stored;
+
+-- What one logged play is worth once the YouTube estimate is applied, and how
+-- long it ran. Both are 1 and 0 until apply_youtube_estimate writes them, which
+-- is what makes the estimate flag a no-op for anyone who never calibrated.
+alter table plays
+  add column if not exists est_plays numeric not null default 1,
+  add column if not exists est_ms    numeric not null default 0;
+
+create index if not exists plays_user_time  on plays (user_id, played_at desc);
+create index if not exists plays_user_artist on plays (user_id, artist);
+create index if not exists plays_norm_keys  on plays (user_id, artist_key, track_key);
+create index if not exists plays_user_time_src on plays (user_id, played_at, source);
+
+-- ---------- cover art ----------
+-- Shared across users and immutable, so it lives here rather than on plays.
+-- Imported history carries no images; those are filled by searching Spotify
+-- once. Misses are stored as null so a fruitless search isn't repeated.
+--
+-- Tracks are keyed too, not just albums: YouTube history carries no album at
+-- all, so those rows have nothing to look up by and would go coverless.
+create table if not exists covers (
+  kind       text not null,               -- 'album' | 'artist' | 'track'
+  artist     text not null,
+  name       text not null default '',    -- album, track, or '' for an artist
+  image_url  text,
+  fetched_at timestamptz not null default now(),
+  primary key (kind, artist, name)
+);
+
+-- ---------- YouTube calibration ----------
+-- Takeout logs one entry per listening session however many times a track
+-- actually repeated inside it, so its play counts run far below the truth.
+-- YouTube Music Recap does not: it reports total listening time for a year, and
+-- the minutes for the handful of tracks it names. Those figures are the only
+-- outside measurement of what the export lost, so they are stored and the
+-- missing plays are worked back from them.
+--
+-- One row per calibrated window: what Recap said the year came to, and the
+-- average track length it implies.
+create table if not exists yt_estimate (
+  user_id       uuid not null references users(id) on delete cascade,
+  window_start  date not null,
+  window_end    date not null,          -- exclusive
+  total_minutes integer not null,
+  avg_track_min numeric not null default 2.85,
+  created_at    timestamptz not null default now(),
+  primary key (user_id, window_start)
+);
+
+-- The tracks Recap named outright. These keep their own minutes instead of
+-- taking a share of the remainder, so a screenshot's number survives intact.
+create table if not exists yt_anchor (
+  user_id      uuid not null references users(id) on delete cascade,
+  window_start date not null,
+  artist_key   text not null,
+  track_key    text not null,
+  minutes      integer,
+  track_min    numeric,                 -- the track's real length, if known
+  primary key (user_id, window_start, artist_key, track_key)
+);
+
+-- Row level security: everything goes through the service role on the
+-- server, so no anon policies are needed. RLS on = nothing leaks if the
+-- publishable key is ever used from the browser.
+alter table users enable row level security;
+alter table plays enable row level security;
+alter table covers enable row level security;
+alter table yt_estimate enable row level security;
+alter table yt_anchor enable row level security;
+
+-- ============================================================
+--  Reading functions
+--
+--  p_source: 'all' | 'spotify' (live + import) | 'youtube'
+--
+--  p_estimate: whether to read YouTube's calibrated figures or its raw ones.
+--
+--  YouTube Takeout records that something played but never for how long, and
+--  logs one entry per session however many times a track repeated inside it.
+--  Both gaps are filled after an import rather than at read time —
+--  recompute_youtube_ms for the duration, apply_youtube_estimate for the
+--  count — so the readers below stay plain aggregation. The >=30s rule still
+--  can't apply to youtube rows, since a Takeout row's duration is inferred
+--  rather than measured. p_source exists because the two platforms are not
+--  measured the same way and shouldn't be forced into one number without the
+--  reader's say-so.
+-- ============================================================
+
+-- ---------- counted duration ----------
+-- Takeout records when each track started and nothing else, but the next
+-- entry's start time is when this one stopped — so the gap between consecutive
+-- plays recovers the duration the export withholds. recompute_youtube_ms fills
+-- it in after an import; past a ten-minute gap the session simply ended and a
+-- typical track length stands in.
+-- Live rows carry the track's own length. recently-played only surfaces a
+-- play once it has run past 30 seconds, so these are never skips, and a real
+-- duration keeps per-track variation that an average would flatten. It still
+-- assumes the play finished, so it is an upper bound, not a measurement.
+--
+-- YouTube rows once carried a flat 2.5 minutes here. They no longer need to:
+-- recompute_youtube_ms writes a real gap-derived duration into ms_played after
+-- every import, so every source now reads the same way.
+create or replace function play_ms(p_ms integer, p_source text)
+returns integer
+language sql immutable
+set search_path = public, pg_temp
+as $$
+  select coalesce(p_ms, 0);
+$$;
+
+-- Fills in the durations Takeout withholds. The next entry's start time is when
+-- this one stopped; past a ten-minute gap the session simply ended and a
+-- typical track length stands in. Run once after an import completes, since it
+-- needs the whole history in place to see the gaps.
+create or replace function recompute_youtube_ms(p_user uuid)
+returns bigint
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  touched bigint;
+begin
+  with seq as (
+    select p.user_id, p.played_at,
+           lead(p.played_at) over (partition by p.user_id order by p.played_at)
+             - p.played_at as gap
+    from plays p
+    where p.user_id = p_user and p.source = 'youtube'
+  )
+  update plays t
+     set ms_played = case
+           when s.gap is null or s.gap > interval '10 minutes' then 150000
+           else greatest(0, least(600000, extract(epoch from s.gap) * 1000))::integer
+         end
+    from seq s
+   where t.user_id = s.user_id
+     and t.played_at = s.played_at
+     and t.source = 'youtube';
+
+  get diagnostics touched = row_count;
+  return touched;
+end;
+$$;
+
+-- ---------- the YouTube estimate ----------
+-- Spreads a Recap window's total listening time across the entries the export
+-- did keep, and turns the result back into a play count. A track Recap named
+-- keeps its own minutes; everything else divides what remains in proportion to
+-- how many entries it holds — the export's counts are wrong in size but not in
+-- shape, so their ratios are the best guide available to the missing plays.
+--
+-- Writes both halves onto each play: est_plays is what that one logged entry
+-- really stood for, est_ms how long it ran. Storing the duration per play
+-- rather than multiplying by an average afterwards is what lets an anchored
+-- track report back exactly the minutes Recap printed.
+--
+-- Returns the factor applied outside every calibrated window.
+create or replace function apply_youtube_estimate(p_user uuid)
+returns numeric
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  global_factor numeric := 1;
+  default_min   numeric;
+begin
+  -- Reset, so a re-run is not cumulative.
+  update plays set est_plays = 1, est_ms = 0
+   where user_id = p_user and source = 'youtube';
+
+  select coalesce(avg(avg_track_min), 2.85) into default_min
+  from yt_estimate where user_id = p_user;
+
+  with cal as (
+    select * from yt_estimate where user_id = p_user
+  ),
+  raw as (
+    select c.window_start, c.window_end, c.total_minutes, c.avg_track_min,
+           p.artist_key, p.track_key, count(*) as entries
+    from cal c
+    join plays p
+      on p.user_id = p_user and p.source = 'youtube'
+     and p.played_at >= c.window_start and p.played_at < c.window_end
+    group by 1,2,3,4,5,6
+  ),
+  anchored as (
+    select r.*, a.minutes as anchor_min, coalesce(a.track_min, r.avg_track_min) as len
+    from raw r
+    left join yt_anchor a
+      on a.user_id = p_user and a.window_start = r.window_start
+     and a.artist_key = r.artist_key and a.track_key = r.track_key
+  ),
+  totals as (
+    select window_start,
+           sum(coalesce(anchor_min, 0))                      as anchored_min,
+           sum(entries) filter (where anchor_min is null)    as free_entries
+    from anchored group by 1
+  ),
+  est as (
+    select a.*,
+           case
+             when a.anchor_min is not null then a.anchor_min
+             else greatest(0, a.total_minutes - t.anchored_min)
+                  * a.entries::numeric / nullif(t.free_entries, 0)
+           end as est_min
+    from anchored a join totals t on t.window_start = a.window_start
+  )
+  update plays p
+     set est_plays = greatest(0.01, (e.est_min / e.len) / e.entries),
+         est_ms    = e.est_min * 60000 / e.entries
+    from est e
+   where p.user_id = p_user and p.source = 'youtube'
+     and p.artist_key = e.artist_key and p.track_key = e.track_key
+     and p.played_at >= e.window_start and p.played_at < e.window_end;
+
+  -- Nothing measures the years Recap didn't cover, so they take one factor:
+  -- whatever the calibrated windows worked out to on average. Weaker than a
+  -- calibration and stated as such, but closer than leaving them at face value.
+  select coalesce(sum(est_plays) / nullif(count(*), 0), 1) into global_factor
+  from plays
+  where user_id = p_user and source = 'youtube'
+    and exists (select 1 from yt_estimate y
+                 where y.user_id = p_user
+                   and plays.played_at >= y.window_start
+                   and plays.played_at <  y.window_end);
+
+  update plays p
+     set est_plays = global_factor,
+         est_ms    = global_factor * default_min * 60000
+   where p.user_id = p_user and p.source = 'youtube'
+     and not exists (select 1 from yt_estimate y
+                      where y.user_id = p_user
+                        and p.played_at >= y.window_start
+                        and p.played_at <  y.window_end);
+
+  return global_factor;
+end;
+$$;
+
+-- Whether this user has a calibration at all. The dashboard only offers the
+-- estimate when there is something real behind it.
+create or replace function has_youtube_estimate(p_user uuid)
+returns boolean
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select exists (select 1 from yt_estimate where user_id = p_user);
+$$;
+
 -- ---------- ranking: mode 'tracks' | 'artists' ----------
+-- p_estimate swaps counted plays for calibrated ones. Every reader also returns
+-- `yt`, saying whether YouTube plays went into that number — without it the
+-- client would have to mark a Spotify-only row as an estimate or leave a
+-- reconstructed one unmarked.
+-- Earlier signatures, retired: PostgREST resolves by named argument, and
+-- leaving two candidates that differ only by p_estimate invites the wrong one.
+drop function if exists top_items(uuid, timestamptz, timestamptz, text, text, int, text);
+drop function if exists top_items(uuid, timestamptz, timestamptz, text, text, int, text, boolean);
+
 create or replace function top_items(
   p_user uuid,
   p_from timestamptz,
@@ -168,7 +362,8 @@ create or replace function top_items(
   p_tz   text default 'Asia/Seoul',
   p_limit int default 250,
   p_source text default 'all',
-  p_days boolean default false
+  p_days boolean default false,
+  p_estimate boolean default false
 )
 returns table (
   artist   text,
@@ -180,7 +375,8 @@ returns table (
   minutes  bigint,
   first_at timestamptz,
   last_at  timestamptz,
-  day_nums integer[]
+  day_nums integer[],
+  yt       boolean
 )
 language sql stable
 -- search_path is pinned so the function always resolves `plays` in this
@@ -196,10 +392,13 @@ as $$
     case when p_mode = 'artists' then null
          else (array_agg(p.album order by p.played_at desc)
                  filter (where p.album is not null and p.album <> ''))[1] end as album,
-    count(*)                                                as plays,
+    (case when p_estimate then round(sum(p.est_plays))
+          else count(*) end)::bigint                        as plays,
     count(distinct (p.played_at at time zone p_tz)::date)   as days,
     count(distinct to_char(p.played_at at time zone p_tz, 'IYYY-IW')) as weeks,
-    (sum(play_ms(p.ms_played, p.source)) / 60000)::bigint   as minutes,
+    (sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
+              then p.est_ms
+              else play_ms(p.ms_played, p.source) end) / 60000)::bigint as minutes,
     min(p.played_at)                                        as first_at,
     max(p.played_at)                                        as last_at,
     -- The days an item actually played. Drawn from the endpoints alone the
@@ -207,7 +406,8 @@ as $$
     -- it and it is the largest thing in the payload, so it is opt-in.
     case when p_days then
       array_agg(distinct ((p.played_at at time zone p_tz)::date - date '1970-01-01'))
-    end                                                     as day_nums
+    end                                                     as day_nums,
+    bool_or(p.source = 'youtube')                           as yt
   from plays p
   where p.user_id = p_user
     and p.played_at >= p_from
@@ -280,21 +480,28 @@ as $$
 $$;
 
 -- ---------- daily totals: powers the summary tiles ----------
+drop function if exists daily_totals(uuid, timestamptz, timestamptz, text, text);
+
 create or replace function daily_totals(
   p_user uuid,
   p_from timestamptz,
   p_to   timestamptz,
   p_tz   text default 'Asia/Seoul',
-  p_source text default 'all'
+  p_source text default 'all',
+  p_estimate boolean default false
 )
-returns table (day date, plays bigint, minutes bigint)
+returns table (day date, plays bigint, minutes bigint, yt boolean)
 language sql stable
 set search_path = public, pg_temp
 as $$
   select
     (p.played_at at time zone p_tz)::date as day,
-    count(*)                              as plays,
-    (sum(play_ms(p.ms_played, p.source)) / 60000)::bigint as minutes
+    (case when p_estimate then round(sum(p.est_plays))
+          else count(*) end)::bigint      as plays,
+    (sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
+              then p.est_ms
+              else play_ms(p.ms_played, p.source) end) / 60000)::bigint as minutes,
+    bool_or(p.source = 'youtube')         as yt
   from plays p
   where p.user_id = p_user
     and p.played_at >= p_from
@@ -305,4 +512,104 @@ as $$
          or (p_source = 'spotify' and p.source <> 'youtube'))
   group by 1
   order by 1;
+$$;
+
+-- ---------- one item's own history: powers the detail sheet ----------
+-- Resolved through the same normalisation the ranking uses, so it covers every
+-- title variant that was merged into that row.
+drop function if exists item_daily(uuid, text, text, text, text);
+
+create or replace function item_daily(
+  p_user uuid,
+  p_artist text,
+  p_track text default null,
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (day date, plays bigint, minutes bigint, yt boolean)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select (p.played_at at time zone p_tz)::date,
+         (case when p_estimate then round(sum(p.est_plays))
+               else count(*) end)::bigint,
+         (sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
+                   then p.est_ms
+                   else play_ms(p.ms_played, p.source) end) / 60000)::bigint,
+         bool_or(p.source = 'youtube')
+  from plays p
+  where p.user_id = p_user
+    and p.artist_key = norm_artist(p_artist)
+    and (p_track is null or p.track_key = norm_track(p_track, p_artist))
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
+  group by 1
+  order by 1;
+$$;
+
+-- ---------- monthly shape of the leaders: powers the trend chart ----------
+-- Spans the whole history rather than the selected window: the point is
+-- watching the top few rise and fall against each other, which one month can't
+-- show. The label is decided once per item in `labelled` rather than per
+-- bucket — deciding it per bucket split one song into two lines wherever the
+-- most common spelling changed part-way through.
+drop function if exists top_trend(uuid, text, text, text, integer);
+
+create or replace function top_trend(
+  p_user uuid,
+  p_mode text default 'tracks',
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_limit integer default 5,
+  p_estimate boolean default false
+)
+returns table (artist text, track text, bucket date, plays bigint, yt boolean)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with kept as (
+    select p.artist_key, case when p_mode = 'artists' then null else p.track_key end as tk,
+           (case when p_estimate then round(sum(p.est_plays))
+                 else count(*) end)::bigint as n
+    from plays p
+    where p.user_id = p_user
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2 order by n desc limit p_limit
+  ),
+  labelled as (
+    select p.artist_key, case when p_mode = 'artists' then null else p.track_key end as tk,
+           mode() within group (order by p.artist) as artist,
+           case when p_mode = 'artists' then null
+                else mode() within group (order by p.track) end as track
+    from plays p
+    join kept k on k.artist_key = p.artist_key
+               and (p_mode = 'artists' or k.tk = p.track_key)
+    where p.user_id = p_user
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2
+  )
+  select l.artist, l.track,
+         date_trunc('month', p.played_at at time zone p_tz)::date,
+         (case when p_estimate then round(sum(p.est_plays))
+               else count(*) end)::bigint,
+         bool_or(p.source = 'youtube')
+  from plays p
+  join labelled l on l.artist_key = p.artist_key
+                 and (p_mode = 'artists' or l.tk = p.track_key)
+  where p.user_id = p_user
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
+  group by l.artist, l.track, 3
+  order by 3;
 $$;

@@ -51,7 +51,7 @@ function DailyChart({ daily }) {
  * Everything known about one row, fetched on demand. Opens over the list
  * rather than navigating, so the ranking stays where it was.
  */
-export default function Detail({ target, source, onClose }) {
+export default function Detail({ target, source, estimate, onClose }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -62,12 +62,13 @@ export default function Detail({ target, source, onClose }) {
     setError(null);
     const qs = new URLSearchParams({ artist: target.artist, source });
     if (target.track) qs.set('track', target.track);
+    if (estimate) qs.set('estimate', '1');
     fetch(`/api/item?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [target, source]);
+  }, [target, source, estimate]);
 
   useEffect(() => {
     const esc = (e) => { if (e.key === 'Escape') onClose(); };
@@ -81,6 +82,9 @@ export default function Detail({ target, source, onClose }) {
     ? data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a))
     : null;
   const hours = s ? s.minutes / 60 : 0;
+  // Play counts and listening time carry the YouTube estimate; the day and week
+  // counts are read off the timestamps and don't move with it.
+  const est = Boolean(data?.estimate && s?.yt) ? '≈' : '';
 
   return (
     <>
@@ -101,8 +105,8 @@ export default function Detail({ target, source, onClose }) {
           <>
             <div className="totals">
               {[
-                [s.plays.toLocaleString(), '재생'],
-                [hours >= 1 ? `${hours.toFixed(1)}h` : `${s.minutes}분`, '시간'],
+                [est + s.plays.toLocaleString(), '재생'],
+                [est + (hours >= 1 ? `${hours.toFixed(1)}h` : `${s.minutes}분`), '시간'],
                 [s.days.toLocaleString(), '들은 날'],
                 [s.weeks.toLocaleString(), '들은 주'],
               ].map(([v, l]) => (
@@ -117,7 +121,8 @@ export default function Detail({ target, source, onClose }) {
             <DailyChart daily={data.daily} />
             <p className="note">
               막대는 하루 재생 횟수입니다. 가장 많이 들은 날{' '}
-              <b>{fmtDate(best?.day)}</b> — {Number(best?.plays ?? 0).toLocaleString()}회
+              <b>{fmtDate(best?.day)}</b> — {est}{Number(best?.plays ?? 0).toLocaleString()}회
+              {est && <><br />≈는 유튜브 기록을 Recap 청취 시간에 맞춰 되살린 추정치입니다.</>}
             </p>
           </>
         )}

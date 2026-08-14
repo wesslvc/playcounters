@@ -23,7 +23,7 @@ const monthLabel = (m) => {
  * Drawn as inline SVG rather than pulled from a charting library — one chart
  * doesn't justify the bundle, and this way it inherits the theme tokens.
  */
-export default function Trend({ mode, source }) {
+export default function Trend({ mode, source, estimate }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -31,12 +31,14 @@ export default function Trend({ mode, source }) {
     const ctl = new AbortController();
     setData(null);
     setError(null);
-    fetch(`/api/trend?mode=${mode}&source=${source}&limit=5`, { signal: ctl.signal })
+    const qs = new URLSearchParams({ mode, source, limit: '5' });
+    if (estimate) qs.set('estimate', '1');
+    fetch(`/api/trend?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [mode, source]);
+  }, [mode, source, estimate]);
 
   const chart = useMemo(() => {
     if (!data?.months?.length) return null;
@@ -97,7 +99,7 @@ export default function Trend({ mode, source }) {
             <i style={{ background: COLORS[i % COLORS.length] }} />
             <b>{s.track ?? s.artist}</b>
             {s.track && <span>{s.artist}</span>}
-            <em>{s.total.toLocaleString()}회</em>
+            <em>{estimate && s.yt ? '≈' : ''}{s.total.toLocaleString()}회</em>
           </li>
         ))}
       </ol>

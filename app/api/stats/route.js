@@ -16,6 +16,10 @@ export async function GET(req) {
   const mode = q.get('mode') === 'artists' ? 'artists' : 'tracks';
   // Spotify and YouTube aren't measured the same way, so they can be read apart.
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
+  // YouTube counts are calibrated against Recap when asked for; Spotify rows
+  // are unaffected either way. Harmless without a calibration too — the
+  // per-play estimate is then the recorded value, so the flag changes nothing.
+  const estimate = q.get('estimate') === '1';
   // The per-item day list is the largest thing here and only the span graph
   // needs it, so it is opt-in rather than always sent.
   const withDays = q.get('days') === '1';
@@ -33,20 +37,22 @@ export async function GET(req) {
   const prevTo = q.get('prevTo');
   const wantPrev = Boolean(prevFrom && prevTo);
 
-  const [items, daily, total, prev, calendar, user] = await Promise.all([
+  const [items, daily, total, prev, calendar, calibrated, user] = await Promise.all([
     db.rpc('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
-      p_limit: limit, p_source: src, p_days: withDays,
+      p_limit: limit, p_source: src, p_days: withDays, p_estimate: estimate,
     }),
-    db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src }),
+    db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src, p_estimate: estimate }),
     db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_source: src }),
     wantPrev
       ? db.rpc('top_items', {
           p_user: userId, p_from: prevFrom, p_to: prevTo,
           p_mode: mode, p_tz: TZ, p_limit: limit, p_source: src,
+          p_estimate: estimate,
         })
       : Promise.resolve({ data: null, error: null }),
     db.rpc('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }),
+    db.rpc('has_youtube_estimate', { p_user: userId }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
 
@@ -67,6 +73,12 @@ export async function GET(req) {
     // derives its options from this, so it can never offer an empty date.
     // Independent of the selected period.
     calendar: calendar.error ? [] : (calendar.data ?? []),
+    // Whether a Recap calibration exists, so the UI only offers the estimate
+    // when there is something real behind it.
+    calibrated: calibrated.error ? false : Boolean(calibrated.data),
+    // What the numbers below actually are, not what was asked for: without a
+    // calibration the estimate resolves to the recorded figures.
+    estimate: estimate && !calibrated.error && Boolean(calibrated.data),
     summary: {
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
@@ -74,6 +86,9 @@ export async function GET(req) {
       // The real distinct count; `shown` is how much of it the list holds.
       items:   total.error ? rows.length : Number(total.data),
       shown:   rows.length,
+      // Whether YouTube plays are part of these totals, so the header can say
+      // so only when they are.
+      yt:      days.some((d) => d.yt),
     },
   });
 }

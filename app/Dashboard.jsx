@@ -273,6 +273,11 @@ export default function Dashboard() {
   const [calendar, setCalendar] = useState([]);
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
+  // YouTube's export logs one entry per session however many times a track
+  // actually ran, so its raw counts are far below the truth. On by default:
+  // the calibrated figure is the closer one, and the server answers with the
+  // recorded numbers anyway when there is nothing calibrated to apply.
+  const [estimate, setEstimate] = useState(true);
 
   // The theme is applied before paint by a script in the layout; this only
   // reads back what it decided, so the toggle starts on the right label.
@@ -368,12 +373,13 @@ export default function Dashboard() {
     const { from, to, prevFrom, prevTo } = rangeFor(sel);
     const qs = new URLSearchParams({ mode, from, to, limit: String(limit), source: src });
     if (viz !== 'count') qs.set('days', '1');
+    if (estimate) qs.set('estimate', '1');
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [sel, mode, src, viz, limit]);
+  }, [sel, mode, src, viz, limit, estimate]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -494,6 +500,16 @@ export default function Dashboard() {
   const syncedAt = data?.user?.last_synced_at;
   const showCount = viz === 'count' || viz === 'both';
   const showSpan = viz === 'span' || viz === 'both';
+  // Whether a calibration exists at all, and whether the numbers on screen are
+  // actually carrying it. The server decides the second one — asking for the
+  // estimate without a calibration behind it just returns the recorded figures.
+  const calibrated = Boolean(data?.calibrated);
+  const estimating = Boolean(data?.estimate);
+  /** A figure is an estimate only if YouTube plays went into it. */
+  const isEst = (row) => estimating && Boolean(row?.yt);
+  /** Only these two move with the estimate — days and weeks are counted off the
+      timestamps whichever way the toggle is set. */
+  const estIsh = sort === 'plays' || sort === 'minutes';
 
   return (
     <div className="wrap">
@@ -524,14 +540,24 @@ export default function Dashboard() {
 
         <div className="totals">
           {[
-            [s ? s.plays.toLocaleString() : '—', '재생'],
-            [s ? Math.round(s.minutes / 60).toLocaleString() : '—', '시간'],
-            [s ? s.items.toLocaleString() : '—', mode === 'tracks' ? '곡' : '가수'],
-            [s ? s.days.toLocaleString() : '—', '들은 날'],
-          ].map(([v, l]) => (
-            <div className="tot" key={l}><b>{v}</b><span>{l}</span></div>
+            [s ? s.plays.toLocaleString() : '—', '재생', true],
+            [s ? Math.round(s.minutes / 60).toLocaleString() : '—', '시간', true],
+            [s ? s.items.toLocaleString() : '—', mode === 'tracks' ? '곡' : '가수', false],
+            [s ? s.days.toLocaleString() : '—', '들은 날', false],
+          ].map(([v, l, est]) => (
+            <div className="tot" key={l}>
+              <b>{est && isEst(s) ? `≈${v}` : v}</b><span>{l}</span>
+            </div>
           ))}
         </div>
+        {isEst(s) && (
+          <p className="estnote">
+            <b>≈</b> 표시는 추정치입니다. 유튜브 기록에는 반복 재생이 남지 않아,
+            YouTube Music Recap이 알려 준 청취 시간에 맞춰 다시 계산했습니다.
+            총량이 Recap 값에 고정되므로 <b>반복해서 듣던 곡은 올라가고 나머지는
+            내려갑니다.</b> 기록 그대로 보려면 아래에서 바꿀 수 있습니다.
+          </p>
+        )}
       </header>
 
       <div className="controls">
@@ -578,6 +604,19 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+        {calibrated && (
+          <div className="grp">
+            <span className="lbl">유튜브 횟수</span>
+            <div className="row">
+              <button className="pill" aria-pressed={estimate} onClick={() => setEstimate(true)}>
+                추정치
+              </button>
+              <button className="pill" aria-pressed={!estimate} onClick={() => setEstimate(false)}>
+                기록 그대로
+              </button>
+            </div>
+          </div>
+        )}
         <div className="grp">
           <span className="lbl">종류</span>
           <div className="row">
@@ -615,7 +654,7 @@ export default function Dashboard() {
           {showTrend ? '추이 숨기기' : '상위 5개 추이 보기'}
         </button>
       </div>
-      {showTrend && <Trend mode={mode} source={src} />}
+      {showTrend && <Trend mode={mode} source={src} estimate={estimating} />}
 
       {error && <p className="err" style={{ padding: '20px 2px' }}>{error}</p>}
 
@@ -638,18 +677,22 @@ export default function Dashboard() {
               it actually ran, so play counts are not comparable across
               sources. Days listened is, and the app can already sort by it —
               saying so beats letting the ranking quietly mislead. */}
-          {src !== 'spotify' && sort === 'plays' && (
+          {src !== 'spotify' && sort === 'plays' && !estimating && (
             <p className="caveat">
               유튜브 기록은 하루에 한 번만 남아서 <b>재생 횟수가 실제보다 적습니다.</b>
-              {' '}출처를 섞어 볼 때는{' '}
-              <button className="linkish" onClick={() => setSort('days')}>들은 날</button>
-              {' '}기준이 더 정확합니다.
+              {' '}
+              {calibrated
+                ? <>위의 <b>추정치</b>를 켜면 보정된 횟수를 볼 수 있습니다.</>
+                : <>출처를 섞어 볼 때는{' '}
+                    <button className="linkish" onClick={() => setSort('days')}>들은 날</button>
+                    {' '}기준이 더 정확합니다.</>}
             </p>
           )}
           <div className="legend">
             <span>
               {mode === 'tracks' ? '곡' : '가수'} · {SORTS.find((x) => x[0] === sort)[1]} 순
               {prevRank && ' · 변동은 직전 기간 대비'}
+              {estimating && ' · ≈는 유튜브 추정치'}
             </span>
             <span>
               {s ? `${s.items.toLocaleString()}개 중 ` : ''}{rows.length.toLocaleString()} 표시
@@ -681,10 +724,16 @@ export default function Dashboard() {
                   >
                     <b>{r.track ?? r.artist}</b>
                     <span>
-                      {r.track ? r.artist : `${Number(r.plays).toLocaleString()}회 · ${r.days}일`}
+                      {r.track ? r.artist
+                        : `${isEst(r) ? '≈' : ''}${Number(r.plays).toLocaleString()}회 · ${r.days}일`}
                     </span>
                   </button>
-                  <div className="val">{fmt(r[sort], sort)}<i>{unit}</i></div>
+                  <div className="val" title={isEst(r) ? '유튜브 추정치가 포함된 값입니다' : undefined}>
+                    {/* Only 재생 횟수 and 들은 시간 are estimated; the day and week
+                        counts come straight from the timestamps either way. */}
+                    {estIsh && isEst(r) && <em className="est">≈</em>}
+                    {fmt(r[sort], sort)}<i>{unit}</i>
+                  </div>
                   {showCount && (
                     <div className="meter" aria-hidden="true"><i style={{ width: pct + '%' }} /></div>
                   )}
@@ -715,12 +764,14 @@ export default function Dashboard() {
         </>
       )}
 
-      <Detail target={detail} source={src} onClose={() => setDetail(null)} />
+      <Detail target={detail} source={src} estimate={estimate} onClose={() => setDetail(null)} />
 
       <p className="foot">
         30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.<br />
-        날짜는 한국 시간 기준입니다. 유튜브 기록은 재생 길이가 없어
-        1회당 2.5분으로 셉니다.
+        날짜는 한국 시간 기준입니다. 유튜브 기록에는 재생 길이가 없어,
+        {estimating
+          ? ' Recap 청취 시간에 맞춰 곡마다 되살린 값을 씁니다.'
+          : ' 기록 사이의 간격으로 길이를 추정합니다.'}
       </p>
     </div>
   );

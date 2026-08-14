@@ -13,10 +13,15 @@ const monthLabel = (m) => {
 };
 
 /**
- * How the leaders rose and fell against each other, by month, across the whole
- * history. Drawn as inline SVG rather than pulled from a charting library —
- * one chart doesn't justify the bundle, and this way it inherits the theme
- * tokens directly.
+ * Running play totals for the leaders, month by month across the whole
+ * history — how each one accumulated, and where one overtook another.
+ *
+ * Cumulative rather than per-month: the question is how a song got to its
+ * total, which a bar of monthly counts answers only indirectly. Flat
+ * stretches read as time out of rotation.
+ *
+ * Drawn as inline SVG rather than pulled from a charting library — one chart
+ * doesn't justify the bundle, and this way it inherits the theme tokens.
  */
 export default function Trend({ mode, source }) {
   const [data, setData] = useState(null);
@@ -37,17 +42,21 @@ export default function Trend({ mode, source }) {
     if (!data?.months?.length) return null;
     const months = data.months;
     const x = (i) => PAD.l + (i / Math.max(1, months.length - 1)) * (W - PAD.l - PAD.r);
-    const peak = Math.max(
-      1,
-      ...data.series.flatMap((s) => s.points.map((p) => p.plays))
-    );
+    // Running totals only ever grow, so the tallest line is the biggest total.
+    const peak = Math.max(1, ...data.series.map((s) => s.total));
     const y = (v) => PAD.t + (1 - v / peak) * (H - PAD.t - PAD.b);
 
     const lines = data.series.map((s) => {
       const byMonth = new Map(s.points.map((p) => [p.month, p.plays]));
-      // Months with no plays are real zeros, not gaps to interpolate over.
+      // Cumulative: a month with no plays holds the line flat rather than
+      // dropping it, because the total hasn't gone anywhere. Flat stretches
+      // are the point — they show when something fell out of rotation.
+      let run = 0;
       const d = months
-        .map((m, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(byMonth.get(m) ?? 0).toFixed(1)}`)
+        .map((m, i) => {
+          run += byMonth.get(m) ?? 0;
+          return `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(run).toFixed(1)}`;
+        })
         .join(' ');
       return { ...s, d };
     });
@@ -65,12 +74,12 @@ export default function Trend({ mode, source }) {
   return (
     <div className="trend">
       <div className="legend">
-        <span>상위 5개 · 월별 재생</span>
-        <span>{monthLabel(months[0])} ~ {monthLabel(months[months.length - 1])} · 최고 {peak}회</span>
+        <span>상위 5개 · 누적 재생</span>
+        <span>{monthLabel(months[0])} ~ {monthLabel(months[months.length - 1])} · 최대 {peak.toLocaleString()}회</span>
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="trend-svg" role="img"
-           aria-label={`상위 ${lines.length}개 월별 재생 추이`}>
+           aria-label={`상위 ${lines.length}개 누적 재생 추이`}>
         {lines.map((s, i) => (
           <path key={i} d={s.d} fill="none" stroke={COLORS[i % COLORS.length]}
                 strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"

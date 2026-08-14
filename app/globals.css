@@ -92,7 +92,7 @@ button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--pink
 }
 ol { list-style:none }
 li.item {
-  display:grid; grid-template-columns:26px 1fr auto; gap:0 10px;
+  display:grid; grid-template-columns:30px 38px 1fr auto; gap:0 10px;
   align-items:center; padding:9px 2px; border-bottom:1px solid var(--line);
 }
 .rk {
@@ -100,6 +100,24 @@ li.item {
   font-size:13px; color:var(--mute); text-align:right;
 }
 li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
+
+/* ---------- rank movement ---------- */
+.delta {
+  display:block; font-family:"IBM Plex Sans KR",sans-serif;
+  font-weight:600; font-size:9.5px; letter-spacing:-.02em; margin-top:1px;
+}
+.delta.up   { color:var(--teal) }
+.delta.down { color:var(--pink) }
+.delta.same { color:var(--line) }
+.delta.new  { color:var(--indigo); font-size:8px; letter-spacing:.02em }
+
+/* ---------- cover art ---------- */
+.art { width:38px; height:38px; border-radius:6px; overflow:hidden; background:var(--line) }
+.art img { display:block; width:100%; height:100%; object-fit:cover }
+.art-none {
+  display:block; width:100%; height:100%;
+  background:linear-gradient(135deg, var(--line), var(--card));
+}
 .nm { min-width:0 }
 .nm b { display:block; font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .nm span { display:block; font-size:12px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
@@ -113,7 +131,7 @@ li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
    Width is the row's value against the leader's, so rank is readable at a
    glance instead of having to compare numbers. */
 .meter {
-  grid-column:2/4; height:7px; background:var(--line);
+  grid-column:3/5; height:7px; background:var(--line);
   border-radius:999px; overflow:hidden; margin-top:7px;
 }
 .meter i {
@@ -123,6 +141,19 @@ li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
 li.item:nth-child(1) .meter i { background:var(--pink) }
 li.item:nth-child(2) .meter i,
 li.item:nth-child(3) .meter i { background:var(--teal) }
+
+/* ---------- span strip ----------
+   The other reading of the same row: when it was in rotation rather than how
+   much. Shown alone, or stacked under the meter as "둘 다". */
+.strip {
+  grid-column:3/5; display:flex; align-items:stretch; gap:1px;
+  height:15px; margin-top:7px;
+}
+ol.dual .strip { height:11px; margin-top:4px }
+.strip i { flex:1 1 0; background:var(--line); border-radius:.5px }
+.strip i.on  { background:var(--teal) }
+.strip i.hi  { background:var(--indigo) }
+.strip i.max { background:var(--pink) }
 
 /* ---------- landing / states ---------- */
 .panel {

@@ -22,12 +22,24 @@ export async function GET(req) {
     ? Math.min(asked, MAX_LIMIT)
     : DEFAULT_LIMIT;
 
-  const [items, daily, total, user] = await Promise.all([
+  // The equivalent window immediately before this one, so the client can rank
+  // both and show movement. Absent for "전체", which has no before.
+  const prevFrom = q.get('prevFrom');
+  const prevTo = q.get('prevTo');
+  const wantPrev = Boolean(prevFrom && prevTo);
+
+  const [items, daily, total, prev, user] = await Promise.all([
     db.rpc('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_limit: limit,
     }),
     db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ }),
     db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ }),
+    wantPrev
+      ? db.rpc('top_items', {
+          p_user: userId, p_from: prevFrom, p_to: prevTo,
+          p_mode: mode, p_tz: TZ, p_limit: limit,
+        })
+      : Promise.resolve({ data: null, error: null }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
 
@@ -41,6 +53,9 @@ export async function GET(req) {
     user: user.data ?? null,
     items: rows,
     daily: days,
+    // Ranking depends on the metric the client is sorting by, so send the raw
+    // previous window and let it rank both the same way.
+    prev: prev.error ? null : prev.data,
     summary: {
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),

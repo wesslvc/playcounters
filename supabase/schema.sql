@@ -32,11 +32,25 @@ create table if not exists plays (
 create index if not exists plays_user_time  on plays (user_id, played_at desc);
 create index if not exists plays_user_artist on plays (user_id, artist);
 
+-- ---------- cover art ----------
+-- Shared across users and immutable, so it lives here rather than on plays.
+-- Imported history carries no images; those are filled by searching Spotify
+-- once. Misses are stored as null so a fruitless search isn't repeated.
+create table if not exists covers (
+  kind       text not null,               -- 'album' | 'artist'
+  artist     text not null,
+  album      text not null default '',    -- '' for artist covers
+  image_url  text,
+  fetched_at timestamptz not null default now(),
+  primary key (kind, artist, album)
+);
+
 -- Row level security: everything goes through the service role on the
 -- server, so no anon policies are needed. RLS on = nothing leaks if the
 -- publishable key is ever used from the browser.
 alter table users enable row level security;
 alter table plays enable row level security;
+alter table covers enable row level security;
 
 -- ============================================================
 --  Ranking function
@@ -54,6 +68,7 @@ create or replace function top_items(
 returns table (
   artist   text,
   track    text,
+  album    text,
   plays    bigint,
   days     bigint,
   weeks    bigint,
@@ -69,6 +84,10 @@ as $$
   select
     p.artist,
     case when p_mode = 'artists' then null else p.track end as track,
+    -- Most recent album this track was played from: singles get re-released
+    -- on compilations, and the latest is what artwork search will match.
+    case when p_mode = 'artists' then null
+         else (array_agg(p.album order by p.played_at desc))[1] end as album,
     count(*)                                                as plays,
     count(distinct (p.played_at at time zone p_tz)::date)   as days,
     count(distinct to_char(p.played_at at time zone p_tz, 'IYYY-IW')) as weeks,

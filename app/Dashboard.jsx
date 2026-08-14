@@ -412,9 +412,21 @@ export default function Dashboard() {
   // has to be discarded when the mode changes.
   const shown = useMemo(() => rows.slice(0, visible), [rows, visible]);
   const inFlight = useRef(false);
+  const [coverTick, setCoverTick] = useState(0);
+  const pausedUntil = useRef(0);
 
   useEffect(() => {
     if (inFlight.current || !shown.length) return;
+
+    // Spotify rate-limits artwork search, and nearly every YouTube row needs
+    // its own lookup. When the server reports a pause, wait it out and try
+    // again rather than firing another burst on the next scroll.
+    const wait = pausedUntil.current - Date.now();
+    if (wait > 0) {
+      const t = setTimeout(() => setCoverTick((n) => n + 1), wait + 250);
+      return () => clearTimeout(t);
+    }
+
     const missing = [];
     const seen = new Set();
     for (const r of shown) {
@@ -435,10 +447,19 @@ export default function Dashboard() {
     })
       .then((r) => r.json())
       .then((json) => {
-        if (cancelled || !json?.covers) return;
-        // Record every key asked for, so an unresolved one isn't requested in a
-        // loop; a later visit picks it up from the server cache.
-        const merged = { ...json.covers };
+        if (cancelled || !json) return;
+        if (json.retryAfter) {
+          pausedUntil.current = Date.now() + json.retryAfter * 1000;
+          // Keep whatever did resolve, but leave the rest unknown so they are
+          // asked for again — marking them missing here would blank those rows
+          // for the whole session over a temporary limit.
+          if (json.covers) setCovers((c) => ({ ...c, ...json.covers }));
+          setCoverTick((n) => n + 1);
+          return;
+        }
+        const merged = { ...(json.covers || {}) };
+        // Record every key asked for, so an unresolved one isn't requested in
+        // a loop; a later visit picks it up from the server cache.
         for (const m of missing) {
           const k = coverKeyFor(mode, m);
           if (!(k in merged)) merged[k] = null;
@@ -448,7 +469,7 @@ export default function Dashboard() {
       .catch(() => {})
       .finally(() => { inFlight.current = false; });
     return () => { cancelled = true; };
-  }, [shown, covers, mode]);
+  }, [shown, covers, mode, coverTick]);
 
   const max = rows.length ? Number(rows[0][sort]) : 0;
   const unit = SORTS.find((s) => s[0] === sort)[2];

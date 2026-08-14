@@ -9,9 +9,19 @@ export const maxDuration = 60;
 /** Keys accepted per call; the client asks again for whatever is still missing. */
 const MAX_KEYS = 80;
 /** Cache misses actually searched per call, bounding both latency and rate limit. */
-const MAX_SEARCH = 30;
+const MAX_SEARCH = 12;
 /** Searches in flight at once. */
-const CONCURRENCY = 6;
+const CONCURRENCY = 3;
+
+/**
+ * Spotify's rate limit is easy to walk into here: most YouTube rows carry no
+ * album, so nearly every one needs its own track search, and a miss costs two
+ * requests because of the loose retry. Once limited, stop searching entirely
+ * until the window passes and say so, rather than having each scroll throw
+ * another burst at a closed door. Per-instance, which is enough to break the
+ * feedback loop.
+ */
+let pausedUntil = 0;
 
 async function inBatches(items, size, fn) {
   const out = [];
@@ -77,14 +87,25 @@ export async function POST(req) {
     else misses.push(w);
   }
 
+  const waitMs = pausedUntil - Date.now();
+  if (waitMs > 0) {
+    return NextResponse.json({
+      covers, pending: misses.length, retryAfter: Math.ceil(waitMs / 1000),
+    });
+  }
+
   const searching = misses.slice(0, MAX_SEARCH);
   const found = await inBatches(searching, CONCURRENCY, async (w) => {
     try {
       return { ...w, image_url: await searchCover(w.kind, w.artist, w.name) };
     } catch (e) {
-      // Rate limit or a bad response: leave it unresolved rather than caching
-      // a null we would never retry.
-      console.error('cover search failed', w.kind, w.artist, w.name, e.message);
+      if (e.rateLimited) {
+        pausedUntil = Math.max(pausedUntil, Date.now() + e.retryAfter * 1000);
+      } else {
+        // A bad response: leave it unresolved rather than caching a null we
+        // would never retry.
+        console.error('cover search failed', w.kind, w.artist, w.name, e.message);
+      }
       return null;
     }
   });
@@ -103,5 +124,10 @@ export async function POST(req) {
     for (const r of resolved) covers[coverKey(r)] = r.image_url;
   }
 
-  return NextResponse.json({ covers, pending: misses.length - searching.length });
+  const stillPaused = Math.max(0, pausedUntil - Date.now());
+  return NextResponse.json({
+    covers,
+    pending: misses.length - resolved.length,
+    ...(stillPaused ? { retryAfter: Math.ceil(stillPaused / 1000) } : {}),
+  });
 }

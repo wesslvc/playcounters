@@ -1,0 +1,26 @@
+name: Sync Spotify plays
+
+# Vercel's Hobby plan caps its own cron at one run per day, which would lose
+# plays for anyone listening to more than 50 tracks between runs. GitHub
+# Actions schedules are free and go down to 5 minutes, so the schedule lives
+# here and just calls the same endpoint.
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes, UTC
+  workflow_dispatch:          # lets you trigger a run by hand from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/sync
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/sync")
+          cat /tmp/out.json
+          echo
+          if [ "$code" != "200" ]; then
+            echo "sync failed with HTTP $code"
+            exit 1
+          fi

@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap');
+
+:root {
+  --paper:#EFEDF4; --card:#FBFAFE; --ink:#191327; --mute:#6B6480;
+  --line:#DCD7E8; --indigo:#4B3BFF; --pink:#FF5C93; --teal:#00A08C;
+}
+
+* { box-sizing:border-box; margin:0; padding:0 }
+html { -webkit-text-size-adjust:100% }
+
+body {
+  background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.5; padding:0 0 64px;
+  font-variant-numeric:tabular-nums;
+}
+
+.wrap { max-width:720px; margin:0 auto; padding:0 16px }
+
+/* ---------- header ---------- */
+header { padding:32px 0 22px }
+.eyebrow {
+  font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--mute); font-weight:600; margin-bottom:10px;
+}
+h1 {
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:800;
+  font-size:clamp(28px,7.5vw,44px); line-height:1.03;
+  letter-spacing:-.02em; margin-bottom:18px;
+}
+h1 em { font-style:normal; color:var(--indigo) }
+
+.totals { display:flex; flex-wrap:wrap; border-top:1.5px solid var(--ink) }
+.tot { flex:1 1 25%; min-width:80px; padding:12px 0 4px; border-bottom:1px solid var(--line) }
+.tot b {
+  display:block; font-family:"Bricolage Grotesque",sans-serif;
+  font-weight:700; font-size:23px; letter-spacing:-.01em;
+}
+.tot span { font-size:11px; color:var(--mute) }
+
+/* ---------- controls ---------- */
+.controls {
+  position:sticky; top:0; z-index:5; background:var(--paper);
+  padding:12px 0 10px; box-shadow:0 8px 12px -8px rgba(25,19,39,.14);
+}
+.row { display:flex; gap:6px; margin-bottom:6px; overflow-x:auto; scrollbar-width:none }
+.row::-webkit-scrollbar { display:none }
+.row:last-child { margin-bottom:0 }
+
+button.pill, a.pill {
+  flex:0 0 auto; font:inherit; font-size:13px; font-weight:500;
+  padding:7px 13px; border:1px solid var(--line); border-radius:999px;
+  background:var(--card); color:var(--mute); cursor:pointer;
+  text-decoration:none; white-space:nowrap;
+  transition:background .12s, color .12s, border-color .12s;
+}
+button.pill:hover, a.pill:hover { border-color:var(--indigo); color:var(--ink) }
+button.pill[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:#fff }
+.row.sorts button.pill[aria-pressed=true] { background:var(--indigo); border-color:var(--indigo) }
+button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+
+/* ---------- list ---------- */
+.legend {
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:11px; color:var(--mute); padding:14px 2px 8px; letter-spacing:.04em;
+}
+ol { list-style:none }
+li.item {
+  display:grid; grid-template-columns:26px 1fr auto; gap:0 10px;
+  align-items:center; padding:9px 2px; border-bottom:1px solid var(--line);
+}
+.rk {
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
+  font-size:13px; color:var(--mute); text-align:right;
+}
+li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
+.nm { min-width:0 }
+.nm b { display:block; font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.nm span { display:block; font-size:12px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.val { font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:17px; text-align:right }
+.val i {
+  display:block; font-style:normal; font-family:"IBM Plex Sans KR",sans-serif;
+  font-weight:400; font-size:10.5px; color:var(--mute);
+}
+
+/* ---------- signature: activity strip ---------- */
+.strip { grid-column:2/4; display:flex; align-items:flex-end; gap:1px; height:17px; margin-top:6px }
+.strip i { flex:1 1 0; background:var(--line); border-radius:.5px; min-height:1.5px }
+.strip i.on  { background:var(--teal) }
+.strip i.hi  { background:var(--indigo) }
+.strip i.max { background:var(--pink) }
+
+/* ---------- landing / states ---------- */
+.panel {
+  background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:20px; margin:16px 0;
+}
+.panel h2 { font-family:"Bricolage Grotesque",sans-serif; font-size:19px; margin-bottom:8px }
+.panel p { font-size:13.5px; color:var(--mute); margin-bottom:12px; line-height:1.6 }
+.btn {
+  display:inline-block; font:inherit; font-weight:600; font-size:14px;
+  padding:11px 20px; border:none; border-radius:999px;
+  background:var(--indigo); color:#fff; cursor:pointer; text-decoration:none;
+}
+.btn:disabled { background:var(--mute); cursor:default }
+.btn.ghost { background:transparent; color:var(--indigo); border:1.5px solid var(--indigo) }
+.btn:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+
+.bar { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin:12px 0 6px }
+.bar > div { height:100%; background:var(--indigo); transition:width .2s }
+.note { font-size:12px; color:var(--mute); line-height:1.7 }
+.err { color:var(--pink); font-size:13px; font-weight:500 }
+.foot { font-size:11.5px; color:var(--mute); padding:22px 2px 0; line-height:1.7 }
+
+input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
+
+@media (prefers-reduced-motion:reduce) { * { transition:none !important } }

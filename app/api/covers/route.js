@@ -95,13 +95,21 @@ export async function POST(req) {
   }
 
   const searching = misses.slice(0, MAX_SEARCH);
+  // Outcome counts, logged once per call. Without them a search that quietly
+  // matches nothing is indistinguishable from one that never ran.
+  const tally = { strict: 0, loose: 0, rejected: 0, 'no-candidates': 0, unusable: 0, limited: 0, failed: 0 };
+
   const found = await inBatches(searching, CONCURRENCY, async (w) => {
     try {
-      return { ...w, image_url: await searchCover(w.kind, w.artist, w.name) };
+      const { url, stage } = await searchCover(w.kind, w.artist, w.name);
+      tally[stage] = (tally[stage] ?? 0) + 1;
+      return { ...w, image_url: url };
     } catch (e) {
       if (e.rateLimited) {
+        tally.limited++;
         pausedUntil = Math.max(pausedUntil, Date.now() + e.retryAfter * 1000);
       } else {
+        tally.failed++;
         // A bad response: leave it unresolved rather than caching a null we
         // would never retry.
         console.error('cover search failed', w.kind, w.artist, w.name, e.message);
@@ -122,6 +130,13 @@ export async function POST(req) {
     );
     if (upErr) console.error('cover cache write failed', upErr.message);
     for (const r of resolved) covers[coverKey(r)] = r.image_url;
+  }
+
+  if (searching.length) {
+    console.log('covers', JSON.stringify({
+      asked: wanted.length, cached: wanted.length - misses.length,
+      searched: searching.length, ...tally,
+    }));
   }
 
   const stillPaused = Math.max(0, pausedUntil - Date.now());

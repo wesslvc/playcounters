@@ -72,6 +72,18 @@ h1 em { font-style:normal; color:var(--indigo) }
   flex:0 0 26px; font-size:10px; letter-spacing:.08em; color:var(--mute);
   font-weight:600;
 }
+select.sel {
+  appearance:none; padding-right:26px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),
+                   linear-gradient(135deg,var(--mute) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 52%, calc(100% - 9px) 52%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+}
+select.sel:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+.picked {
+  flex:0 0 auto; align-self:center; font-size:12px;
+  font-weight:600; color:var(--indigo); white-space:nowrap;
+}
 
 button.pill, a.pill {
   flex:0 0 auto; font:inherit; font-size:13px; font-weight:500;

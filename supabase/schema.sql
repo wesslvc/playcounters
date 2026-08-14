@@ -132,6 +132,26 @@ as $$
 $$;
 
 -- ============================================================
+--  Months that hold plays — powers the month picker
+--  Listening isn't continuous, so this lists the months that
+--  actually have something rather than every month between the
+--  first and the last. Same >=30s rule as the rankings.
+-- ============================================================
+create or replace function play_months(p_user uuid, p_tz text default 'Asia/Seoul')
+returns table (ym text, plays bigint)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select to_char(played_at at time zone p_tz, 'YYYY-MM') as ym,
+         count(*) as plays
+  from plays
+  where user_id = p_user
+    and ms_played >= 30000
+  group by 1
+  order by 1 desc;
+$$;
+
+-- ============================================================
 --  Daily totals — powers the summary tiles
 -- ============================================================
 create or replace function daily_totals(

@@ -28,7 +28,7 @@ export async function GET(req) {
   const prevTo = q.get('prevTo');
   const wantPrev = Boolean(prevFrom && prevTo);
 
-  const [items, daily, total, prev, user] = await Promise.all([
+  const [items, daily, total, prev, months, user] = await Promise.all([
     db.rpc('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_limit: limit,
     }),
@@ -40,6 +40,7 @@ export async function GET(req) {
           p_mode: mode, p_tz: TZ, p_limit: limit,
         })
       : Promise.resolve({ data: null, error: null }),
+    db.rpc('play_months', { p_user: userId, p_tz: TZ }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
 
@@ -56,6 +57,9 @@ export async function GET(req) {
     // Ranking depends on the metric the client is sorting by, so send the raw
     // previous window and let it rank both the same way.
     prev: prev.error ? null : prev.data,
+    // Months that actually hold plays, so the picker never offers an empty
+    // one. Independent of the selected period.
+    months: months.error ? [] : (months.data ?? []),
     summary: {
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),

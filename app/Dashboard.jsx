@@ -55,6 +55,14 @@ const kstYearShift = (ts, years) => {
   return Date.UTC(k.getUTCFullYear() + years, 0, 1) - KST;
 };
 
+/** A specific calendar month, e.g. "2026-03", cut on Korean day boundaries. */
+const MONTH_PREFIX = 'm:';
+const monthLabel = (ym) => {
+  const [y, m] = ym.split('-');
+  return `${y}년 ${Number(m)}월`;
+};
+
+
 /**
  * Window for a period, plus the equivalent window right before it so the list
  * can show movement. "전체" has no before, so it gets none.
@@ -68,6 +76,13 @@ function rangeFor(period) {
     prevFrom: pa == null ? null : iso(pa),
     prevTo: pb == null ? null : iso(pb),
   });
+
+  // A month picked from the calendar, compared against the month before it.
+  if (period.startsWith(MONTH_PREFIX)) {
+    const [y, m] = period.slice(MONTH_PREFIX.length).split('-').map(Number);
+    const start = Date.UTC(y, m - 1, 1) - KST;
+    return win(start, Date.UTC(y, m, 1) - KST, Date.UTC(y, m - 2, 1) - KST, start);
+  }
 
   switch (period) {
     case 'today':    return win(midnight, midnight + DAY, midnight - DAY, midnight);
@@ -169,6 +184,13 @@ export default function Dashboard() {
   const [syncMsg, setSyncMsg] = useState(null);
   const [visible, setVisible] = useState(PAGE);
   const [covers, setCovers] = useState({});
+  const [months, setMonths] = useState([]);
+
+  // The month list doesn't depend on the selected period, so hold onto it
+  // instead of letting the picker blink empty on every reload.
+  useEffect(() => {
+    if (data?.months?.length) setMonths(data.months);
+  }, [data]);
 
   // Any change to what's listed or how it's ordered starts the list over.
   useEffect(() => { setVisible(PAGE); }, [period, mode, sort]);
@@ -329,6 +351,26 @@ export default function Dashboard() {
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="grp">
+          <span className="lbl">달</span>
+          <div className="row">
+            <select
+              className="pill sel"
+              value={period.startsWith(MONTH_PREFIX) ? period : ''}
+              onChange={(e) => e.target.value && setPeriod(e.target.value)}
+            >
+              <option value="">월 선택…</option>
+              {months.map(({ ym, plays }) => (
+                <option key={ym} value={MONTH_PREFIX + ym}>
+                  {monthLabel(ym)} ({Number(plays).toLocaleString()}회)
+                </option>
+              ))}
+            </select>
+            {period.startsWith(MONTH_PREFIX) && (
+              <span className="picked">{monthLabel(period.slice(MONTH_PREFIX.length))} 통계</span>
+            )}
           </div>
         </div>
         <div className="grp">

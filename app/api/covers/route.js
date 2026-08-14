@@ -9,9 +9,9 @@ export const maxDuration = 60;
 /** Keys accepted per call; the client asks again for whatever is still missing. */
 const MAX_KEYS = 80;
 /** Cache misses actually searched per call, bounding both latency and rate limit. */
-const MAX_SEARCH = 12;
+const MAX_SEARCH = 24;
 /** Searches in flight at once. */
-const CONCURRENCY = 3;
+const CONCURRENCY = 4;
 
 /**
  * Spotify's rate limit is easy to walk into here: most YouTube rows carry no

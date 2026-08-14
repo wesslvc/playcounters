@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
+import Detail from './Detail';
+import Trend from './Trend';
 
 const MODES = [['tracks', '곡'], ['artists', '가수']];
 const SORTS = [
@@ -84,9 +86,19 @@ function rangeFor(sel) {
   return win(at(y, m - 1, 1), at(y, m, 1), at(y, m - 2, 1), at(y, m - 1, 1));
 }
 
+const dayLabel = (d) => {
+  const [y, m, day] = d.split('-');
+  return `${y}년 ${Number(m)}월 ${Number(day)}일`;
+};
+
 /** "2024년 12월 1일 ~ 12월 7일" — states exactly what is being counted. */
-function rangeLabel(sel) {
-  if (!sel?.y) return '전체 기간';
+function rangeLabel(sel, calendar) {
+  // "전체" still has real edges; naming them beats an unbounded word.
+  if (!sel?.y) {
+    if (!calendar?.length) return '전체 기간';
+    const days = calendar.map((c) => c.day).sort();
+    return `전체 · ${dayLabel(days[0])} ~ ${dayLabel(days[days.length - 1])}`;
+  }
   const { from, to } = rangeFor(sel);
   const a = new Date(new Date(from).getTime() + KST);
   // `to` is exclusive; step back a day to name the last day actually included.
@@ -259,6 +271,8 @@ export default function Dashboard() {
   const [expanding, setExpanding] = useState(false);
   const [covers, setCovers] = useState({});
   const [calendar, setCalendar] = useState([]);
+  const [detail, setDetail] = useState(null);
+  const [showTrend, setShowTrend] = useState(false);
 
   // The theme is applied before paint by a script in the layout; this only
   // reads back what it decided, so the toggle starts on the right label.
@@ -498,7 +512,7 @@ export default function Dashboard() {
       <header>
         <h1><Logo /></h1>
         <p className="eyebrow">{data?.user?.display_name ?? 'Spotify'}</p>
-        <p className="range">{rangeLabel(sel)}</p>
+        <p className="range">{rangeLabel(sel, calendar)}</p>
 
         <p className="synced">
           마지막 갱신{' '}
@@ -596,6 +610,13 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="trendbar">
+        <button className="pill" aria-pressed={showTrend} onClick={() => setShowTrend((v) => !v)}>
+          {showTrend ? '추이 숨기기' : '상위 5개 추이 보기'}
+        </button>
+      </div>
+      {showTrend && <Trend mode={mode} source={src} />}
+
       {error && <p className="err" style={{ padding: '20px 2px' }}>{error}</p>}
 
       {!error && loading && <p className="note" style={{ padding: '20px 2px' }}>불러오는 중…</p>}
@@ -641,12 +662,16 @@ export default function Dashboard() {
                       ? <img src={img} alt="" loading="lazy" decoding="async" width="38" height="38" />
                       : <span className="art-none" aria-hidden="true" />}
                   </div>
-                  <div className="nm">
+                  <button
+                    className="nm as-link"
+                    onClick={() => setDetail({ artist: r.artist, track: r.track ?? null })}
+                    aria-label={`${r.track ?? r.artist} 통계 보기`}
+                  >
                     <b>{r.track ?? r.artist}</b>
                     <span>
                       {r.track ? r.artist : `${Number(r.plays).toLocaleString()}회 · ${r.days}일`}
                     </span>
-                  </div>
+                  </button>
                   <div className="val">{fmt(r[sort], sort)}<i>{unit}</i></div>
                   {showCount && (
                     <div className="meter" aria-hidden="true"><i style={{ width: pct + '%' }} /></div>
@@ -677,6 +702,8 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      <Detail target={detail} source={src} onClose={() => setDetail(null)} />
 
       <p className="foot">
         30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.<br />

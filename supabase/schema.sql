@@ -61,7 +61,11 @@ returns table (
   first_at timestamptz,
   last_at  timestamptz
 )
-language sql stable as $$
+-- search_path is pinned so the function always resolves `plays` in this
+-- schema, whatever the caller's search_path happens to be.
+language sql stable
+set search_path = public, pg_temp
+as $$
   select
     p.artist,
     case when p_mode = 'artists' then null else p.track end as track,
@@ -91,7 +95,9 @@ create or replace function daily_totals(
   p_tz   text default 'Asia/Seoul'
 )
 returns table (day date, plays bigint, minutes bigint)
-language sql stable as $$
+language sql stable
+set search_path = public, pg_temp
+as $$
   select
     (played_at at time zone p_tz)::date as day,
     count(*)                            as plays,

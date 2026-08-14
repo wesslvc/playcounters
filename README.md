@@ -29,6 +29,12 @@ Vercel 플랜은 그대로 무료입니다.
 2. SQL Editor에 `supabase/schema.sql` 전체를 붙여넣고 실행
 3. Project Settings → API에서 **Project URL**과 **service_role** 키 복사
 
+> 무료 플랜은 프로젝트 개수가 제한돼 있습니다. 새로 만들 수 없다면 쓰던
+> 프로젝트에 얹어도 됩니다 — 이 스키마가 만드는 것은 `users`, `plays` 두
+> 테이블과 `top_items`, `daily_totals` 두 함수뿐이라, 이 이름들만 비어 있으면
+> 충돌하지 않습니다. 다만 그 프로젝트의 service_role 키를 이 앱에 넣게 되므로,
+> 앱이 뚫리면 같은 DB의 다른 데이터까지 닿는다는 점은 감안하세요.
+
 ### 2. Spotify 개발자 앱
 
 1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → Create app

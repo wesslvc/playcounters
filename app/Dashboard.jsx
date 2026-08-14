@@ -634,6 +634,18 @@ export default function Dashboard() {
 
       {!error && !loading && rows.length > 0 && (
         <>
+          {/* Takeout logs about one entry per track per day however many times
+              it actually ran, so play counts are not comparable across
+              sources. Days listened is, and the app can already sort by it —
+              saying so beats letting the ranking quietly mislead. */}
+          {src !== 'spotify' && sort === 'plays' && (
+            <p className="caveat">
+              유튜브 기록은 하루에 한 번만 남아서 <b>재생 횟수가 실제보다 적습니다.</b>
+              {' '}출처를 섞어 볼 때는{' '}
+              <button className="linkish" onClick={() => setSort('days')}>들은 날</button>
+              {' '}기준이 더 정확합니다.
+            </p>
+          )}
           <div className="legend">
             <span>
               {mode === 'tracks' ? '곡' : '가수'} · {SORTS.find((x) => x[0] === sort)[1]} 순

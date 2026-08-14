@@ -16,9 +16,11 @@ const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube
 /** Rows added per press of 더 보기 — keeps the DOM light on big libraries. */
 const PAGE = 200;
 /** How many ranked rows to pull; well past what most libraries reach. */
-const FETCH_LIMIT = 5000;
+const FETCH_LIMIT = 1500;
 /** Cover keys requested per round trip. */
 const COVER_BATCH = 60;
+/** Cells in the span strip. Fixed, so the drawing survives a long range. */
+const STRIP_CELLS = 90;
 
 const DAY = 864e5;
 /* Ranking is reckoned in Korean time, so the windows have to be too. KST has
@@ -137,13 +139,23 @@ function Strip({ days, item }) {
   const density = Number(item.days) / spanDays;
   const cls = density > 0.6 ? 'max' : density > 0.25 ? 'hi' : 'on';
 
+  // Drawn as a fixed number of cells rather than one per day. A cell per day
+  // collapsed once the range grew: 626 days at a 1px gap spend every pixel of
+  // a phone-width row on gaps, leaving the bars themselves sub-pixel and the
+  // whole strip invisible.
+  const t0 = new Date(days[0].day).getTime();
+  const t1 = new Date(days[days.length - 1].day).getTime();
+  const span = Math.max(1, t1 - t0);
+  const cells = Math.min(STRIP_CELLS, days.length);
+  const at = (t) => Math.round(((t - t0) / span) * (cells - 1));
+  const from = Math.max(0, Math.min(cells - 1, at(first)));
+  const to = Math.max(from, Math.min(cells - 1, at(last)));
+
   return (
     <div className="strip" aria-hidden="true">
-      {days.map((d) => {
-        const t = new Date(d.day).getTime();
-        const inside = t >= first - DAY / 2 && t <= last + DAY / 2;
-        return <i key={d.day} className={inside ? cls : undefined} />;
-      })}
+      {Array.from({ length: cells }, (_, i) => (
+        <i key={i} className={i >= from && i <= to ? cls : undefined} />
+      ))}
     </div>
   );
 }
@@ -387,7 +399,7 @@ export default function Dashboard() {
       <div className="controls">
         <div className="grp">
           <span className="lbl">기간</span>
-          <div className="row">
+          <div className="row picks">
             <button className="pill" aria-pressed={!sel} onClick={() => setSel(null)}>전체</button>
             <Picker
               value={sel?.y ?? null}
@@ -532,8 +544,8 @@ export default function Dashboard() {
 
       <p className="foot">
         30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.<br />
-        날짜는 한국 시간 기준입니다. 실시간으로 모은 재생은 Spotify가 재생
-        길이를 알려주지 않아 곡 길이로 셉니다.
+        날짜는 한국 시간 기준입니다. 실시간으로 모은 재생은 곡 길이로,
+        유튜브 기록은 재생 길이가 없어 1회당 2.5분으로 셉니다.
       </p>
     </div>
   );

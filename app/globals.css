@@ -95,6 +95,10 @@ h1 em { font-style:normal; color:var(--indigo) }
   font-weight:600;
 }
 
+/* The period row must not scroll — an overflow container clips the dropdown
+   that opens out of it, which is subtle because the button still works. */
+.row.picks { overflow:visible; flex-wrap:wrap; row-gap:6px }
+
 /* ---------- custom date picker ----------
    Built out of the same pill vocabulary as everything else rather than a
    native <select>, which cannot be styled consistently across platforms. */

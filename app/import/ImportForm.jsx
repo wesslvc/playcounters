@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { blankStats, consume, flush } from '@/lib/youtube';
+import { blankStats, consume, flush, parseJson } from '@/lib/youtube';
 
 const BATCH = 1500;
 
@@ -86,15 +86,18 @@ export default function ImportForm() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!/\.html?$/i.test(file.name)) {
+    const isJson = /\.json$/i.test(file.name);
+    if (!isJson && !/\.html?$/i.test(file.name)) {
       setStatus('error');
-      setMessage('watch-history.html 파일을 선택해 주세요. zip은 먼저 풀어야 합니다.');
+      setMessage('watch-history.html 또는 watch-history.json 파일을 선택해 주세요. zip은 먼저 풀어야 합니다.');
       return;
     }
 
     setStatus('working');
     setProgress(0);
     setMessage('파일을 읽는 중…');
+
+    if (isJson) return handleYouTubeJson(file);
 
     const stats = blankStats();
     const opts = { includePlainYouTube: plainYouTube, stats };
@@ -172,6 +175,63 @@ export default function ImportForm() {
     setMessage(`${total.toLocaleString()}건을 넣었습니다.`);
   }
 
+
+  /**
+   * The JSON export of the same history. Read whole rather than streamed: it
+   * is one array, so there is no point at which a partial parse is valid.
+   */
+  async function handleYouTubeJson(file) {
+    let entries;
+    try {
+      entries = JSON.parse(await file.text());
+    } catch {
+      setStatus('error');
+      setMessage(`${file.name} 을 읽지 못했습니다. Takeout의 watch-history.json이 맞는지 확인해 주세요.`);
+      return;
+    }
+
+    const { rows, stats } = parseJson(entries, { includePlainYouTube: plainYouTube });
+    if (!rows.length) {
+      setStatus('error');
+      setMessage(
+        `기록 ${stats.cells.toLocaleString()}개를 읽었지만 넣을 수 있는 음악이 없습니다. ` +
+        `(음악 아님 ${stats.product.toLocaleString()} · 링크 없음 ${stats.nolink.toLocaleString()} · ` +
+        `이름 없음 ${stats.noname.toLocaleString()} · 날짜 못읽음 ${stats.nodate.toLocaleString()})`
+      );
+      return;
+    }
+
+    let total = 0;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH);
+      setMessage(`올리는 중… ${(i + batch.length).toLocaleString()} / ${rows.length.toLocaleString()}`);
+      try {
+        total += await send(batch, 'youtube');
+      } catch (e) {
+        setStatus('error');
+        setMessage(`업로드가 중단됐습니다: ${e.message}. 다시 올리면 이어서 진행됩니다.`);
+        return;
+      }
+      setProgress(Math.round(((i + batch.length) / rows.length) * 100));
+    }
+
+    setMessage('재생 시간 계산 중…');
+    await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'youtube', finalize: true }),
+    });
+
+    setStatus('done');
+    setProgress(100);
+    // The found/inserted split is the interesting number here: it says how
+    // many of the file's entries were new rather than already present.
+    setMessage(
+      `파일에서 ${rows.length.toLocaleString()}건을 읽어 ${total.toLocaleString()}건을 넣었습니다. ` +
+      `(이미 있던 기록은 건너뜁니다)`
+    );
+  }
+
   const busy = status === 'working';
 
   return (
@@ -204,8 +264,9 @@ export default function ImportForm() {
       <div className="panel">
         <h2>YouTube Music — HTML</h2>
         <p>
-          Google Takeout에서 받은 <code>watch-history.html</code>을 고르세요.
-          파일이 수백 MB여도 브라우저에서 조금씩 읽어 올리니 그대로 두시면 됩니다.
+          Google Takeout에서 받은 <code>watch-history.html</code> 또는
+          <code>watch-history.json</code>을 고르세요. 파일이 수백 MB여도
+          브라우저에서 조금씩 읽어 올리니 그대로 두시면 됩니다.
         </p>
         <label className="check">
           <input
@@ -218,7 +279,7 @@ export default function ImportForm() {
         </label>
         <input
           type="file"
-          accept=".html,text/html"
+          accept=".html,.json,text/html,application/json"
           onChange={handleYouTube}
           disabled={busy}
         />

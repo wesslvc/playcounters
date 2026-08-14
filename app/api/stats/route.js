@@ -5,6 +5,9 @@ export const dynamic = 'force-dynamic';
 
 const TZ = 'Asia/Seoul';
 
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 5000;
+
 export async function GET(req) {
   const userId = currentUserId();
   if (!userId) return NextResponse.json({ error: 'not signed in' }, { status: 401 });
@@ -14,11 +17,17 @@ export async function GET(req) {
   const from = q.get('from') || '1970-01-01T00:00:00Z';
   const to   = q.get('to')   || new Date(Date.now() + 864e5).toISOString();
 
-  const [items, daily, user] = await Promise.all([
+  const asked = Number(q.get('limit'));
+  const limit = Number.isFinite(asked) && asked > 0
+    ? Math.min(asked, MAX_LIMIT)
+    : DEFAULT_LIMIT;
+
+  const [items, daily, total, user] = await Promise.all([
     db.rpc('top_items', {
-      p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_limit: 250,
+      p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_limit: limit,
     }),
     db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ }),
+    db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
 
@@ -36,7 +45,9 @@ export async function GET(req) {
       plays:   days.reduce((s, d) => s + Number(d.plays), 0),
       minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
       days:    days.length,
-      items:   rows.length,
+      // The real distinct count; `shown` is how much of it the list holds.
+      items:   total.error ? rows.length : Number(total.data),
+      shown:   rows.length,
     },
   });
 }

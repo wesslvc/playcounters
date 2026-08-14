@@ -16,6 +16,11 @@ const PERIODS = [
   ['365', '올해'],
 ];
 
+/** Rows added per press of 더 보기 — keeps the DOM light on big libraries. */
+const PAGE = 200;
+/** How many ranked rows to pull; well past what most libraries reach. */
+const FETCH_LIMIT = 2000;
+
 function rangeFor(period) {
   const to = new Date(Date.now() + 864e5).toISOString();
   if (period === 'all') return { from: '1970-01-01T00:00:00Z', to };
@@ -51,10 +56,16 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  const [visible, setVisible] = useState(PAGE);
+
+  // Any change to what's listed or how it's ordered starts the list over.
+  useEffect(() => { setVisible(PAGE); }, [period, mode, sort]);
 
   const fetchStats = useCallback(async (signal) => {
     const { from, to } = rangeFor(period);
-    const res = await fetch(`/api/stats?mode=${mode}&from=${from}&to=${to}`, { signal });
+    const res = await fetch(
+      `/api/stats?mode=${mode}&from=${from}&to=${to}&limit=${FETCH_LIMIT}`, { signal }
+    );
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
@@ -196,10 +207,12 @@ export default function Dashboard() {
         <>
           <div className="legend">
             <span>{mode === 'tracks' ? '곡' : '가수'} · {SORTS.find((x) => x[0] === sort)[1]} 순</span>
-            <span>막대 = 1위 대비</span>
+            <span>
+              {rows.length.toLocaleString()}개 중 {Math.min(visible, rows.length).toLocaleString()}
+            </span>
           </div>
           <ol>
-            {rows.map((r, i) => {
+            {rows.slice(0, visible).map((r, i) => {
               // Keep a sliver visible so the long tail doesn't read as zero.
               const pct = max > 0 ? Math.max((Number(r[sort]) / max) * 100, 1.5) : 0;
               return (
@@ -217,6 +230,21 @@ export default function Dashboard() {
               );
             })}
           </ol>
+
+          {visible < rows.length && (
+            <div className="more">
+              <button className="btn ghost" onClick={() => setVisible((v) => v + PAGE)}>
+                더 보기 ({(rows.length - visible).toLocaleString()}개 남음)
+              </button>
+            </div>
+          )}
+
+          {rows.length >= FETCH_LIMIT && (
+            <p className="note" style={{ padding: '10px 2px' }}>
+              목록은 {FETCH_LIMIT.toLocaleString()}개까지만 표시합니다.
+              위의 합계는 전체 기준입니다.
+            </p>
+          )}
         </>
       )}
 

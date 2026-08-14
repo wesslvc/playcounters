@@ -86,7 +86,34 @@ as $$
 $$;
 
 -- ============================================================
---  Daily totals — powers the activity strip
+--  Distinct item count
+--  top_items is capped by p_limit, so counting its rows undercounts as
+--  soon as anyone passes the cap. This counts the real thing.
+-- ============================================================
+create or replace function item_count(
+  p_user uuid,
+  p_from timestamptz,
+  p_to   timestamptz,
+  p_mode text default 'tracks',
+  p_tz   text default 'Asia/Seoul'
+)
+returns bigint
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select case when p_mode = 'artists'
+              then count(distinct artist)
+              else count(distinct (artist, track))
+         end
+  from plays
+  where user_id = p_user
+    and played_at >= p_from
+    and played_at <  p_to
+    and ms_played >= 30000;
+$$;
+
+-- ============================================================
+--  Daily totals — powers the summary tiles
 -- ============================================================
 create or replace function daily_totals(
   p_user uuid,

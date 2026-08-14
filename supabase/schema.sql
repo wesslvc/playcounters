@@ -80,23 +80,20 @@ alter table covers enable row level security;
 -- ============================================================
 
 -- ---------- counted duration ----------
--- YouTube Takeout records that something played but never for how long, so
--- those rows carry ms_played 0. Counting them as zero listening time made the
--- hours figure meaningless once most of the history came from YouTube; a
--- typical track is assumed instead, so 40 plays reads as about 100 minutes.
--- A round number on purpose: it is an assumption, not a measurement.
--- Only imported history carries a measured duration. Live rows store the
--- track's full length because recently-played never says how long it ran,
--- which quietly assumes every play finished; YouTube Takeout gives nothing at
--- all. Both unmeasured sources use the same 2.5 minutes a play, so 40 plays
--- reads as about 100 minutes. A round number on purpose: it is an assumption,
--- not a measurement, and more precision would only look like more truth.
+-- Live rows carry the track's own length. recently-played only surfaces a
+-- play once it has run past 30 seconds, so these are never skips, and a real
+-- duration keeps per-track variation that an average would flatten. It still
+-- assumes the play finished, so it is an upper bound, not a measurement.
+--
+-- YouTube Takeout records no duration and offers no such guarantee, so those
+-- rows get a flat 2.5 minutes a play: 40 plays reads as about 100 minutes.
+-- A round number on purpose — more precision would only look like more truth.
 create or replace function play_ms(p_ms integer, p_source text)
 returns integer
 language sql immutable
 set search_path = public, pg_temp
 as $$
-  select case when p_source = 'import' then coalesce(p_ms, 0) else 150000 end;
+  select case when p_source = 'youtube' then 150000 else coalesce(p_ms, 0) end;
 $$;
 
 -- ---------- title normalisation ----------

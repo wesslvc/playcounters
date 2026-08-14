@@ -13,10 +13,12 @@ const SORTS = [
 const VIZ = [['count', '횟수'], ['span', '기간'], ['both', '둘 다']];
 const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube']];
 
-/** Rows added per press of 더 보기 — keeps the DOM light on big libraries. */
-const PAGE = 200;
-/** How many ranked rows to pull; well past what most libraries reach. */
-const FETCH_LIMIT = 1500;
+/** Rows fetched at a time. Small on purpose: the first paint is what people
+    wait on, and almost nobody reads past the first screen. 펼치기 asks the
+    server for the next slice rather than shipping thousands up front. */
+const PAGE = 50;
+/** Ceiling on how deep 펼치기 will go. */
+const MAX_ROWS = 3000;
 /** Cover keys requested per round trip. */
 const COVER_BATCH = 60;
 /** Cells in the span strip. Fixed, so the drawing survives a long range. */
@@ -253,7 +255,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
-  const [visible, setVisible] = useState(PAGE);
+  const [limit, setLimit] = useState(PAGE);
+  const [expanding, setExpanding] = useState(false);
   const [covers, setCovers] = useState({});
   const [calendar, setCalendar] = useState([]);
 
@@ -278,7 +281,7 @@ export default function Dashboard() {
   useEffect(() => { if (data?.calendar) setCalendar(data.calendar); }, [data]);
 
   // Any change to what's listed or how it's ordered starts the list over.
-  useEffect(() => { setVisible(PAGE); }, [sel, mode, sort, src]);
+  useEffect(() => { setLimit(PAGE); }, [sel, mode, src]);
 
   /* ---- picker options, derived from days that actually hold plays ---- */
   const years = useMemo(() => {
@@ -349,27 +352,33 @@ export default function Dashboard() {
 
   const fetchStats = useCallback(async (signal) => {
     const { from, to, prevFrom, prevTo } = rangeFor(sel);
-    const qs = new URLSearchParams({ mode, from, to, limit: String(FETCH_LIMIT), source: src });
+    const qs = new URLSearchParams({ mode, from, to, limit: String(limit), source: src });
     if (viz !== 'count') qs.set('days', '1');
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [sel, mode, src, viz]);
+  }, [sel, mode, src, viz, limit]);
 
   useEffect(() => {
     const ctl = new AbortController();
-    setLoading(true);
+    // Only the first slice shows a loading state; 펼치기 keeps what's on
+    // screen and appends, so the page doesn't jump back to "불러오는 중".
+    if (limit === PAGE) setLoading(true);
     setError(null);
     fetchStats(ctl.signal)
       .then(setData)
       .catch((e) => {
         if (e.name !== 'AbortError') setError(e.message || '통계를 불러오지 못했습니다.');
       })
-      .finally(() => { if (!ctl.signal.aborted) setLoading(false); });
+      .finally(() => {
+        if (ctl.signal.aborted) return;
+        setLoading(false);
+        setExpanding(false);
+      });
     return () => ctl.abort();
-  }, [fetchStats]);
+  }, [fetchStats, limit]);
 
   /** Pull straight from Spotify, then redraw — doesn't wait for the 30-minute cron. */
   async function refresh() {
@@ -407,10 +416,15 @@ export default function Dashboard() {
     return m;
   }, [data, cmp]);
 
+  // The previous window is fetched under the same limit, so an item missing
+  // from it may simply have ranked below the cutoff. Only call something NEW
+  // when the previous list was short enough to be complete.
+  const prevComplete = (data?.prev?.length ?? 0) < limit;
+
   // Fetch artwork for rows on screen, a batch at a time. Covers are cached
   // server-side and keys carry their kind, so this settles quickly and nothing
   // has to be discarded when the mode changes.
-  const shown = useMemo(() => rows.slice(0, visible), [rows, visible]);
+  const shown = rows;
   const inFlight = useRef(false);
   const [coverTick, setCoverTick] = useState(0);
   const pausedUntil = useRef(0);
@@ -616,7 +630,7 @@ export default function Dashboard() {
               {prevRank && ' · 변동은 직전 기간 대비'}
             </span>
             <span>
-              {rows.length.toLocaleString()}개 중 {Math.min(visible, rows.length).toLocaleString()}
+              {s ? `${s.items.toLocaleString()}개 중 ` : ''}{rows.length.toLocaleString()} 표시
             </span>
           </div>
           <ol className={showSpan && showCount ? 'dual' : undefined}>
@@ -626,7 +640,9 @@ export default function Dashboard() {
               const key = rowKey(r);
               const img = covers[coverKeyFor(mode, r)];
               const before = prevRank?.get(key);
-              const delta = prevRank ? (before === undefined ? undefined : before - (i + 1)) : null;
+              const delta = !prevRank ? null
+                : before !== undefined ? before - (i + 1)
+                  : prevComplete ? undefined : null;
 
               return (
                 <li className="item" key={key}>
@@ -652,17 +668,21 @@ export default function Dashboard() {
             })}
           </ol>
 
-          {visible < rows.length && (
+          {rows.length >= limit && limit < MAX_ROWS && (
             <div className="more">
-              <button className="btn ghost" onClick={() => setVisible((v) => v + PAGE)}>
-                더 보기 ({(rows.length - visible).toLocaleString()}개 남음)
+              <button
+                className="btn ghost"
+                disabled={expanding}
+                onClick={() => { setExpanding(true); setLimit((l) => Math.min(l * 2, MAX_ROWS)); }}
+              >
+                {expanding ? '불러오는 중…' : '펼치기'}
               </button>
             </div>
           )}
 
-          {rows.length >= FETCH_LIMIT && (
+          {limit >= MAX_ROWS && rows.length >= MAX_ROWS && (
             <p className="note" style={{ padding: '10px 2px' }}>
-              목록은 {FETCH_LIMIT.toLocaleString()}개까지만 표시합니다.
+              목록은 {MAX_ROWS.toLocaleString()}개까지만 표시합니다.
               위의 합계는 전체 기준입니다.
             </p>
           )}
@@ -671,8 +691,8 @@ export default function Dashboard() {
 
       <p className="foot">
         30초 이상 재생된 것만 셉니다. 팟캐스트와 오디오북은 빠집니다.<br />
-        날짜는 한국 시간 기준입니다. 실시간으로 모은 재생은 곡 길이로,
-        유튜브 기록은 재생 길이가 없어 1회당 2.5분으로 셉니다.
+        날짜는 한국 시간 기준입니다. 유튜브 기록은 재생 길이가 없어
+        1회당 2.5분으로 셉니다.
       </p>
     </div>
   );

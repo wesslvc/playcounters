@@ -25,7 +25,7 @@ create table if not exists plays (
   artist     text not null,
   album      text,
   ms_played  integer not null default 0,
-  source     text not null default 'live',   -- 'live' | 'import'
+  source     text not null default 'live',   -- 'live' | 'import' | 'youtube'
   primary key (user_id, played_at)
 );
 
@@ -53,17 +53,27 @@ alter table plays enable row level security;
 alter table covers enable row level security;
 
 -- ============================================================
---  Ranking function
---  mode: 'tracks' | 'artists'
---  Returns plays, distinct days, distinct ISO weeks, minutes.
+--  Reading functions
+--
+--  p_source: 'all' | 'spotify' (live + import) | 'youtube'
+--
+--  YouTube Takeout records that something played but never for how long, so
+--  youtube rows carry ms_played 0. The >=30s rule therefore cannot apply to
+--  them — it would discard every one — and they contribute nothing to the
+--  minutes total rather than inventing a duration. p_source exists because
+--  the two platforms are not measured the same way and shouldn't be forced
+--  into one number without the reader's say-so.
 -- ============================================================
+
+-- ---------- ranking: mode 'tracks' | 'artists' ----------
 create or replace function top_items(
   p_user uuid,
   p_from timestamptz,
   p_to   timestamptz,
   p_mode text default 'tracks',
   p_tz   text default 'Asia/Seoul',
-  p_limit int default 250
+  p_limit int default 250,
+  p_source text default 'all'
 )
 returns table (
   artist   text,
@@ -76,9 +86,9 @@ returns table (
   first_at timestamptz,
   last_at  timestamptz
 )
+language sql stable
 -- search_path is pinned so the function always resolves `plays` in this
 -- schema, whatever the caller's search_path happens to be.
-language sql stable
 set search_path = public, pg_temp
 as $$
   select
@@ -98,81 +108,93 @@ as $$
   where p.user_id = p_user
     and p.played_at >= p_from
     and p.played_at <  p_to
-    and p.ms_played >= 30000          -- same rule stats.fm and .fmbot use
+    -- >=30s is the rule stats.fm and .fmbot use; youtube has no duration.
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
   group by p.artist, case when p_mode = 'artists' then null else p.track end
   order by plays desc
   limit p_limit;
 $$;
 
--- ============================================================
---  Distinct item count
---  top_items is capped by p_limit, so counting its rows undercounts as
---  soon as anyone passes the cap. This counts the real thing.
--- ============================================================
+-- ---------- distinct item count ----------
+-- top_items is capped by p_limit, so counting its rows undercounts as soon as
+-- anyone passes the cap. This counts the real thing.
 create or replace function item_count(
   p_user uuid,
   p_from timestamptz,
   p_to   timestamptz,
   p_mode text default 'tracks',
-  p_tz   text default 'Asia/Seoul'
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all'
 )
 returns bigint
 language sql stable
 set search_path = public, pg_temp
 as $$
   select case when p_mode = 'artists'
-              then count(distinct artist)
-              else count(distinct (artist, track))
+              then count(distinct p.artist)
+              else count(distinct (p.artist, p.track))
          end
-  from plays
-  where user_id = p_user
-    and played_at >= p_from
-    and played_at <  p_to
-    and ms_played >= 30000;
+  from plays p
+  where p.user_id = p_user
+    and p.played_at >= p_from
+    and p.played_at <  p_to
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'));
 $$;
 
--- ============================================================
---  Months that hold plays — powers the month picker
---  Listening isn't continuous, so this lists the months that
---  actually have something rather than every month between the
---  first and the last. Same >=30s rule as the rankings.
--- ============================================================
-create or replace function play_months(p_user uuid, p_tz text default 'Asia/Seoul')
+-- ---------- months that hold plays: powers the month picker ----------
+-- Listening isn't continuous, so this lists the months that actually have
+-- something rather than every month between the first and the last.
+create or replace function play_months(
+  p_user uuid,
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all'
+)
 returns table (ym text, plays bigint)
 language sql stable
 set search_path = public, pg_temp
 as $$
-  select to_char(played_at at time zone p_tz, 'YYYY-MM') as ym,
+  select to_char(p.played_at at time zone p_tz, 'YYYY-MM') as ym,
          count(*) as plays
-  from plays
-  where user_id = p_user
-    and ms_played >= 30000
+  from plays p
+  where p.user_id = p_user
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
   group by 1
   order by 1 desc;
 $$;
 
--- ============================================================
---  Daily totals — powers the summary tiles
--- ============================================================
+-- ---------- daily totals: powers the summary tiles ----------
 create or replace function daily_totals(
   p_user uuid,
   p_from timestamptz,
   p_to   timestamptz,
-  p_tz   text default 'Asia/Seoul'
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all'
 )
 returns table (day date, plays bigint, minutes bigint)
 language sql stable
 set search_path = public, pg_temp
 as $$
   select
-    (played_at at time zone p_tz)::date as day,
-    count(*)                            as plays,
-    (sum(ms_played) / 60000)::bigint    as minutes
-  from plays
-  where user_id = p_user
-    and played_at >= p_from
-    and played_at <  p_to
-    and ms_played >= 30000
+    (p.played_at at time zone p_tz)::date as day,
+    count(*)                              as plays,
+    (sum(p.ms_played) / 60000)::bigint    as minutes
+  from plays p
+  where p.user_id = p_user
+    and p.played_at >= p_from
+    and p.played_at <  p_to
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
   group by 1
   order by 1;
 $$;

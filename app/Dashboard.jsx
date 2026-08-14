@@ -22,6 +22,7 @@ const PERIODS = [
   ['all', '전체'],
 ];
 const VIZ = [['count', '횟수'], ['span', '기간'], ['both', '둘 다']];
+const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube']];
 
 /** Rows added per press of 더 보기 — keeps the DOM light on big libraries. */
 const PAGE = 200;
@@ -177,6 +178,7 @@ export default function Dashboard() {
   const [mode, setMode] = useState('tracks');
   const [sort, setSort] = useState('plays');
   const [viz, setViz] = useState('count');
+  const [src, setSrc] = useState('all');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -187,23 +189,25 @@ export default function Dashboard() {
   const [months, setMonths] = useState([]);
 
   // The month list doesn't depend on the selected period, so hold onto it
-  // instead of letting the picker blink empty on every reload.
+  // instead of letting the picker blink empty on every reload. It does depend
+  // on the source, so an empty list must still clear it — data is null while
+  // loading, which is what keeps the blink away.
   useEffect(() => {
-    if (data?.months?.length) setMonths(data.months);
+    if (data?.months) setMonths(data.months);
   }, [data]);
 
   // Any change to what's listed or how it's ordered starts the list over.
-  useEffect(() => { setVisible(PAGE); }, [period, mode, sort]);
+  useEffect(() => { setVisible(PAGE); }, [period, mode, sort, src]);
 
   const fetchStats = useCallback(async (signal) => {
     const { from, to, prevFrom, prevTo } = rangeFor(period);
-    const qs = new URLSearchParams({ mode, from, to, limit: String(FETCH_LIMIT) });
+    const qs = new URLSearchParams({ mode, from, to, limit: String(FETCH_LIMIT), source: src });
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [period, mode]);
+  }, [period, mode, src]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -371,6 +375,16 @@ export default function Dashboard() {
             {period.startsWith(MONTH_PREFIX) && (
               <span className="picked">{monthLabel(period.slice(MONTH_PREFIX.length))} 통계</span>
             )}
+          </div>
+        </div>
+        <div className="grp">
+          <span className="lbl">출처</span>
+          <div className="row">
+            {SOURCES.map(([v, label]) => (
+              <button key={v} className="pill" aria-pressed={src === v} onClick={() => setSrc(v)}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="grp">

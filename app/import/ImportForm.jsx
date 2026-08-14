@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { consume, flush } from '@/lib/youtube';
 
 const BATCH = 1500;
 
@@ -8,10 +9,23 @@ export default function ImportForm() {
   const [status, setStatus] = useState('idle');   // idle | working | done | error
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
-  const [inserted, setInserted] = useState(0);
+  const [plainYouTube, setPlainYouTube] = useState(false);
 
-  async function handleFiles(event) {
+  /** Post one batch, returning how many rows landed. */
+  async function send(batch, source) {
+    const res = await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch, source }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || res.status);
+    return json.inserted ?? 0;
+  }
+
+  async function handleSpotify(event) {
     const files = [...event.target.files].filter((f) => f.name.endsWith('.json'));
+    event.target.value = '';
     if (!files.length) {
       setStatus('error');
       setMessage('.json 파일을 선택해 주세요. zip은 먼저 풀어야 합니다.');
@@ -20,7 +34,6 @@ export default function ImportForm() {
 
     setStatus('working');
     setProgress(0);
-    setInserted(0);
     setMessage('파일을 읽는 중…');
 
     let all = [];
@@ -45,33 +58,103 @@ export default function ImportForm() {
       return;
     }
 
-    let done = 0;
     let total = 0;
     for (let i = 0; i < music.length; i += BATCH) {
       const batch = music.slice(i, i + BATCH);
       setMessage(`올리는 중… ${(i + batch.length).toLocaleString()} / ${music.length.toLocaleString()}`);
       try {
-        const res = await fetch('/api/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batch }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || res.status);
-        total += json.inserted ?? 0;
+        total += await send(batch, 'spotify');
       } catch (e) {
         setStatus('error');
         setMessage(`업로드가 중단됐습니다: ${e.message}. 다시 올리면 이어서 진행됩니다.`);
         return;
       }
-      done += batch.length;
-      setProgress(Math.round((done / music.length) * 100));
-      setInserted(total);
+      setProgress(Math.round(((i + batch.length) / music.length) * 100));
     }
 
     setStatus('done');
     setMessage(`${total.toLocaleString()}건을 넣었습니다.`);
   }
+
+  /**
+   * Takeout's watch history is HTML and can run to hundreds of megabytes, so
+   * it's streamed and decoded incrementally. A TextDecoder in stream mode is
+   * what makes that safe: slicing raw bytes would cut multi-byte Korean
+   * characters in half at chunk boundaries.
+   */
+  async function handleYouTube(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name)) {
+      setStatus('error');
+      setMessage('watch-history.html 파일을 선택해 주세요. zip은 먼저 풀어야 합니다.');
+      return;
+    }
+
+    setStatus('working');
+    setProgress(0);
+    setMessage('파일을 읽는 중…');
+
+    const opts = { includePlainYouTube: plainYouTube };
+    const reader = file.stream().getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let pending = [];
+    let read = 0;
+    let total = 0;
+    let found = 0;
+
+    const drain = async (force) => {
+      while (pending.length >= BATCH || (force && pending.length)) {
+        const batch = pending.slice(0, BATCH);
+        pending = pending.slice(BATCH);
+        total += await send(batch, 'youtube');
+      }
+    };
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        read += value.byteLength;
+        buffer += decoder.decode(value, { stream: true });
+
+        const { rows, remainder } = consume(buffer, opts);
+        buffer = remainder;
+        pending.push(...rows);
+        found += rows.length;
+
+        await drain(false);
+        setProgress(Math.round((read / file.size) * 100));
+        setMessage(`읽는 중… ${found.toLocaleString()}건 발견 · ${Math.round((read / file.size) * 100)}%`);
+      }
+
+      buffer += decoder.decode();
+      const last = consume(buffer, opts);
+      pending.push(...last.rows, ...flush(last.remainder, opts));
+      await drain(true);
+    } catch (e) {
+      setStatus('error');
+      setMessage(`업로드가 중단됐습니다: ${e.message}. 다시 올리면 이어서 진행됩니다.`);
+      return;
+    }
+
+    if (!total && !found) {
+      setStatus('error');
+      setMessage(
+        '음악 재생 기록을 찾지 못했습니다. Takeout에서 "YouTube 및 YouTube Music → 기록"을 받으셨는지, ' +
+        '일반 YouTube 영상만 있는 건 아닌지 확인해 주세요.'
+      );
+      return;
+    }
+
+    setStatus('done');
+    setProgress(100);
+    setMessage(`${total.toLocaleString()}건을 넣었습니다.`);
+  }
+
+  const busy = status === 'working';
 
   return (
     <div className="wrap">
@@ -85,45 +168,73 @@ export default function ImportForm() {
       </header>
 
       <div className="panel">
-        <h2>Spotify JSON 파일 올리기</h2>
+        <h2>Spotify — JSON</h2>
         <p>
           <code>Streaming_History_Audio_*.json</code> 파일을 고르세요. 여러 개를
           한 번에 선택해도 됩니다. 원래 재생 날짜가 그대로 들어가고, 이미 있는
           기록은 자동으로 건너뜁니다.
         </p>
-
         <input
           type="file"
           accept=".json,application/json"
           multiple
-          onChange={handleFiles}
-          disabled={status === 'working'}
+          onChange={handleSpotify}
+          disabled={busy}
         />
-
-        {status === 'working' && (
-          <>
-            <div className="bar"><div style={{ width: progress + '%' }} /></div>
-            <p className="note">{message}</p>
-          </>
-        )}
-        {status === 'done' && (
-          <>
-            <p className="note" style={{ marginTop: 10 }}>{message}</p>
-            <a className="btn" href="/" style={{ marginTop: 12 }}>순위 보기</a>
-          </>
-        )}
-        {status === 'error' && <p className="err" style={{ marginTop: 10 }}>{message}</p>}
       </div>
+
+      <div className="panel">
+        <h2>YouTube Music — HTML</h2>
+        <p>
+          Google Takeout에서 받은 <code>watch-history.html</code>을 고르세요.
+          파일이 수백 MB여도 브라우저에서 조금씩 읽어 올리니 그대로 두시면 됩니다.
+        </p>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={plainYouTube}
+            onChange={(e) => setPlainYouTube(e.target.checked)}
+            disabled={busy}
+          />
+          일반 YouTube 영상도 포함 (기본은 YouTube Music만)
+        </label>
+        <input
+          type="file"
+          accept=".html,text/html"
+          onChange={handleYouTube}
+          disabled={busy}
+        />
+        <p className="note" style={{ marginTop: 10 }}>
+          Takeout에는 <b>재생 시간이 들어 있지 않습니다.</b> 그래서 유튜브 기록은
+          재생 횟수와 들은 날에는 반영되지만 &ldquo;시간&rdquo; 합계에는 0으로 잡힙니다.
+          30초 규칙도 적용할 수 없어, 잠깐 넘긴 곡도 1회로 셉니다.
+        </p>
+      </div>
+
+      {status !== 'idle' && (
+        <div className="panel">
+          {busy && <div className="bar"><div style={{ width: progress + '%' }} /></div>}
+          <p className={status === 'error' ? 'err' : 'note'}>{message}</p>
+          {status === 'done' && <a className="btn" href="/" style={{ marginTop: 12 }}>순위 보기</a>}
+        </div>
+      )}
 
       <div className="panel">
         <h2>파일이 없다면</h2>
         <p>
-          Spotify 계정 → 개인정보 설정 → 데이터 다운로드에서 &ldquo;확장 스트리밍
-          기록&rdquo;만 체크하고 신청하세요. 보통 며칠, 최대 30일 걸립니다. 받은
-          zip을 풀면 안에 json 파일들이 들어 있습니다.
+          <b>Spotify</b> — 계정 → 개인정보 설정 → 데이터 다운로드에서 &ldquo;확장 스트리밍
+          기록&rdquo;만 체크하고 신청하세요. 보통 며칠, 최대 30일 걸립니다.
+        </p>
+        <p>
+          <b>YouTube</b> — takeout.google.com에서 &ldquo;YouTube 및 YouTube Music&rdquo;만
+          선택하고, 그 안에서 &ldquo;기록&rdquo;만 고르면 파일이 훨씬 작아집니다.
         </p>
         <a className="btn ghost" href="https://www.spotify.com/account/privacy/" target="_blank" rel="noreferrer">
-          Spotify 개인정보 설정 열기
+          Spotify 개인정보 설정
+        </a>
+        {' '}
+        <a className="btn ghost" href="https://takeout.google.com/" target="_blank" rel="noreferrer">
+          Google Takeout
         </a>
       </div>
 

@@ -14,6 +14,8 @@ export async function GET(req) {
 
   const q = req.nextUrl.searchParams;
   const mode = q.get('mode') === 'artists' ? 'artists' : 'tracks';
+  // Spotify and YouTube aren't measured the same way, so they can be read apart.
+  const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
   const from = q.get('from') || '1970-01-01T00:00:00Z';
   const to   = q.get('to')   || new Date(Date.now() + 864e5).toISOString();
 
@@ -30,17 +32,18 @@ export async function GET(req) {
 
   const [items, daily, total, prev, months, user] = await Promise.all([
     db.rpc('top_items', {
-      p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_limit: limit,
+      p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
+      p_limit: limit, p_source: src,
     }),
-    db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ }),
-    db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ }),
+    db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src }),
+    db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_source: src }),
     wantPrev
       ? db.rpc('top_items', {
           p_user: userId, p_from: prevFrom, p_to: prevTo,
-          p_mode: mode, p_tz: TZ, p_limit: limit,
+          p_mode: mode, p_tz: TZ, p_limit: limit, p_source: src,
         })
       : Promise.resolve({ data: null, error: null }),
-    db.rpc('play_months', { p_user: userId, p_tz: TZ }),
+    db.rpc('play_months', { p_user: userId, p_tz: TZ, p_source: src }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
 

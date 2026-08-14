@@ -27,7 +27,7 @@ const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube
 /** Rows added per press of 더 보기 — keeps the DOM light on big libraries. */
 const PAGE = 200;
 /** How many ranked rows to pull; well past what most libraries reach. */
-const FETCH_LIMIT = 2000;
+const FETCH_LIMIT = 5000;
 /** Cover keys requested per round trip. */
 const COVER_BATCH = 60;
 

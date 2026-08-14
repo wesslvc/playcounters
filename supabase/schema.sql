@@ -65,6 +65,64 @@ alter table covers enable row level security;
 --  into one number without the reader's say-so.
 -- ============================================================
 
+-- ---------- title normalisation ----------
+-- The same recording reaches us under different titles: Spotify writes
+-- "Lose My Mind (feat. Doja Cat) [From F1(R) The Movie]", YouTube writes
+-- "Lose My Mind (feat. Doja Cat)", and the official channel prefixes the
+-- artist. Ranking on the raw string splits one song four ways.
+--
+-- Deliberately narrow. Only qualifiers that leave the recording itself
+-- unchanged are dropped -- featured credits, soundtrack attributions,
+-- "official video" markers, remaster/edition tags. Remix, live, acoustic,
+-- instrumental, slowed, sped up and 8D are different recordings and stay apart.
+create or replace function norm_artist(p text)
+returns text
+language sql immutable
+set search_path = public, pg_temp
+as $$
+  select btrim(regexp_replace(
+    regexp_replace(lower(coalesce(p, '')), '\s*-\s*topic$', ''),
+    '\s+', ' ', 'g'));
+$$;
+
+create or replace function norm_track(p_track text, p_artist text default '')
+returns text
+language sql immutable
+set search_path = public, pg_temp
+as $$
+  with s0 as (
+    -- Unify bracket styles so [From ...] and (From ...) are one shape, and
+    -- drop registered marks, which appear inconsistently.
+    select regexp_replace(translate(lower(coalesce(p_track, '')), '[]', '()'),
+                          '[®™©]', '', 'g') as t,
+           norm_artist(p_artist) as a
+  ),
+  s1 as (
+    -- YouTube titles are usually prefixed with the artist.
+    select case when a <> '' and t like a || ' - %'
+                then substr(t, length(a) + 4)
+                else t end as t
+    from s0
+  ),
+  s2 as (
+    select regexp_replace(t, '\s*\((feat\.?|ft\.?|featuring|with)\s[^)]*\)', '', 'g') as t
+    from s1
+  ),
+  s3 as (
+    select regexp_replace(t, '\s*\(from\s[^)]*\)', '', 'g') as t from s2
+  ),
+  s4 as (
+    select regexp_replace(
+      t,
+      '\s*\([^)]*(official|music video|lyrics?|visualizer|remaster|deluxe|explicit|clean|bonus|anniversary|edition)[^)]*\)',
+      '', 'g') as t
+    from s3
+  )
+  select nullif(btrim(regexp_replace(regexp_replace(t, '\s+', ' ', 'g'),
+                                     '[-–—[:space:]]+$', '')), '')
+  from s4;
+$$;
+
 -- ---------- ranking: mode 'tracks' | 'artists' ----------
 create or replace function top_items(
   p_user uuid,
@@ -92,12 +150,14 @@ language sql stable
 set search_path = public, pg_temp
 as $$
   select
-    p.artist,
-    case when p_mode = 'artists' then null else p.track end as track,
-    -- Most recent album this track was played from: singles get re-released
-    -- on compilations, and the latest is what artwork search will match.
+    -- Rows are grouped on the normalised key, so the label shown is the
+    -- variant that actually appears most often.
+    mode() within group (order by p.artist)              as artist,
     case when p_mode = 'artists' then null
-         else (array_agg(p.album order by p.played_at desc))[1] end as album,
+         else mode() within group (order by p.track) end as track,
+    case when p_mode = 'artists' then null
+         else (array_agg(p.album order by p.played_at desc)
+                 filter (where p.album is not null and p.album <> ''))[1] end as album,
     count(*)                                                as plays,
     count(distinct (p.played_at at time zone p_tz)::date)   as days,
     count(distinct to_char(p.played_at at time zone p_tz, 'IYYY-IW')) as weeks,
@@ -113,7 +173,9 @@ as $$
     and (p_source = 'all'
          or (p_source = 'youtube' and p.source =  'youtube')
          or (p_source = 'spotify' and p.source <> 'youtube'))
-  group by p.artist, case when p_mode = 'artists' then null else p.track end
+  group by norm_artist(p.artist),
+           case when p_mode = 'artists' then null
+                else norm_track(p.track, p.artist) end
   order by plays desc
   limit p_limit;
 $$;
@@ -134,8 +196,8 @@ language sql stable
 set search_path = public, pg_temp
 as $$
   select case when p_mode = 'artists'
-              then count(distinct p.artist)
-              else count(distinct (p.artist, p.track))
+              then count(distinct norm_artist(p.artist))
+              else count(distinct (norm_artist(p.artist), norm_track(p.track, p.artist)))
          end
   from plays p
   where p.user_id = p_user

@@ -27,7 +27,9 @@ function DailyChart({ daily }) {
   const t1 = new Date(daily[daily.length - 1].day + 'T00:00:00Z').getTime();
   const span = Math.max(1, Math.round((t1 - t0) / DAY));
   const cells = Math.min(120, span + 1);
-  const max = Math.max(...daily.map((d) => Number(d.plays)));
+  // Bars are drawn from the exact figure; only the number written out is
+  // rounded, and only where it is written out.
+  const max = Math.round(Math.max(...daily.map((d) => Number(d.plays))));
 
   const buckets = new Array(cells).fill(0);
   for (const d of daily) {
@@ -114,14 +116,17 @@ export default function Detail({ target, source, estimate, onClose }) {
               ))}
             </div>
 
+            {/* This sheet is the item's whole history, not the period selected
+                behind it — say so, or the two disagree for no visible reason. */}
             <p className="synced" style={{ marginTop: 14 }}>
-              <b>{fmtDate(s.first)}</b> 처음 · <b>{fmtDate(s.last)}</b> 마지막
+              전체 기간 기준 · <b>{fmtDate(s.first)}</b> 처음 ·{' '}
+              <b>{fmtDate(s.last)}</b> 마지막
             </p>
 
             <DailyChart daily={data.daily} />
             <p className="note">
               막대는 하루 재생 횟수입니다. 가장 많이 들은 날{' '}
-              <b>{fmtDate(best?.day)}</b> — {est}{Number(best?.plays ?? 0).toLocaleString()}회
+              <b>{fmtDate(best?.day)}</b> — {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회
               {est && <><br />≈는 유튜브 기록을 Recap 청취 시간에 맞춰 되살린 추정치입니다.</>}
             </p>
           </>

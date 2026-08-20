@@ -36,6 +36,10 @@ export async function GET(req) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const days = data ?? [];
+  // Rounded once over the whole history, not once a day. Adding up rounded days
+  // drifted this 18 plays clear of what the ranking showed for the same track.
+  const sum = (key) => days.reduce((s, d) => s + Number(d[key]), 0);
+
   return NextResponse.json({
     artist,
     track,
@@ -44,8 +48,8 @@ export async function GET(req) {
     summary: {
       // YouTube plays in the mix mean the figures carry an estimate.
       yt:      days.some((d) => d.yt),
-      plays:   days.reduce((s, d) => s + Number(d.plays), 0),
-      minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
+      plays:   Math.round(sum('plays')),
+      minutes: Math.round(sum('minutes')),
       days:    days.length,
       weeks:   new Set(days.map((d) => isoWeek(d.day))).size,
       first:   days[0]?.day ?? null,

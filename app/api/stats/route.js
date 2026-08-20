@@ -80,8 +80,10 @@ export async function GET(req) {
     // calibration the estimate resolves to the recorded figures.
     estimate: estimate && !calibrated.error && Boolean(calibrated.data),
     summary: {
-      plays:   days.reduce((s, d) => s + Number(d.plays), 0),
-      minutes: days.reduce((s, d) => s + Number(d.minutes), 0),
+      // Rounded once over the whole window rather than once a day, so the
+      // header agrees with the rows underneath it.
+      plays:   Math.round(days.reduce((s, d) => s + Number(d.plays), 0)),
+      minutes: Math.round(days.reduce((s, d) => s + Number(d.minutes), 0)),
       days:    days.length,
       // The real distinct count; `shown` is how much of it the list holds.
       items:   total.error ? rows.length : Number(total.data),

@@ -45,8 +45,10 @@ export async function GET(req) {
     s.yt = s.yt || Boolean(r.yt);
   }
 
+  // Rounded once over the whole history rather than once a month: adding up
+  // rounded buckets put the same track a play or two clear of the ranking.
   const series = [...byItem.values()]
-    .map((s) => ({ ...s, total: s.points.reduce((t, p) => t + p.plays, 0) }))
+    .map((s) => ({ ...s, total: Math.round(s.points.reduce((t, p) => t + p.plays, 0)) }))
     .sort((a, b) => b.total - a.total);
 
   return NextResponse.json({

@@ -570,9 +570,21 @@ as $$
 $$;
 
 -- ---------- daily totals: powers the summary tiles ----------
-drop function if exists daily_totals(uuid, timestamptz, timestamptz, text, text);
+-- These three readers return their figures unrounded, and every caller rounds
+-- once at the end.
+--
+-- They used to round inside each bucket, and the callers added the rounded
+-- values up: per month in the trend chart, per day in the detail sheet. An
+-- estimate of 1.87 plays an entry rounds up on most days, so two hundred days
+-- of it drifted 18 plays clear of the truth, and the same track came out as
+-- 793, 794 and 811 depending on which screen asked. Minutes had the same shape
+-- of error, integer division truncating in every bucket.
+--
+-- A bar is drawn from a fraction perfectly well; the few places a single
+-- bucket's count is written out round it there.
+drop function if exists daily_totals(uuid, timestamptz, timestamptz, text, text, boolean);
 
-create or replace function daily_totals(
+create function daily_totals(
   p_user uuid,
   p_from timestamptz,
   p_to   timestamptz,
@@ -580,18 +592,17 @@ create or replace function daily_totals(
   p_source text default 'all',
   p_estimate boolean default false
 )
-returns table (day date, plays bigint, minutes bigint, yt boolean)
+returns table (day date, plays numeric, minutes numeric, yt boolean)
 language sql stable
 set search_path = public, pg_temp
 as $$
   select
     (p.played_at at time zone p_tz)::date as day,
-    (case when p_estimate then round(sum(p.est_plays))
-          else count(*) end)::bigint      as plays,
-    (sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
-              then p.est_ms
-              else play_ms(p.ms_played, p.source) end) / 60000)::bigint as minutes,
-    bool_or(p.source = 'youtube')         as yt
+    case when p_estimate then sum(p.est_plays) else count(*)::numeric end as plays,
+    sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
+             then p.est_ms
+             else play_ms(p.ms_played, p.source) end) / 60000.0 as minutes,
+    bool_or(p.source = 'youtube') as yt
   from plays p
   where p.user_id = p_user
     and p.played_at >= p_from
@@ -606,10 +617,11 @@ $$;
 
 -- ---------- one item's own history: powers the detail sheet ----------
 -- Resolved through the same normalisation the ranking uses, so it covers every
--- title variant that was merged into that row.
-drop function if exists item_daily(uuid, text, text, text, text);
+-- title variant that was merged into that row. Spans the whole history rather
+-- than the selected period -- the sheet is about the item, not the window.
+drop function if exists item_daily(uuid, text, text, text, text, boolean);
 
-create or replace function item_daily(
+create function item_daily(
   p_user uuid,
   p_artist text,
   p_track text default null,
@@ -617,16 +629,15 @@ create or replace function item_daily(
   p_source text default 'all',
   p_estimate boolean default false
 )
-returns table (day date, plays bigint, minutes bigint, yt boolean)
+returns table (day date, plays numeric, minutes numeric, yt boolean)
 language sql stable
 set search_path = public, pg_temp
 as $$
   select (p.played_at at time zone p_tz)::date,
-         (case when p_estimate then round(sum(p.est_plays))
-               else count(*) end)::bigint,
-         (sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
-                   then p.est_ms
-                   else play_ms(p.ms_played, p.source) end) / 60000)::bigint,
+         case when p_estimate then sum(p.est_plays) else count(*)::numeric end,
+         sum(case when p_estimate and p.source = 'youtube' and p.est_ms > 0
+                  then p.est_ms
+                  else play_ms(p.ms_played, p.source) end) / 60000.0,
          bool_or(p.source = 'youtube')
   from plays p
   where p.user_id = p_user
@@ -644,11 +655,11 @@ $$;
 -- Spans the whole history rather than the selected window: the point is
 -- watching the top few rise and fall against each other, which one month can't
 -- show. The label is decided once per item in `labelled` rather than per
--- bucket — deciding it per bucket split one song into two lines wherever the
+-- bucket -- deciding it per bucket split one song into two lines wherever the
 -- most common spelling changed part-way through.
-drop function if exists top_trend(uuid, text, text, text, integer);
+drop function if exists top_trend(uuid, text, text, text, integer, boolean);
 
-create or replace function top_trend(
+create function top_trend(
   p_user uuid,
   p_mode text default 'tracks',
   p_tz text default 'Asia/Seoul',
@@ -656,14 +667,13 @@ create or replace function top_trend(
   p_limit integer default 5,
   p_estimate boolean default false
 )
-returns table (artist text, track text, bucket date, plays bigint, yt boolean)
+returns table (artist text, track text, bucket date, plays numeric, yt boolean)
 language sql stable
 set search_path = public, pg_temp
 as $$
   with kept as (
     select p.artist_key, case when p_mode = 'artists' then null else p.track_key end as tk,
-           (case when p_estimate then round(sum(p.est_plays))
-                 else count(*) end)::bigint as n
+           case when p_estimate then sum(p.est_plays) else count(*)::numeric end as n
     from plays p
     where p.user_id = p_user
       and (p.ms_played >= 30000 or p.source = 'youtube')
@@ -689,8 +699,7 @@ as $$
   )
   select l.artist, l.track,
          date_trunc('month', p.played_at at time zone p_tz)::date,
-         (case when p_estimate then round(sum(p.est_plays))
-               else count(*) end)::bigint,
+         case when p_estimate then sum(p.est_plays) else count(*)::numeric end,
          bool_or(p.source = 'youtube')
   from plays p
   join labelled l on l.artist_key = p.artist_key

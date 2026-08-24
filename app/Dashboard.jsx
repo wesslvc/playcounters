@@ -369,8 +369,12 @@ export default function Dashboard() {
       ...inWeek.map(({ value, label, count }) => ({ value, label, count }))];
   }, [monthDaysWithPlays, sel?.y, sel?.m, sel?.w]);
 
+  // One place the window is worked out, so the ranking and the trend chart
+  // cannot end up describing different spans.
+  const range = useMemo(() => rangeFor(sel), [sel]);
+
   const fetchStats = useCallback(async (signal) => {
-    const { from, to, prevFrom, prevTo } = rangeFor(sel);
+    const { from, to, prevFrom, prevTo } = range;
     const qs = new URLSearchParams({ mode, from, to, limit: String(limit), source: src });
     if (viz !== 'count') qs.set('days', '1');
     if (estimate) qs.set('estimate', '1');
@@ -379,7 +383,7 @@ export default function Dashboard() {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json;
-  }, [sel, mode, src, viz, limit, estimate]);
+  }, [range, mode, src, viz, limit, estimate]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -656,7 +660,12 @@ export default function Dashboard() {
           {showTrend ? '추이 숨기기' : '상위 5개 추이 보기'}
         </button>
       </div>
-      {showTrend && <Trend mode={mode} source={src} estimate={estimating} />}
+      {showTrend && (
+        <Trend
+          mode={mode} source={src} estimate={estimating}
+          from={range.from} to={range.to}
+        />
+      )}
 
       {error && <p className="err" style={{ padding: '20px 2px' }}>{error}</p>}
 

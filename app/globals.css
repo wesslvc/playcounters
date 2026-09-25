@@ -1,36 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Titillium+Web:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Titillium+Web:wght@400;600;700;900&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
 
-/* ---------- F1 broadcast-graphics system ----------
-   Titillium Web is the typeface F1's own timing tower and lower-thirds use;
-   it carries the numbers, ranks and labels. It has no Hangul, so Korean text
-   stays on IBM Plex Sans KR — the two are paired by role, not swapped in and
-   out. Rank is the one key every color below reads off: P1/P2/P3 are gold/
-   silver/bronze everywhere a rank appears (badge, meter, podium, chart), so
-   the same hue never means two different things in the same view. */
+/* ---------- the color contract ----------
+   The interface itself is achromatic: paper, ink, mute, line, and one warm
+   accent kept for actions. Every hue you see on a bar, a strip, a chart line
+   or a podium edge is genre — never rank, never decoration. That is the whole
+   rule, and it is what keeps the page from looking like a paint sample: with
+   chrome neutral, two pinks beside each other mean two K-pop tracks rather
+   than two arbitrary choices.
+
+   Rank is still marked, but by weight and by the three medal tones on the
+   position number alone, which can't be confused with a genre hue.
+
+   Titillium Web carries numerals (tabular, F1's own typeface); Korean text
+   stays on IBM Plex Sans KR, which has the Hangul the former lacks. */
 :root {
-  --paper:#EFEDF4; --card:#FBFAFE; --ink:#191327; --mute:#6B6480;
-  --line:#DCD7E8; --indigo:#4B3BFF; --pink:#FF5C93; --teal:#00A08C;
-  --shadow:rgba(25,19,39,.14); --overlay:rgba(25,19,39,.32);
-  --red:#E10600; --gold:#E8A400; --silver:#8C8FA3; --bronze:#B5793F;
-  --track:#15131C;
+  --paper:#F4F3F7; --card:#FFF; --sunk:#EDEBF2;
+  --ink:#16141C; --mute:#6E6880; --faint:#9A94A8;
+  --line:#E2DFEA; --hair:#EEECF3;
+  --accent:#C8102E;
+  --gold:#B8860B; --silver:#7D8290; --bronze:#A2622F;
+  --pos:#0E9F6E; --neg:#C8102E;
+  --shadow:rgba(20,16,32,.10); --shadow-lg:rgba(20,16,32,.16);
+  --overlay:rgba(18,14,26,.38);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper:#0D0B12; --card:#18151F; --ink:#F4F2FA; --mute:#9A93AD;
-    --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
-    --shadow:rgba(0,0,0,.55); --overlay:rgba(0,0,0,.65);
-    --red:#FF2A20; --gold:#FFC53D; --silver:#C9CDD6; --bronze:#E8A672;
-    --track:#000;
+    --paper:#0F0E13; --card:#181722; --sunk:#12111A;
+    --ink:#F5F3FA; --mute:#9E98AE; --faint:#6E6880;
+    --line:#282536; --hair:#1F1D2A;
+    --accent:#FF4D5E;
+    --gold:#E8B93C; --silver:#B9BECC; --bronze:#D08A52;
+    --pos:#34D399; --neg:#FF6B7A;
+    --shadow:rgba(0,0,0,.4); --shadow-lg:rgba(0,0,0,.55);
+    --overlay:rgba(0,0,0,.6);
   }
 }
 
 :root[data-theme="dark"] {
-  --paper:#0D0B12; --card:#18151F; --ink:#F4F2FA; --mute:#9A93AD;
-  --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
-  --shadow:rgba(0,0,0,.55); --overlay:rgba(0,0,0,.65);
-  --red:#FF2A20; --gold:#FFC53D; --silver:#C9CDD6; --bronze:#E8A672;
-  --track:#000;
+  --paper:#0F0E13; --card:#181722; --sunk:#12111A;
+  --ink:#F5F3FA; --mute:#9E98AE; --faint:#6E6880;
+  --line:#282536; --hair:#1F1D2A;
+  --accent:#FF4D5E;
+  --gold:#E8B93C; --silver:#B9BECC; --bronze:#D08A52;
+  --pos:#34D399; --neg:#FF6B7A;
+  --shadow:rgba(0,0,0,.4); --shadow-lg:rgba(0,0,0,.55);
+  --overlay:rgba(0,0,0,.6);
 }
 
 html { color-scheme:light dark }
@@ -43,352 +58,351 @@ html { -webkit-text-size-adjust:100% }
 body {
   background:var(--paper); color:var(--ink);
   font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  font-size:15px; line-height:1.5; padding:0 0 64px;
+  font-size:15px; line-height:1.55; padding:0 0 72px;
   font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;
 }
 
-.wrap { max-width:720px; margin:0 auto; padding:0 16px }
-
-/* A single racing stripe across the very top of the page — the one purely
-   decorative touch, kept to a thin band so it reads as a livery accent
-   rather than chrome competing with the data underneath it. */
-.wrap::before {
-  content:''; display:block; height:4px; margin:0 -16px 0;
-  background:linear-gradient(90deg, var(--red) 0 60%, var(--gold) 60% 75%, var(--ink) 75% 100%);
-}
+.wrap { max-width:720px; margin:0 auto; padding:0 18px }
 
 /* ---------- nav ---------- */
-.nav { display:flex; gap:6px; padding:14px 0 0; overflow-x:auto; scrollbar-width:none }
+.nav { display:flex; gap:7px; padding:18px 0 0; overflow-x:auto; scrollbar-width:none }
 .nav::-webkit-scrollbar { display:none }
-.nav .pill.act { background:var(--red); border-color:var(--red); color:#fff }
-.nav .pill.act:hover:not(:disabled) { color:#fff; opacity:.88 }
-.nav .pill.act:disabled { background:var(--mute); border-color:var(--mute); cursor:default }
-.nav .pill.danger { color:var(--pink) }
-.nav .pill.danger:hover { border-color:var(--pink); color:var(--pink) }
+.nav .pill.act { background:var(--ink); border-color:var(--ink); color:var(--paper) }
+.nav .pill.act:hover:not(:disabled) { color:var(--paper); opacity:.86 }
+.nav .pill.act:disabled { background:var(--faint); border-color:var(--faint); cursor:default }
+.nav .pill.danger:hover { border-color:var(--accent); color:var(--accent) }
 
 /* ---------- header ---------- */
-header { padding:20px 0 22px }
-.synced { font-size:12px; color:var(--mute); margin-bottom:16px }
+header { padding:26px 0 24px }
+.synced { font-size:12px; color:var(--mute); margin-bottom:18px }
 .synced b { font-weight:600; color:var(--ink) }
-.synced span { font-size:11px; opacity:.7; margin-left:6px }
-.syncmsg {
-  font-size:12.5px; color:var(--indigo); font-weight:500;
-  margin:-8px 0 16px;
-}
+.synced span { font-size:11px; color:var(--faint); margin-left:6px }
+.syncmsg { font-size:12.5px; color:var(--ink); font-weight:500; margin:-10px 0 18px }
 .eyebrow {
-  font-family:"Titillium Web",sans-serif; font-style:italic;
-  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
-  color:var(--mute); font-weight:700; margin-bottom:10px;
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--faint); font-weight:600; margin-bottom:12px;
 }
-h1 { line-height:0; margin-bottom:14px }
-.logo { display:block; width:clamp(190px,52vw,250px); height:auto; color:var(--ink) }
+/* Two kinds of h1 live here: the wordmark on the dashboard, and a text
+   headline on the landing and import pages. The wordmark needs its line box
+   collapsed around the SVG; the text emphatically does not. */
+h1 {
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
+  font-size:clamp(29px,7.4vw,42px); line-height:1.15; letter-spacing:-.03em;
+  margin-bottom:18px;
+}
+h1:has(.logo) { line-height:0; margin-bottom:16px }
+h1 em { font-style:normal; color:var(--accent) }
+.logo { display:block; width:clamp(190px,50vw,244px); height:auto; color:var(--ink) }
 
 /* What is actually being counted, stated rather than inferred from the pills. */
 .range {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
-  font-size:clamp(18px,4.6vw,23px); letter-spacing:-.01em;
-  color:var(--red); margin:2px 0 14px; text-transform:uppercase;
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
+  font-size:clamp(19px,4.6vw,24px); letter-spacing:-.02em;
+  color:var(--ink); margin:4px 0 18px;
 }
 
-.totals { display:flex; flex-wrap:wrap; border-top:3px solid var(--ink) }
-.tot { flex:1 1 25%; min-width:80px; padding:12px 0 4px; border-bottom:1px solid var(--line) }
+/* The four headline totals, set as a quiet table rather than four loud cards.
+   A grid, not wrapping flex: at phone width flex left one tile stranded on a
+   row of its own, which read as a layout bug rather than a fourth figure. */
+.totals {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--line); border-radius:14px; overflow:hidden;
+}
+.tot { padding:14px 14px 12px; background:var(--card); min-width:0 }
 .tot b {
   display:block; font-family:"Titillium Web",sans-serif;
-  font-weight:900; font-size:25px; letter-spacing:-.01em;
+  font-weight:700; font-size:25px; letter-spacing:-.01em; line-height:1.15;
   font-variant-numeric:tabular-nums;
 }
-.tot span {
-  font-size:10.5px; color:var(--mute); text-transform:uppercase; letter-spacing:.08em;
-}
+.tot span { font-size:11.5px; color:var(--mute) }
 
 /* ---------- controls ---------- */
 .controls {
   position:sticky; top:0; z-index:5; background:var(--paper);
-  padding:12px 0 10px; box-shadow:0 8px 12px -8px var(--shadow);
+  padding:14px 0 12px;
 }
-.row { display:flex; gap:6px; margin-bottom:6px; overflow-x:auto; scrollbar-width:none }
+.controls::after {
+  content:''; position:absolute; left:0; right:0; bottom:0; height:14px;
+  background:linear-gradient(var(--paper), transparent); pointer-events:none;
+  transform:translateY(100%);
+}
+.row { display:flex; gap:7px; margin-bottom:7px; overflow-x:auto; scrollbar-width:none }
 .row::-webkit-scrollbar { display:none }
 .row:last-child { margin-bottom:0 }
 
-/* Each control row gets a standing label, so it's clear what the pills
-   change without having to press one and watch. */
-.grp { display:flex; align-items:center; gap:9px; margin-bottom:6px }
+.grp { display:flex; align-items:center; gap:10px; margin-bottom:7px }
 .grp:last-child { margin-bottom:0 }
 .grp .row { flex:1 1 auto; min-width:0; margin-bottom:0 }
 .lbl {
-  flex:0 0 30px; font-family:"Titillium Web",sans-serif;
-  font-size:10px; letter-spacing:.1em; color:var(--mute);
-  font-weight:700; text-transform:uppercase;
+  flex:0 0 30px; font-size:10.5px; letter-spacing:.06em; color:var(--faint);
+  font-weight:600;
 }
 
 /* The period row must not scroll — an overflow container clips the dropdown
    that opens out of it, which is subtle because the button still works. */
-.row.picks { overflow:visible; flex-wrap:wrap; row-gap:6px }
+.row.picks { overflow:visible; flex-wrap:wrap; row-gap:7px }
 
 /* ---------- custom date picker ----------
    Built out of the same pill vocabulary as everything else rather than a
    native <select>, which cannot be styled consistently across platforms. */
 .pick { position:relative; flex:0 0 auto }
-.pick > button { min-width:74px; text-align:left }
+.pick > button { min-width:76px; text-align:left }
 .pick > button::after {
-  content:''; display:inline-block; margin-left:6px; vertical-align:middle;
+  content:''; display:inline-block; margin-left:7px; vertical-align:middle;
   border:3.5px solid transparent; border-top-color:currentColor;
-  transform:translateY(2px);
+  transform:translateY(2px); opacity:.6;
 }
-.pick[data-open=true] > button { border-color:var(--red); color:var(--ink) }
+.pick[data-open=true] > button { border-color:var(--ink); color:var(--ink) }
 
 .menu {
-  position:absolute; z-index:40; top:calc(100% + 5px); left:0;
-  min-width:100%; max-height:264px; overflow-y:auto;
-  background:var(--card); border:1px solid var(--line); border-radius:10px;
-  box-shadow:0 10px 26px -10px var(--shadow); padding:5px;
+  position:absolute; z-index:40; top:calc(100% + 6px); left:0;
+  min-width:100%; max-height:270px; overflow-y:auto;
+  background:var(--card); border:1px solid var(--line); border-radius:14px;
+  box-shadow:0 16px 36px -14px var(--shadow-lg); padding:6px;
 }
 .menu button {
-  display:flex; justify-content:space-between; gap:12px; align-items:baseline;
+  display:flex; justify-content:space-between; gap:14px; align-items:baseline;
   width:100%; font:inherit; font-size:13px; white-space:nowrap;
-  padding:7px 10px; border:none; border-radius:6px;
+  padding:8px 11px; border:none; border-radius:9px;
   background:none; color:var(--ink); cursor:pointer; text-align:left;
 }
-.menu button:hover { background:var(--paper) }
-.menu button[aria-selected=true] { background:var(--red); color:#fff; font-weight:600 }
-.menu button em { font-style:normal; font-size:11px; color:var(--mute) }
-.menu button[aria-selected=true] em { color:#fff; opacity:.85 }
-.menu button:focus-visible { outline:2px solid var(--gold); outline-offset:-2px }
+.menu button:hover { background:var(--sunk) }
+.menu button[aria-selected=true] { background:var(--ink); color:var(--paper); font-weight:600 }
+.menu button em { font-style:normal; font-size:11px; color:var(--faint) }
+.menu button[aria-selected=true] em { color:var(--paper); opacity:.7 }
+.menu button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px }
 
 .scrim { position:fixed; inset:0; z-index:30; background:transparent; border:none }
-.picked {
-  flex:0 0 auto; align-self:center; font-size:12px;
-  font-weight:600; color:var(--red); white-space:nowrap;
-}
 
-/* Pills are cut on a slight angle rather than fully rounded — the one
-   recurring shape motif borrowed from timing-tower chrome, applied to every
-   control so it reads as one system rather than a decoration on a few. */
 button.pill, a.pill {
-  flex:0 0 auto; font:inherit; font-size:13px; font-weight:600;
-  padding:7px 14px; border:1.5px solid var(--line);
-  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
+  flex:0 0 auto; font:inherit; font-size:13px; font-weight:500;
+  padding:7px 14px; border:1px solid var(--line); border-radius:999px;
   background:var(--card); color:var(--mute); cursor:pointer;
   text-decoration:none; white-space:nowrap;
-  transition:background .12s, color .12s, border-color .12s;
+  transition:background .14s, color .14s, border-color .14s;
 }
-button.pill:hover, a.pill:hover { border-color:var(--red); color:var(--ink) }
-button.pill[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:var(--paper) }
-.row.sorts button.pill[aria-pressed=true] { background:var(--red); border-color:var(--red); color:#fff }
-button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--gold); outline-offset:2px }
+button.pill:hover, a.pill:hover { border-color:var(--faint); color:var(--ink) }
+button.pill[aria-pressed=true] {
+  background:var(--ink); border-color:var(--ink); color:var(--paper); font-weight:600;
+}
+button.pill:focus-visible, a.pill:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
 
 /* ---------- list ---------- */
 .legend {
-  display:flex; justify-content:space-between; align-items:baseline;
-  font-size:11px; color:var(--mute); padding:14px 2px 8px; letter-spacing:.04em;
+  display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+  font-size:11.5px; color:var(--faint); padding:16px 2px 10px;
 }
 ol { list-style:none }
 li.item {
-  display:grid; grid-template-columns:34px 38px 1fr auto; gap:0 10px;
-  align-items:center; padding:9px 2px; border-bottom:1px solid var(--line);
+  display:grid; grid-template-columns:32px 40px 1fr auto; gap:0 12px;
+  align-items:center; padding:11px 2px; border-bottom:1px solid var(--hair);
 }
 
-/* ---------- rank badge ----------
-   The one place rank is stated as a color, not just a number — P1/P2/P3 are
-   gold/silver/bronze, matching the podium below and the chart legend, so the
-   same three colors carry "top three" everywhere they appear. */
+/* Rank: weight and medal tone on the number, nothing else. Genre owns hue,
+   so rank cannot be allowed to spend one. */
 .rk {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
-  font-size:13px; color:var(--mute); text-align:right;
+  font-family:"Titillium Web",sans-serif; font-weight:700;
+  font-size:14px; color:var(--faint); text-align:right;
 }
-li.item:nth-child(1) .rk { color:var(--gold); font-size:19px }
-li.item:nth-child(2) .rk { color:var(--silver); font-size:17px }
-li.item:nth-child(3) .rk { color:var(--bronze); font-size:17px }
+li.item:nth-child(1) .rk { color:var(--gold); font-size:19px; font-weight:900 }
+li.item:nth-child(2) .rk { color:var(--silver); font-size:17px; font-weight:900 }
+li.item:nth-child(3) .rk { color:var(--bronze); font-size:17px; font-weight:900 }
 
 /* ---------- rank movement ---------- */
-.delta {
-  display:block; font-family:"IBM Plex Sans KR",sans-serif;
-  font-weight:600; font-size:9.5px; letter-spacing:-.02em; margin-top:1px;
-}
-.delta.up   { color:var(--teal) }
-.delta.down { color:var(--red) }
+.delta { display:block; font-weight:600; font-size:9.5px; letter-spacing:-.02em; margin-top:2px }
+.delta.up   { color:var(--pos) }
+.delta.down { color:var(--neg) }
 .delta.same { color:var(--line) }
-.delta.new  { color:var(--indigo); font-size:8px; letter-spacing:.02em }
+.delta.new  { color:var(--mute); font-size:8px; letter-spacing:.04em }
 
 /* ---------- cover art ---------- */
-.art { width:38px; height:38px; border-radius:5px; overflow:hidden; background:var(--line) }
+.art {
+  width:40px; height:40px; border-radius:9px; overflow:hidden;
+  background:var(--sunk); box-shadow:0 1px 3px -1px var(--shadow);
+}
 .art img { display:block; width:100%; height:100%; object-fit:cover }
 .art-none {
   display:block; width:100%; height:100%;
-  background:linear-gradient(135deg, var(--line), var(--card));
+  background:linear-gradient(135deg, var(--line), var(--sunk));
 }
 .nm { min-width:0 }
 .nm b { display:block; font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.nm span { display:block; font-size:12px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.nm span {
+  display:flex; align-items:baseline; gap:0; font-size:12px; color:var(--mute);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+/* The genre, stated in words beside the name — the colors are a shorthand for
+   this, and a shorthand needs somewhere to be spelled out. */
+.rowgenre {
+  font-style:normal; font-size:11px; color:var(--faint);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.rowgenre::before { content:' · ' }
+
 .val {
-  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:17px;
-  text-align:right; font-variant-numeric:tabular-nums;
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:17.5px;
+  text-align:right; font-variant-numeric:tabular-nums; letter-spacing:-.01em;
 }
 .val i {
   display:block; font-style:normal; font-family:"IBM Plex Sans KR",sans-serif;
-  font-weight:400; font-size:10.5px; color:var(--mute);
+  font-weight:400; font-size:10.5px; color:var(--faint);
 }
 
-/* ---------- signature: count meter ----------
-   Width is the row's value against the leader's, so rank is readable at a
-   glance instead of having to compare numbers. Its color is the same
-   rank-color used for the badge above it — the meter is the badge's color
-   run out as a bar, not a separate choice. */
+/* ---------- count meter ----------
+   Width is the row's value against the leader's; color is its genre. The two
+   are independent readings and neither borrows the other's channel. */
 .meter {
-  grid-column:3/5; height:7px; background:var(--line);
-  border-radius:2px; overflow:hidden; margin-top:7px;
+  grid-column:3/5; height:6px; background:var(--sunk);
+  border-radius:999px; overflow:hidden; margin-top:9px;
 }
-.meter i {
-  display:block; height:100%;
-  border-radius:2px; transition:width .25s;
-}
+.meter i { display:block; height:100%; border-radius:999px; transition:width .3s ease }
 
 /* ---------- span strip ----------
-   The other reading of the same row: when it was in rotation rather than how
-   much. One hue (the red livery accent), stepped by density, rather than
-   three different hues borrowed from elsewhere — so it never collides with
-   what the same colors mean on the badge or the meter beside it. */
+   When it was in rotation rather than how much: same genre hue, stepped in
+   opacity by how densely the days inside its span are filled. */
 .strip {
   grid-column:3/5; display:flex; align-items:stretch; gap:1px;
-  height:15px; margin-top:7px;
+  height:13px; margin-top:9px;
 }
-ol.dual .strip { height:11px; margin-top:4px }
-.strip i { flex:1 1 0; background:var(--line); border-radius:.5px }
-.strip i.on  { background:var(--red); opacity:.38 }
-.strip i.hi  { background:var(--red); opacity:.68 }
-.strip i.max { background:var(--red); opacity:1 }
+/* Shown under the meter, it is the second reading of the row, so it steps back
+   — shorter and softer, rather than two bars shouting at the same volume. */
+ol.dual .strip { height:8px; margin-top:6px; opacity:.72 }
+.strip i { flex:1 1 0; background:var(--sunk); border-radius:1px }
 
 /* ---------- podium ----------
-   The top three, drawn the way a race actually ends: P1 centred and tallest,
-   P2 left, P3 right, each block using the same gold/silver/bronze as the
-   badge and meter above so nothing here introduces a new meaning for color. */
+   P1 centred and tallest, P2 left, P3 right. The medal tone is on the position
+   label; the block's underline is the genre. */
 .podium {
   display:grid; grid-template-columns:1fr 1fr 1fr; align-items:end;
-  gap:8px; margin:4px 0 18px; padding:0 2px;
+  gap:10px; margin:6px 0 22px;
 }
 .podium-step {
   display:flex; flex-direction:column; align-items:center; text-align:center;
-  gap:6px; padding:14px 6px 10px; border-radius:10px 10px 3px 3px;
-  background:var(--card); border:1px solid var(--line); border-bottom-width:5px;
-  min-width:0; font:inherit; color:inherit; cursor:pointer;
+  gap:7px; padding:18px 10px 14px; min-width:0;
+  font:inherit; color:inherit; cursor:pointer;
+  background:var(--card); border:1px solid var(--line);
+  border-bottom:3px solid var(--line);
+  border-radius:16px; box-shadow:0 2px 10px -6px var(--shadow);
+  transition:transform .16s ease, box-shadow .16s ease;
 }
-.podium-step:hover { border-top-color:var(--red); border-left-color:var(--red); border-right-color:var(--red) }
-.podium-step:focus-visible { outline:2px solid var(--gold); outline-offset:2px }
-.podium-step .art { width:52px; height:52px; border-radius:7px; margin-bottom:2px }
+.podium-step:hover { transform:translateY(-2px); box-shadow:0 10px 22px -12px var(--shadow-lg) }
+.podium-step:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
+.podium-step .art { width:54px; height:54px; border-radius:12px }
 .podium-step .pos {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
-  font-size:22px; line-height:1;
+  font-family:"Titillium Web",sans-serif; font-weight:900;
+  font-size:13px; letter-spacing:.04em; line-height:1;
 }
 .podium-step .nm2 {
-  font-weight:700; font-size:13px; width:100%;
+  font-weight:600; font-size:13.5px; width:100%; line-height:1.35;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.podium-step .sub {
-  font-size:11px; color:var(--mute); width:100%;
+.podium-step .sub,
+.podium-step .chip {
+  font-size:11px; width:100%;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+.podium-step .sub { color:var(--mute) }
+.podium-step .chip { font-weight:600; letter-spacing:.02em }
 .podium-step .amt {
-  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:14px;
-  margin-top:2px;
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:15px;
+  margin-top:1px;
 }
-.podium-step[data-pos="1"] { order:2; border-bottom-color:var(--gold); padding-top:6px }
-.podium-step[data-pos="1"] .pos { color:var(--gold); font-size:30px }
-.podium-step[data-pos="1"] .art { width:64px; height:64px }
-.podium-step[data-pos="2"] { order:1; border-bottom-color:var(--silver) }
+.podium-step[data-pos="1"] { order:2; padding:22px 10px 16px }
+.podium-step[data-pos="1"] .pos { color:var(--gold); font-size:15px }
+.podium-step[data-pos="1"] .art { width:66px; height:66px; border-radius:14px }
+.podium-step[data-pos="1"] .nm2 { font-size:14.5px }
+.podium-step[data-pos="2"] { order:1 }
 .podium-step[data-pos="2"] .pos { color:var(--silver) }
-.podium-step[data-pos="3"] { order:3; border-bottom-color:var(--bronze) }
+.podium-step[data-pos="3"] { order:3 }
 .podium-step[data-pos="3"] .pos { color:var(--bronze) }
 
 /* ---------- recap ----------
-   The fun-facts strip: pole position, streaks, the busiest day. Framed as a
-   timing-tower readout — a bordered card of stat tiles — separate in tone
-   from the ranked list beneath it, but built from the same tokens so it
-   doesn't feel like a bolted-on widget. */
+   Pole position, the streaks, the genre that took the period. A calm card, so
+   the numbers inside it can be the loud part. */
 .recap {
-  background:var(--track); color:#fff; border-radius:12px;
-  padding:16px 14px 12px; margin:0 0 18px;
-  border:1px solid var(--line);
+  background:var(--card); border:1px solid var(--line); border-radius:18px;
+  padding:18px 20px 20px; margin:0 0 20px;
+  box-shadow:0 2px 12px -8px var(--shadow);
 }
 .recap-title {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
-  font-size:12px; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--gold); margin-bottom:10px;
-  display:flex; align-items:center; gap:6px;
+  font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--faint); font-weight:600; margin-bottom:16px;
 }
-.recap-title::before { content:'🏁'; font-style:normal }
-.recap-grid {
-  display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;
-}
+.recap-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px 20px }
 .recap-tile { min-width:0 }
-.recap-tile b {
-  display:block; font-family:"Titillium Web",sans-serif; font-weight:800;
-  font-size:14.5px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
 .recap-tile span {
-  display:block; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
-  color:rgba(255,255,255,.55); margin-bottom:2px;
+  display:block; font-size:10.5px; letter-spacing:.06em;
+  color:var(--faint); margin-bottom:3px;
+}
+.recap-tile b {
+  display:block; font-weight:600; font-size:15px; line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .recap-tile em {
-  font-style:normal; font-size:11.5px; color:rgba(255,255,255,.7);
+  font-style:normal; font-size:12px; color:var(--mute);
+  font-family:"Titillium Web",sans-serif; font-weight:600;
 }
+
+/* ---------- genre key ----------
+   The legend for every hue on the page, so the colors can be read rather than
+   merely admired. */
+.genrekey {
+  display:flex; flex-wrap:wrap; gap:6px 14px;
+  padding:4px 2px 0; font-size:11.5px; color:var(--mute);
+}
+.genrekey span { display:inline-flex; align-items:center; gap:6px }
+.genrekey i { width:8px; height:8px; border-radius:50%; flex:0 0 auto }
+.genrekey em { font-style:normal; color:var(--faint); margin-left:1px }
 
 /* ---------- landing / states ---------- */
 .panel {
   background:var(--card); border:1px solid var(--line);
-  border-radius:14px; padding:20px; margin:16px 0;
+  border-radius:18px; padding:24px; margin:18px 0;
+  box-shadow:0 2px 12px -8px var(--shadow);
 }
-.panel h2 { font-family:"Bricolage Grotesque",sans-serif; font-size:19px; margin-bottom:8px }
-.panel p { font-size:13.5px; color:var(--mute); margin-bottom:12px; line-height:1.6 }
+.panel h2 {
+  font-family:"Bricolage Grotesque",sans-serif; font-size:19px;
+  letter-spacing:-.01em; margin-bottom:8px;
+}
+.panel p { font-size:13.5px; color:var(--mute); margin-bottom:14px; line-height:1.65 }
 .btn {
-  display:inline-block; font:inherit; font-weight:700; font-size:14px;
-  padding:11px 22px; border:none;
-  clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);
-  background:var(--red); color:#fff; cursor:pointer; text-decoration:none;
+  display:inline-block; font:inherit; font-weight:600; font-size:14px;
+  padding:11px 22px; border:none; border-radius:999px;
+  background:var(--ink); color:var(--paper); cursor:pointer; text-decoration:none;
 }
-.btn:disabled { background:var(--mute); cursor:default }
-.btn.ghost { background:transparent; color:var(--red); border:1.5px solid var(--red) }
-.btn:focus-visible { outline:2.5px solid var(--gold); outline-offset:2px }
+.btn:disabled { background:var(--faint); cursor:default }
+.btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line) }
+.btn.ghost:hover { border-color:var(--faint) }
+.btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
 
-.bar { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin:12px 0 6px }
-.bar > div { height:100%; background:var(--red); transition:width .2s }
-.more { display:flex; justify-content:center; padding:18px 0 4px }
-.note { font-size:12px; color:var(--mute); line-height:1.7 }
-.err { color:var(--red); font-size:13px; font-weight:500 }
-.foot { font-size:11.5px; color:var(--mute); padding:22px 2px 0; line-height:1.7 }
+.bar { height:6px; background:var(--sunk); border-radius:999px; overflow:hidden; margin:14px 0 6px }
+.bar > div { height:100%; background:var(--ink); transition:width .2s }
+.more { display:flex; justify-content:center; padding:22px 0 4px }
+.note { font-size:12px; color:var(--mute); line-height:1.75 }
+.err { color:var(--accent); font-size:13px; font-weight:500 }
+.foot { font-size:11.5px; color:var(--faint); padding:26px 2px 0; line-height:1.8 }
 
 input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 .check {
-  display:flex; align-items:center; gap:7px;
-  font-size:13px; color:var(--mute); margin:0 0 12px; cursor:pointer;
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--mute); margin:0 0 14px; cursor:pointer;
 }
-.check input { accent-color:var(--red); width:15px; height:15px; cursor:pointer }
-
+.check input { accent-color:var(--ink); width:15px; height:15px; cursor:pointer }
 
 /* A standing caveat where a number would otherwise be read as comparable. */
-.caveat {
-  font-size:12px; line-height:1.6; color:var(--mute);
-  background:var(--card); border:1px solid var(--line);
-  border-radius:10px; padding:9px 11px; margin:14px 0 2px;
+.caveat, .estnote {
+  font-size:12px; line-height:1.7; color:var(--mute);
+  background:var(--sunk); border:1px solid var(--hair);
+  border-radius:12px; padding:11px 13px;
 }
+.caveat { margin:16px 0 2px }
+.estnote { margin:0 0 18px }
 .caveat b { color:var(--ink); font-weight:600 }
-
-/* ---------- estimate marks ----------
-   YouTube's export drops repeat plays, so those figures are reconstructed. The
-   mark says which ones, rather than letting a recovered number pass as a
-   counted one. Lighter than the value it sits beside — it qualifies the
-   number, it isn't part of it. */
-.estnote {
-  font-size:12px; line-height:1.6; color:var(--mute);
-  background:var(--card); border:1px solid var(--line);
-  border-radius:10px; padding:9px 11px; margin:0 0 16px;
-}
-.estnote b { color:var(--red); font-weight:700 }
-.val .est {
-  font-style:normal; font-weight:600; color:var(--mute);
-  margin-right:1px; font-size:14px;
-}
+.estnote b { color:var(--ink); font-weight:600 }
+.val .est { font-style:normal; font-weight:600; color:var(--faint); margin-right:1px; font-size:14px }
 .linkish {
-  font:inherit; font-weight:600; color:var(--red);
+  font:inherit; font-weight:600; color:var(--ink);
   background:none; border:none; padding:0; cursor:pointer;
   text-decoration:underline; text-underline-offset:2px;
 }
@@ -398,58 +412,66 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   font:inherit; text-align:left; background:none; border:none; padding:0;
   cursor:pointer; color:inherit; width:100%;
 }
-.nm.as-link:hover b { color:var(--red) }
-.nm.as-link:focus-visible { outline:2px solid var(--gold); outline-offset:2px; border-radius:4px }
+.nm.as-link:hover b { text-decoration:underline; text-underline-offset:3px }
+.nm.as-link:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px }
 
 /* ---------- detail sheet ---------- */
 .sheet-scrim {
   position:fixed; inset:0; z-index:50; border:none;
-  background:var(--overlay); backdrop-filter:blur(2px);
+  background:var(--overlay); backdrop-filter:blur(3px);
 }
 .sheet {
   position:fixed; z-index:51; left:50%; bottom:0; transform:translateX(-50%);
   width:min(720px,100%); max-height:86vh; overflow-y:auto;
   background:var(--paper); border:1px solid var(--line);
-  border-radius:18px 18px 0 0; padding:18px 16px 28px;
-  box-shadow:0 -12px 40px -16px var(--shadow);
+  border-radius:22px 22px 0 0; padding:22px 20px 32px;
+  box-shadow:0 -16px 48px -20px var(--shadow-lg);
 }
-.sheet-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px }
+.sheet-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:18px }
 .sheet-head .nm { flex:1 1 auto; min-width:0 }
 .sheet-head .nm b { font-size:17px; font-weight:600; display:block }
 .sheet-head .nm span { font-size:13px; color:var(--mute) }
 
 /* ---------- day chart ---------- */
 .chart {
-  display:flex; align-items:flex-end; gap:1px; height:84px;
-  margin:16px 0 8px; padding:0 1px;
-  border-bottom:1.5px solid var(--line);
+  display:flex; align-items:flex-end; gap:1.5px; height:88px;
+  margin:18px 0 10px; padding:0 1px;
+  border-bottom:1px solid var(--line);
 }
-.chart i { flex:1 1 0; background:var(--line); border-radius:1px 1px 0 0; min-height:1px }
-.chart i[data-on=true] { background:var(--red) }
+.chart i { flex:1 1 0; background:var(--sunk); border-radius:2px 2px 0 0; min-height:1px }
+.chart i[data-on=true] { background:var(--ink); opacity:.78 }
 
 /* ---------- trend ---------- */
-.trendbar { padding:14px 0 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap }
-.trend { padding:6px 0 4px }
-.trend-svg {
-  width:100%; height:200px; display:block;
-  overflow:visible; margin-top:4px;
-}
-/* The checkered flag at the right edge — every line finishes at the current
-   total, so the finish line is the one honest place to put it. */
-.trend-finish { opacity:.5 }
+.trendbar { padding:16px 0 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+.trend { padding:8px 0 4px }
+.trend-svg { width:100%; height:206px; display:block; overflow:visible; margin-top:6px }
+/* The finish line at the right edge: every series ends there, at its total. */
+.trend-finish { opacity:.65 }
 .trend-x {
   display:flex; justify-content:space-between;
-  font-size:10.5px; color:var(--mute); padding:2px 2px 0;
+  font-size:10.5px; color:var(--faint); padding:4px 2px 0;
 }
-.trend-key { list-style:none; margin-top:12px }
+.trend-key { list-style:none; margin-top:14px }
 .trend-key li {
-  display:flex; align-items:baseline; gap:8px;
-  padding:5px 2px; border-bottom:1px solid var(--line); font-size:13px;
+  display:flex; align-items:baseline; gap:10px;
+  padding:7px 2px; border-bottom:1px solid var(--hair); font-size:13px;
 }
-.trend-key i { width:11px; height:3px; border-radius:2px; flex:0 0 auto; transform:translateY(-3px) }
+.trend-key i { width:10px; height:10px; border-radius:50%; flex:0 0 auto; transform:translateY(-1px) }
 .trend-key b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.trend-key span { font-size:11.5px; color:var(--mute); flex:1 1 auto; min-width:0;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.trend-key em { font-style:normal; font-size:12px; color:var(--mute); margin-left:auto }
+.trend-key span {
+  display:flex; align-items:baseline; font-size:11.5px; color:var(--mute);
+  flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.trend-key em {
+  font-style:normal; font-size:12.5px; color:var(--mute); margin-left:auto;
+  font-family:"Titillium Web",sans-serif; font-weight:600;
+}
+
+@media (max-width:420px) {
+  .recap-grid { gap:14px 16px }
+  .podium { gap:7px }
+  .podium-step { padding:14px 6px 12px; border-radius:14px }
+  .podium-step[data-pos="1"] { padding:18px 6px 14px }
+}
 
 @media (prefers-reduced-motion:reduce) { * { transition:none !important } }

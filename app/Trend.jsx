@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { colorForRank } from '@/lib/palette';
+import { genreColor, familyLabel } from '@/lib/genre';
 
 const W = 720;
 const H = 200;
@@ -24,7 +24,7 @@ const bucketLabel = (b) => {
  * Drawn as inline SVG rather than pulled from a charting library — one chart
  * doesn't justify the bundle, and this way it inherits the theme tokens.
  */
-export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
+export default function Trend({ mode, source, estimate, from, to, limit = 5, genres = {} }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -62,7 +62,10 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
           return `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(run).toFixed(1)}`;
         })
         .join(' ');
-      return { ...s, d };
+      // Where the line finishes. Five tracks by the same kind of artist come
+      // out five shades of one hue — which is the honest picture — so the
+      // lines are told apart by where they cross the line, not by color.
+      return { ...s, d, ex: x(buckets.length - 1), ey: y(run) };
     });
     return { buckets, lines, peak };
   }, [data]);
@@ -74,6 +77,15 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
   const ticks = buckets.length <= 6
     ? buckets
     : [buckets[0], buckets[Math.floor(buckets.length / 2)], buckets[buckets.length - 1]];
+
+  // Same key as the list: hue by genre family, shade by artist. A chart of five
+  // K-pop tracks comes out five pinks, which is the honest picture of what the
+  // period held.
+  const colorOf = (s) => genreColor(genres[s.artist]?.family ?? 'other', s.artist);
+  const genreOf = (s) => {
+    const fam = genres[s.artist]?.family;
+    return fam && fam !== 'other' ? familyLabel(fam) : null;
+  };
 
   return (
     <div className="trend">
@@ -91,8 +103,18 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
         <line x1={W - PAD.r} y1={PAD.t} x2={W - PAD.r} y2={H - PAD.b}
               stroke="var(--line)" strokeWidth="1.5" strokeDasharray="2,3" className="trend-finish" />
         {lines.map((s, i) => (
-          <path key={i} d={s.d} fill="none" stroke={colorForRank(i)}
+          <path key={i} d={s.d} fill="none" stroke={colorOf(s)}
                 strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+                vectorEffect="non-scaling-stroke" />
+        ))}
+        {/* The finishing order, marked where each line ends. The legend below
+            is in the same order, which is what ties a line to a name. Drawn as
+            a rounded rect rather than a circle: the viewBox is stretched to the
+            container (preserveAspectRatio="none"), which would squash a circle
+            into an ellipse at phone width. */}
+        {lines.map((s, i) => (
+          <rect key={`p${i}`} x={s.ex - 7} y={s.ey - 3.5} width="14" height="7" rx="3.5"
+                fill={colorOf(s)} stroke="var(--paper)" strokeWidth="1.5"
                 vectorEffect="non-scaling-stroke" />
         ))}
       </svg>
@@ -104,9 +126,12 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
       <ol className="trend-key">
         {lines.map((s, i) => (
           <li key={i}>
-            <i style={{ background: colorForRank(i) }} />
-            <b>P{i + 1} {s.track ?? s.artist}</b>
-            {s.track && <span>{s.artist}</span>}
+            <i style={{ background: colorOf(s) }} />
+            <b>{s.track ?? s.artist}</b>
+            <span>
+              {s.track ? s.artist : ''}
+              {genreOf(s) && <em className="rowgenre">{genreOf(s)}</em>}
+            </span>
             <em>{estimate && s.yt ? '≈' : ''}{s.total.toLocaleString()}회</em>
           </li>
         ))}

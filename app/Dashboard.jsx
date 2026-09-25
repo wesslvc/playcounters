@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
-import { colorForRank } from '@/lib/palette';
+import { genreColor, familyColor, familyLabel } from '@/lib/genre';
 import Detail from './Detail';
 import Trend from './Trend';
 
@@ -24,6 +24,9 @@ const PAGE = 50;
 const MAX_ROWS = 3000;
 /** Cover keys requested per round trip. */
 const COVER_BATCH = 60;
+/** Artists per genre lookup. Smaller than the cover batch: each miss costs a
+    Spotify search, and that quota is the tighter of the two. */
+const GENRE_BATCH = 24;
 /** Cells in the span strip. Fixed, so the drawing survives a long range. */
 const STRIP_CELLS = 90;
 
@@ -178,15 +181,17 @@ function Picker({ value, label, options, onChange, disabled }) {
 
 /**
  * How long an item stayed in rotation, drawn against the whole range. A short
- * dense bar is a binge; a long pale one never left. Colour is how many days
- * inside that window it actually played, so duration and density read apart.
+ * dense bar is a binge; a long pale one never left. Opacity is how many days
+ * inside that window it actually played, so duration and density read apart —
+ * and the hue is the row's genre, the same one its meter uses, so the two
+ * readings of one row never disagree about what color it is.
  */
-function Strip({ days, item }) {
+function Strip({ days, item, color }) {
   if (!days.length) return null;
   const spanDays = Math.max(1,
     Math.round((new Date(item.last_at) - new Date(item.first_at)) / DAY) + 1);
   const density = Number(item.days) / spanDays;
-  const cls = density > 0.6 ? 'max' : density > 0.25 ? 'hi' : 'on';
+  const opacity = density > 0.6 ? 1 : density > 0.25 ? 0.68 : 0.4;
 
   // A fixed number of cells rather than one per day: at 626 days a 1px gap
   // spends every pixel of a phone-width row, leaving the bars sub-pixel.
@@ -214,27 +219,30 @@ function Strip({ days, item }) {
   return (
     <div className="strip" aria-hidden="true">
       {Array.from({ length: cells }, (_, i) => (
-        <i key={i} className={on.has(i) ? cls : undefined} />
+        <i key={i} style={on.has(i) ? { background: color, opacity } : undefined} />
       ))}
     </div>
   );
 }
 
-/** Wordmark. Bars first, which is what the app actually measures. */
+/** Wordmark. Bars first, which is what the app actually measures. Ink at
+    stepped opacities, with the accent on the tallest — the chrome stays
+    achromatic so hue can mean genre everywhere else. */
 function Logo() {
   const bars = [
-    [0, 13, 'var(--teal)'], [5.5, 9, 'var(--indigo)'],
-    [11, 17, 'var(--pink)'], [16.5, 5, 'var(--indigo)'],
+    [0, 13, 'currentColor', 0.35], [5.5, 9, 'currentColor', 0.55],
+    [11, 17, 'var(--accent)', 1], [16.5, 5, 'currentColor', 0.35],
   ];
   return (
     <svg className="logo" viewBox="0 0 168 22" role="img" aria-label="playcounters">
-      {bars.map(([x, h, fill]) => (
-        <rect key={x} x={x} y={19 - h} width="3.6" height={h} rx="1.4" fill={fill} />
+      {bars.map(([x, h, fill, opacity]) => (
+        <rect key={x} x={x} y={19 - h} width="3.6" height={h} rx="1.8"
+              fill={fill} opacity={opacity} />
       ))}
       <text
         x="27" y="18"
         fontFamily="Bricolage Grotesque, sans-serif"
-        fontSize="20" fontWeight="800" letterSpacing="-0.6"
+        fontSize="20" fontWeight="700" letterSpacing="-0.7"
         fill="currentColor"
       >
         playcounters
@@ -260,19 +268,24 @@ function Delta({ value }) {
  * The top three, drawn the way a race actually ends: P1 centred and tallest,
  * P2 to the left, P3 to the right. CSS `order` does the reshuffling so the
  * markup can stay rank-ordered (P1, P2, P3) for screen readers.
+ *
+ * Rank is carried by the medal color on the P-label alone; the block's own
+ * accent is the item's genre, as everywhere else. The two never compete for
+ * the same element.
  */
-function Podium({ rows, mode, covers, sort, unit, onSelect, isEst }) {
+function Podium({ rows, mode, covers, sort, unit, onSelect, isEst, colorOf, genreOf }) {
   if (rows.length < 3) return null;
   return (
     <div className="podium">
       {rows.slice(0, 3).map((r, i) => {
         const img = covers[coverKeyFor(mode, r)];
+        const genre = genreOf(r);
         return (
           <button
             key={rowKey(r)}
             className="podium-step"
             data-pos={i + 1}
-            style={{ borderBottomColor: colorForRank(i) }}
+            style={{ borderBottomColor: colorOf(r) }}
             onClick={() => onSelect({ artist: r.artist, track: r.track ?? null })}
           >
             <span className="pos">P{i + 1}</span>
@@ -284,6 +297,7 @@ function Podium({ rows, mode, covers, sort, unit, onSelect, isEst }) {
             <span className="nm2">{r.track ?? r.artist}</span>
             {r.track && <span className="sub">{r.artist}</span>}
             <span className="amt">{isEst(r) ? '≈' : ''}{fmt(r[sort], sort)}{unit}</span>
+            {genre && <span className="chip" style={{ color: colorOf(r) }}>{genre}</span>}
           </button>
         );
       })}
@@ -293,11 +307,12 @@ function Podium({ rows, mode, covers, sort, unit, onSelect, isEst }) {
 
 /**
  * Fun-facts strip, in timing-tower language: who's on pole, the longest run
- * without a day off, the single busiest day, and — when there's a previous
- * window to compare against — who gained the most ground. Everything here is
- * derived from data the page already fetched; no extra round trip.
+ * without a day off, the single busiest day, the genre that took the most of
+ * the period, and — when there's a previous window to compare against — who
+ * gained the most ground. Everything here is derived from data the page
+ * already fetched; no extra round trip.
  */
-function Recap({ rows, daily, prevRank, prevComplete, mode, sort, unit, isEst }) {
+function Recap({ rows, daily, prevRank, prevComplete, sort, unit, isEst, familyOf }) {
   const pole = rows[0];
 
   const streak = useMemo(() => {
@@ -329,17 +344,41 @@ function Recap({ rows, daily, prevRank, prevComplete, mode, sort, unit, isEst })
     return best;
   }, [rows, prevRank, prevComplete]);
 
+  /** Which genre took the most plays. Only counts rows whose genre is known,
+      so a half-filled cache understates rather than misattributes. */
+  const topGenre = useMemo(() => {
+    const byFamily = new Map();
+    for (const r of rows) {
+      const fam = familyOf(r);
+      if (!fam || fam === 'other') continue;
+      byFamily.set(fam, (byFamily.get(fam) ?? 0) + Number(r.plays));
+    }
+    if (!byFamily.size) return null;
+    const [family, plays] = [...byFamily].sort((a, b) => b[1] - a[1])[0];
+    const total = [...byFamily.values()].reduce((a, b) => a + b, 0);
+    return { family, share: Math.round((plays / total) * 100) };
+  }, [rows, familyOf]);
+
   if (!pole) return null;
 
   return (
     <div className="recap">
-      <p className="recap-title">이번 기간 레카프</p>
+      <p className="recap-title">이번 기간 리캡</p>
       <div className="recap-grid">
         <div className="recap-tile">
           <span>폴 포지션</span>
           <b>{pole.track ?? pole.artist}</b>
           <em>{isEst(pole) ? '≈' : ''}{fmt(pole[sort], sort)}{unit}</em>
         </div>
+        {topGenre && (
+          <div className="recap-tile">
+            <span>주력 장르</span>
+            <b style={{ color: familyColor(topGenre.family) }}>
+              {familyLabel(topGenre.family)}
+            </b>
+            <em>알려진 장르 중 {topGenre.share}%</em>
+          </div>
+        )}
         {streak && streak.len > 1 && (
           <div className="recap-tile">
             <span>최다 연속 청취</span>
@@ -381,6 +420,7 @@ export default function Dashboard() {
   const [limit, setLimit] = useState(PAGE);
   const [expanding, setExpanding] = useState(false);
   const [covers, setCovers] = useState({});
+  const [genres, setGenres] = useState({});
   const [calendar, setCalendar] = useState([]);
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
@@ -610,6 +650,77 @@ export default function Dashboard() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [shown, covers, mode, tick]);
 
+  // Fetch genres for the artists on screen, on the same terms as artwork: a
+  // batch at a time, only what the server actually answers is recorded, and
+  // whatever is still pending is asked for again on the next tick. Spotify's
+  // quota is the tighter of the two ceilings, so the batch is smaller.
+  const genreFlight = useRef(false);
+  const [genreTick, setGenreTick] = useState(0);
+
+  useEffect(() => {
+    if (genreFlight.current || !shown.length) return;
+
+    const missing = [];
+    for (const r of shown) {
+      if (!r.artist || r.artist in genres || missing.includes(r.artist)) continue;
+      missing.push(r.artist);
+      if (missing.length >= GENRE_BATCH) break;
+    }
+    if (!missing.length) return;
+
+    let cancelled = false;
+    let timer;
+    genreFlight.current = true;
+    fetch('/api/genres', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artists: missing }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        const got = json?.genres ?? {};
+        if (Object.keys(got).length) setGenres((g) => ({ ...g, ...got }));
+        if (json?.retryAfter || json?.pending) {
+          const wait = json.retryAfter ? json.retryAfter * 1000 : 800;
+          timer = setTimeout(() => setGenreTick((t) => t + 1), wait);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) timer = setTimeout(() => setGenreTick((t) => t + 1), 3000);
+      })
+      .finally(() => { genreFlight.current = false; });
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [shown, genres, genreTick]);
+
+  /* ---- genre as the one color key ----
+     Hue comes from the genre family, and the shade from the artist's name, so
+     everything by one artist is one color and everything in one genre is one
+     neighbourhood of color. Until the lookup lands a row is neutral grey
+     rather than a placeholder hue it would later change out of. */
+  const familyOf = useCallback((row) => genres[row.artist]?.family ?? null, [genres]);
+  const colorOf = useCallback(
+    (row) => genreColor(familyOf(row) ?? 'other', row.artist),
+    [familyOf]
+  );
+  const genreOf = useCallback((row) => {
+    const fam = familyOf(row);
+    return fam && fam !== 'other' ? familyLabel(fam) : null;
+  }, [familyOf]);
+
+  /** The genres actually on screen, most common first — the key that makes the
+      colors in the list readable rather than decorative. */
+  const genreMix = useMemo(() => {
+    const byFamily = new Map();
+    for (const r of shown) {
+      const fam = genres[r.artist]?.family;
+      if (!fam || fam === 'other') continue;
+      byFamily.set(fam, (byFamily.get(fam) ?? 0) + 1);
+    }
+    return [...byFamily].sort((a, b) => b[1] - a[1]).slice(0, 7);
+  }, [shown, genres]);
+
   const max = rows.length ? Number(rows[0][sort]) : 0;
   const unit = SORTS.find((s) => s[0] === sort)[2];
   const s = data?.summary;
@@ -783,7 +894,7 @@ export default function Dashboard() {
       {showTrend && (
         <Trend
           mode={mode} source={src} estimate={estimating} limit={trendN}
-          from={range.from} to={range.to}
+          from={range.from} to={range.to} genres={genres}
         />
       )}
 
@@ -822,14 +933,25 @@ export default function Dashboard() {
           {showCount && (
             <Podium
               rows={shown} mode={mode} covers={covers} sort={sort} unit={unit}
-              onSelect={setDetail} isEst={isEst}
+              onSelect={setDetail} isEst={isEst} colorOf={colorOf} genreOf={genreOf}
             />
           )}
 
           <Recap
             rows={shown} daily={data.daily} prevRank={prevRank} prevComplete={prevComplete}
-            mode={mode} sort={sort} unit={unit} isEst={isEst}
+            sort={sort} unit={unit} isEst={isEst} familyOf={familyOf}
           />
+
+          {genreMix.length > 1 && (
+            <div className="genrekey">
+              {genreMix.map(([family, n]) => (
+                <span key={family}>
+                  <i style={{ background: familyColor(family) }} />
+                  {familyLabel(family)}<em>{n}</em>
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="legend">
             <span>
@@ -869,6 +991,7 @@ export default function Dashboard() {
                     <span>
                       {r.track ? r.artist
                         : `${isEst(r) ? '≈' : ''}${Number(r.plays).toLocaleString()}회 · ${r.days}일`}
+                      {genreOf(r) && <em className="rowgenre">{genreOf(r)}</em>}
                     </span>
                   </button>
                   <div className="val" title={isEst(r) ? '유튜브 추정치가 포함된 값입니다' : undefined}>
@@ -879,10 +1002,10 @@ export default function Dashboard() {
                   </div>
                   {showCount && (
                     <div className="meter" aria-hidden="true">
-                      <i style={{ width: pct + '%', background: colorForRank(i) }} />
+                      <i style={{ width: pct + '%', background: colorOf(r) }} />
                     </div>
                   )}
-                  {showSpan && <Strip days={data.daily} item={r} />}
+                  {showSpan && <Strip days={data.daily} item={r} color={colorOf(r)} />}
                 </li>
               );
             })}

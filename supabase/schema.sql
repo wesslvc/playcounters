@@ -124,6 +124,22 @@ create table if not exists covers (
   primary key (kind, artist, name)
 );
 
+-- ---------- genres ----------
+-- Spotify files genres on the artist, not the track, so one row per artist
+-- serves every track they appear on. Shared across users and effectively
+-- immutable, like covers.
+--
+-- `genre` is the Spotify string as given ("korean r&b"); `family` is the coarse
+-- bucket the UI colors by, resolved once here so the client never has to. A
+-- lookup that matched nothing is stored too — genre null, family 'other' — so
+-- an artist Spotify does not know is not searched again on every scroll.
+create table if not exists artist_genres (
+  artist     text primary key,
+  genre      text,
+  family     text not null default 'other',
+  fetched_at timestamptz not null default now()
+);
+
 -- ---------- YouTube calibration ----------
 -- Takeout logs one entry per listening session however many times a track
 -- actually repeated inside it, so its play counts run far below the truth.
@@ -172,6 +188,7 @@ create table if not exists yt_anchor (
 alter table users enable row level security;
 alter table plays enable row level security;
 alter table covers enable row level security;
+alter table artist_genres enable row level security;
 alter table yt_estimate enable row level security;
 alter table yt_anchor enable row level security;
 

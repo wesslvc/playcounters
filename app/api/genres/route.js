@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
-import { searchArtistGenres } from '@/lib/spotify';
+import { findGenre } from '@/lib/artwork';
 import { familyOfGenres } from '@/lib/genre';
 
 export const dynamic = 'force-dynamic';
@@ -8,14 +8,13 @@ export const maxDuration = 60;
 
 /** Artists accepted per call; the client asks again for whatever is still missing. */
 const MAX_NAMES = 80;
-/** Cache misses actually searched per call, bounding both latency and quota. */
+/** Cache misses actually looked up per call, bounding latency. */
 const MAX_SEARCH = 16;
-/** Searches in flight at once. Lower than covers: this is Spotify's quota, and
-    it is the tighter of the two. */
+/** Lookups in flight at once. Each one is one or two Deezer calls. */
 const CONCURRENCY = 3;
 
 /**
- * Set when Spotify starts refusing, so a scroll doesn't throw another burst at
+ * Set when Deezer starts refusing, so a scroll doesn't throw another burst at
  * a closed door. Per-instance, which is enough to break the feedback loop.
  */
 let pausedUntil = 0;
@@ -32,10 +31,10 @@ async function inBatches(items, size, fn) {
  * Resolve genres for a batch of artists, so the list and the charts can color
  * by genre rather than by rank.
  *
- * Cache first, then Spotify, then written back — including the misses, which
- * are a real answer and cost a search to learn. The response is keyed by the
- * artist name exactly as it was asked for, so the client can look it up
- * without normalising anything.
+ * Cache first, then Deezer, then written back — including the misses, which are
+ * a real answer and cost a lookup to learn. The response is keyed by the artist
+ * name exactly as it was asked for, so the client can look it up without
+ * normalising anything.
  */
 export async function POST(req) {
   if (!currentUserId()) {
@@ -81,13 +80,16 @@ export async function POST(req) {
   }
 
   const searching = misses.slice(0, MAX_SEARCH);
-  const tally = { matched: 0, unknown: 0, limited: 0, failed: 0 };
+  // Outcome counts, logged once per call. Without them a lookup that quietly
+  // finds nothing is indistinguishable from one that never ran — which is
+  // exactly how the previous source's silent failure went unnoticed.
+  const tally = { search: 0, album: 0, 'no-genre': 0, 'no-albums': 0, unusable: 0, limited: 0, failed: 0 };
 
   const found = await inBatches(searching, CONCURRENCY, async (artist) => {
     try {
-      const list = await searchArtistGenres(artist);
-      const { family, genre } = familyOfGenres(list);
-      tally[list.length ? 'matched' : 'unknown']++;
+      const { genre: name, stage } = await findGenre(artist);
+      const { family, genre } = familyOfGenres(name ? [name] : []);
+      tally[stage] = (tally[stage] ?? 0) + 1;
       return { artist, family, genre };
     } catch (e) {
       if (e.rateLimited) {
@@ -97,7 +99,7 @@ export async function POST(req) {
         tally.failed++;
         // A bad response: leave it unresolved rather than caching an 'other'
         // we would never retry.
-        console.error('genre search failed', artist, e.message);
+        console.error('genre lookup failed', artist, e.message);
       }
       return null;
     }

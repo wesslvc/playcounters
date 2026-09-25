@@ -125,14 +125,19 @@ create table if not exists covers (
 );
 
 -- ---------- genres ----------
--- Spotify files genres on the artist, not the track, so one row per artist
--- serves every track they appear on. Shared across users and effectively
--- immutable, like covers.
+-- One row per artist, serving every track they appear on. Shared across users
+-- and effectively immutable, like covers.
 --
--- `genre` is the Spotify string as given ("korean r&b"); `family` is the coarse
--- bucket the UI colors by, resolved once here so the client never has to. A
--- lookup that matched nothing is stored too — genre null, family 'other' — so
--- an artist Spotify does not know is not searched again on every scroll.
+-- Spotify used to file genres on the artist and stopped in early 2026 — the
+-- field is absent from search results and null from the artist endpoint — so
+-- these come from Deezer, which files genre on the album. An artist's genre is
+-- the one most of their albums carry.
+--
+-- `genre` is the name as given ("Rap/Hip Hop"); `family` is the coarse bucket
+-- the UI colors by, resolved once here so the client never has to. A lookup
+-- that matched nothing is stored too — genre null, family 'other' — so an
+-- artist nobody can place is not looked up again on every scroll. To retry
+-- those later: delete from artist_genres where genre is null;
 create table if not exists artist_genres (
   artist     text primary key,
   genre      text,

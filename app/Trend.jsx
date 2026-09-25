@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { colorForRank } from '@/lib/palette';
 
-const COLORS = ['var(--indigo)', 'var(--pink)', 'var(--teal)', '#F0A202', '#8B5CF6'];
 const W = 720;
 const H = 200;
 const PAD = { l: 4, r: 4, t: 10, b: 20 };
@@ -24,7 +24,7 @@ const bucketLabel = (b) => {
  * Drawn as inline SVG rather than pulled from a charting library — one chart
  * doesn't justify the bundle, and this way it inherits the theme tokens.
  */
-export default function Trend({ mode, source, estimate, from, to }) {
+export default function Trend({ mode, source, estimate, from, to, limit = 5 }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -32,14 +32,14 @@ export default function Trend({ mode, source, estimate, from, to }) {
     const ctl = new AbortController();
     setData(null);
     setError(null);
-    const qs = new URLSearchParams({ mode, source, limit: '5', from, to });
+    const qs = new URLSearchParams({ mode, source, limit: String(limit), from, to });
     if (estimate) qs.set('estimate', '1');
     fetch(`/api/trend?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [mode, source, estimate, from, to]);
+  }, [mode, source, estimate, from, to, limit]);
 
   const chart = useMemo(() => {
     if (!data?.buckets?.length) return null;
@@ -78,7 +78,7 @@ export default function Trend({ mode, source, estimate, from, to }) {
   return (
     <div className="trend">
       <div className="legend">
-        <span>상위 5개 · 기간 내 누적 재생</span>
+        <span>상위 {lines.length}개 · 기간 내 누적 재생</span>
         <span>
           {bucketLabel(buckets[0])} ~ {bucketLabel(buckets[buckets.length - 1])}
           {' · '}최대 {peak.toLocaleString()}회
@@ -87,8 +87,11 @@ export default function Trend({ mode, source, estimate, from, to }) {
 
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="trend-svg" role="img"
            aria-label={`상위 ${lines.length}개 누적 재생 추이`}>
+        {/* The finish line: every series ends here, at the current total. */}
+        <line x1={W - PAD.r} y1={PAD.t} x2={W - PAD.r} y2={H - PAD.b}
+              stroke="var(--line)" strokeWidth="1.5" strokeDasharray="2,3" className="trend-finish" />
         {lines.map((s, i) => (
-          <path key={i} d={s.d} fill="none" stroke={COLORS[i % COLORS.length]}
+          <path key={i} d={s.d} fill="none" stroke={colorForRank(i)}
                 strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
         ))}
@@ -101,8 +104,8 @@ export default function Trend({ mode, source, estimate, from, to }) {
       <ol className="trend-key">
         {lines.map((s, i) => (
           <li key={i}>
-            <i style={{ background: COLORS[i % COLORS.length] }} />
-            <b>{s.track ?? s.artist}</b>
+            <i style={{ background: colorForRank(i) }} />
+            <b>P{i + 1} {s.track ?? s.artist}</b>
             {s.track && <span>{s.artist}</span>}
             <em>{estimate && s.yt ? '≈' : ''}{s.total.toLocaleString()}회</em>
           </li>

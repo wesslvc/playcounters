@@ -1,26 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Titillium+Web:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap');
 
-/* Light is the base; dark redefines only the tokens, so every rule below
-   works in both without being written twice. The [data-theme] attribute is
-   the explicit choice and wins over the system preference in both directions. */
+/* ---------- F1 broadcast-graphics system ----------
+   Titillium Web is the typeface F1's own timing tower and lower-thirds use;
+   it carries the numbers, ranks and labels. It has no Hangul, so Korean text
+   stays on IBM Plex Sans KR — the two are paired by role, not swapped in and
+   out. Rank is the one key every color below reads off: P1/P2/P3 are gold/
+   silver/bronze everywhere a rank appears (badge, meter, podium, chart), so
+   the same hue never means two different things in the same view. */
 :root {
   --paper:#EFEDF4; --card:#FBFAFE; --ink:#191327; --mute:#6B6480;
   --line:#DCD7E8; --indigo:#4B3BFF; --pink:#FF5C93; --teal:#00A08C;
   --shadow:rgba(25,19,39,.14); --overlay:rgba(25,19,39,.32);
+  --red:#E10600; --gold:#E8A400; --silver:#8C8FA3; --bronze:#B5793F;
+  --track:#15131C;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper:#131019; --card:#1C1826; --ink:#EFEDF4; --mute:#9A93AD;
+    --paper:#0D0B12; --card:#18151F; --ink:#F4F2FA; --mute:#9A93AD;
     --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
-    --shadow:rgba(0,0,0,.5); --overlay:rgba(0,0,0,.6);
+    --shadow:rgba(0,0,0,.55); --overlay:rgba(0,0,0,.65);
+    --red:#FF2A20; --gold:#FFC53D; --silver:#C9CDD6; --bronze:#E8A672;
+    --track:#000;
   }
 }
 
 :root[data-theme="dark"] {
-  --paper:#131019; --card:#1C1826; --ink:#EFEDF4; --mute:#9A93AD;
+  --paper:#0D0B12; --card:#18151F; --ink:#F4F2FA; --mute:#9A93AD;
   --line:#2E2840; --indigo:#8B7DFF; --pink:#FF7FA9; --teal:#2BC4AE;
-  --shadow:rgba(0,0,0,.5); --overlay:rgba(0,0,0,.6);
+  --shadow:rgba(0,0,0,.55); --overlay:rgba(0,0,0,.65);
+  --red:#FF2A20; --gold:#FFC53D; --silver:#C9CDD6; --bronze:#E8A672;
+  --track:#000;
 }
 
 html { color-scheme:light dark }
@@ -39,11 +49,19 @@ body {
 
 .wrap { max-width:720px; margin:0 auto; padding:0 16px }
 
+/* A single racing stripe across the very top of the page — the one purely
+   decorative touch, kept to a thin band so it reads as a livery accent
+   rather than chrome competing with the data underneath it. */
+.wrap::before {
+  content:''; display:block; height:4px; margin:0 -16px 0;
+  background:linear-gradient(90deg, var(--red) 0 60%, var(--gold) 60% 75%, var(--ink) 75% 100%);
+}
+
 /* ---------- nav ---------- */
 .nav { display:flex; gap:6px; padding:14px 0 0; overflow-x:auto; scrollbar-width:none }
 .nav::-webkit-scrollbar { display:none }
-.nav .pill.act { background:var(--indigo); border-color:var(--indigo); color:var(--card) }
-.nav .pill.act:hover:not(:disabled) { color:var(--card); opacity:.88 }
+.nav .pill.act { background:var(--red); border-color:var(--red); color:#fff }
+.nav .pill.act:hover:not(:disabled) { color:#fff; opacity:.88 }
 .nav .pill.act:disabled { background:var(--mute); border-color:var(--mute); cursor:default }
 .nav .pill.danger { color:var(--pink) }
 .nav .pill.danger:hover { border-color:var(--pink); color:var(--pink) }
@@ -58,26 +76,30 @@ header { padding:20px 0 22px }
   margin:-8px 0 16px;
 }
 .eyebrow {
-  font-size:11px; letter-spacing:.16em; text-transform:uppercase;
-  color:var(--mute); font-weight:600; margin-bottom:10px;
+  font-family:"Titillium Web",sans-serif; font-style:italic;
+  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--mute); font-weight:700; margin-bottom:10px;
 }
 h1 { line-height:0; margin-bottom:14px }
 .logo { display:block; width:clamp(190px,52vw,250px); height:auto; color:var(--ink) }
 
 /* What is actually being counted, stated rather than inferred from the pills. */
 .range {
-  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
-  font-size:clamp(17px,4.4vw,21px); letter-spacing:-.01em;
-  color:var(--indigo); margin:2px 0 14px;
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
+  font-size:clamp(18px,4.6vw,23px); letter-spacing:-.01em;
+  color:var(--red); margin:2px 0 14px; text-transform:uppercase;
 }
 
-.totals { display:flex; flex-wrap:wrap; border-top:1.5px solid var(--ink) }
+.totals { display:flex; flex-wrap:wrap; border-top:3px solid var(--ink) }
 .tot { flex:1 1 25%; min-width:80px; padding:12px 0 4px; border-bottom:1px solid var(--line) }
 .tot b {
-  display:block; font-family:"Bricolage Grotesque",sans-serif;
-  font-weight:700; font-size:23px; letter-spacing:-.01em;
+  display:block; font-family:"Titillium Web",sans-serif;
+  font-weight:900; font-size:25px; letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
 }
-.tot span { font-size:11px; color:var(--mute) }
+.tot span {
+  font-size:10.5px; color:var(--mute); text-transform:uppercase; letter-spacing:.08em;
+}
 
 /* ---------- controls ---------- */
 .controls {
@@ -94,8 +116,9 @@ h1 { line-height:0; margin-bottom:14px }
 .grp:last-child { margin-bottom:0 }
 .grp .row { flex:1 1 auto; min-width:0; margin-bottom:0 }
 .lbl {
-  flex:0 0 26px; font-size:10px; letter-spacing:.08em; color:var(--mute);
-  font-weight:600;
+  flex:0 0 30px; font-family:"Titillium Web",sans-serif;
+  font-size:10px; letter-spacing:.1em; color:var(--mute);
+  font-weight:700; text-transform:uppercase;
 }
 
 /* The period row must not scroll — an overflow container clips the dropdown
@@ -112,43 +135,47 @@ h1 { line-height:0; margin-bottom:14px }
   border:3.5px solid transparent; border-top-color:currentColor;
   transform:translateY(2px);
 }
-.pick[data-open=true] > button { border-color:var(--indigo); color:var(--ink) }
+.pick[data-open=true] > button { border-color:var(--red); color:var(--ink) }
 
 .menu {
   position:absolute; z-index:40; top:calc(100% + 5px); left:0;
   min-width:100%; max-height:264px; overflow-y:auto;
-  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 10px 26px -10px var(--shadow); padding:5px;
 }
 .menu button {
   display:flex; justify-content:space-between; gap:12px; align-items:baseline;
   width:100%; font:inherit; font-size:13px; white-space:nowrap;
-  padding:7px 10px; border:none; border-radius:8px;
+  padding:7px 10px; border:none; border-radius:6px;
   background:none; color:var(--ink); cursor:pointer; text-align:left;
 }
 .menu button:hover { background:var(--paper) }
-.menu button[aria-selected=true] { background:var(--indigo); color:var(--card); font-weight:600 }
+.menu button[aria-selected=true] { background:var(--red); color:#fff; font-weight:600 }
 .menu button em { font-style:normal; font-size:11px; color:var(--mute) }
-.menu button[aria-selected=true] em { color:var(--card); opacity:.8 }
-.menu button:focus-visible { outline:2px solid var(--pink); outline-offset:-2px }
+.menu button[aria-selected=true] em { color:#fff; opacity:.85 }
+.menu button:focus-visible { outline:2px solid var(--gold); outline-offset:-2px }
 
 .scrim { position:fixed; inset:0; z-index:30; background:transparent; border:none }
 .picked {
   flex:0 0 auto; align-self:center; font-size:12px;
-  font-weight:600; color:var(--indigo); white-space:nowrap;
+  font-weight:600; color:var(--red); white-space:nowrap;
 }
 
+/* Pills are cut on a slight angle rather than fully rounded — the one
+   recurring shape motif borrowed from timing-tower chrome, applied to every
+   control so it reads as one system rather than a decoration on a few. */
 button.pill, a.pill {
-  flex:0 0 auto; font:inherit; font-size:13px; font-weight:500;
-  padding:7px 13px; border:1px solid var(--line); border-radius:999px;
+  flex:0 0 auto; font:inherit; font-size:13px; font-weight:600;
+  padding:7px 14px; border:1.5px solid var(--line);
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
   background:var(--card); color:var(--mute); cursor:pointer;
   text-decoration:none; white-space:nowrap;
   transition:background .12s, color .12s, border-color .12s;
 }
-button.pill:hover, a.pill:hover { border-color:var(--indigo); color:var(--ink) }
+button.pill:hover, a.pill:hover { border-color:var(--red); color:var(--ink) }
 button.pill[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:var(--paper) }
-.row.sorts button.pill[aria-pressed=true] { background:var(--indigo); border-color:var(--indigo); color:var(--card) }
-button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+.row.sorts button.pill[aria-pressed=true] { background:var(--red); border-color:var(--red); color:#fff }
+button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--gold); outline-offset:2px }
 
 /* ---------- list ---------- */
 .legend {
@@ -157,14 +184,21 @@ button.pill:focus-visible, a.pill:focus-visible { outline:2.5px solid var(--pink
 }
 ol { list-style:none }
 li.item {
-  display:grid; grid-template-columns:30px 38px 1fr auto; gap:0 10px;
+  display:grid; grid-template-columns:34px 38px 1fr auto; gap:0 10px;
   align-items:center; padding:9px 2px; border-bottom:1px solid var(--line);
 }
+
+/* ---------- rank badge ----------
+   The one place rank is stated as a color, not just a number — P1/P2/P3 are
+   gold/silver/bronze, matching the podium below and the chart legend, so the
+   same three colors carry "top three" everywhere they appear. */
 .rk {
-  font-family:"Bricolage Grotesque",sans-serif; font-weight:700;
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
   font-size:13px; color:var(--mute); text-align:right;
 }
-li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
+li.item:nth-child(1) .rk { color:var(--gold); font-size:19px }
+li.item:nth-child(2) .rk { color:var(--silver); font-size:17px }
+li.item:nth-child(3) .rk { color:var(--bronze); font-size:17px }
 
 /* ---------- rank movement ---------- */
 .delta {
@@ -172,12 +206,12 @@ li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
   font-weight:600; font-size:9.5px; letter-spacing:-.02em; margin-top:1px;
 }
 .delta.up   { color:var(--teal) }
-.delta.down { color:var(--pink) }
+.delta.down { color:var(--red) }
 .delta.same { color:var(--line) }
 .delta.new  { color:var(--indigo); font-size:8px; letter-spacing:.02em }
 
 /* ---------- cover art ---------- */
-.art { width:38px; height:38px; border-radius:6px; overflow:hidden; background:var(--line) }
+.art { width:38px; height:38px; border-radius:5px; overflow:hidden; background:var(--line) }
 .art img { display:block; width:100%; height:100%; object-fit:cover }
 .art-none {
   display:block; width:100%; height:100%;
@@ -186,7 +220,10 @@ li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
 .nm { min-width:0 }
 .nm b { display:block; font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .nm span { display:block; font-size:12px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.val { font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:17px; text-align:right }
+.val {
+  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:17px;
+  text-align:right; font-variant-numeric:tabular-nums;
+}
 .val i {
   display:block; font-style:normal; font-family:"IBM Plex Sans KR",sans-serif;
   font-weight:400; font-size:10.5px; color:var(--mute);
@@ -194,31 +231,106 @@ li.item:nth-child(-n+3) .rk { color:var(--pink); font-size:16px }
 
 /* ---------- signature: count meter ----------
    Width is the row's value against the leader's, so rank is readable at a
-   glance instead of having to compare numbers. */
+   glance instead of having to compare numbers. Its color is the same
+   rank-color used for the badge above it — the meter is the badge's color
+   run out as a bar, not a separate choice. */
 .meter {
   grid-column:3/5; height:7px; background:var(--line);
-  border-radius:999px; overflow:hidden; margin-top:7px;
+  border-radius:2px; overflow:hidden; margin-top:7px;
 }
 .meter i {
-  display:block; height:100%; background:var(--indigo);
-  border-radius:999px; transition:width .25s;
+  display:block; height:100%;
+  border-radius:2px; transition:width .25s;
 }
-li.item:nth-child(1) .meter i { background:var(--pink) }
-li.item:nth-child(2) .meter i,
-li.item:nth-child(3) .meter i { background:var(--teal) }
 
 /* ---------- span strip ----------
    The other reading of the same row: when it was in rotation rather than how
-   much. Shown alone, or stacked under the meter as "둘 다". */
+   much. One hue (the red livery accent), stepped by density, rather than
+   three different hues borrowed from elsewhere — so it never collides with
+   what the same colors mean on the badge or the meter beside it. */
 .strip {
   grid-column:3/5; display:flex; align-items:stretch; gap:1px;
   height:15px; margin-top:7px;
 }
 ol.dual .strip { height:11px; margin-top:4px }
 .strip i { flex:1 1 0; background:var(--line); border-radius:.5px }
-.strip i.on  { background:var(--teal) }
-.strip i.hi  { background:var(--indigo) }
-.strip i.max { background:var(--pink) }
+.strip i.on  { background:var(--red); opacity:.38 }
+.strip i.hi  { background:var(--red); opacity:.68 }
+.strip i.max { background:var(--red); opacity:1 }
+
+/* ---------- podium ----------
+   The top three, drawn the way a race actually ends: P1 centred and tallest,
+   P2 left, P3 right, each block using the same gold/silver/bronze as the
+   badge and meter above so nothing here introduces a new meaning for color. */
+.podium {
+  display:grid; grid-template-columns:1fr 1fr 1fr; align-items:end;
+  gap:8px; margin:4px 0 18px; padding:0 2px;
+}
+.podium-step {
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:6px; padding:14px 6px 10px; border-radius:10px 10px 3px 3px;
+  background:var(--card); border:1px solid var(--line); border-bottom-width:5px;
+  min-width:0; font:inherit; color:inherit; cursor:pointer;
+}
+.podium-step:hover { border-top-color:var(--red); border-left-color:var(--red); border-right-color:var(--red) }
+.podium-step:focus-visible { outline:2px solid var(--gold); outline-offset:2px }
+.podium-step .art { width:52px; height:52px; border-radius:7px; margin-bottom:2px }
+.podium-step .pos {
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
+  font-size:22px; line-height:1;
+}
+.podium-step .nm2 {
+  font-weight:700; font-size:13px; width:100%;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.podium-step .sub {
+  font-size:11px; color:var(--mute); width:100%;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.podium-step .amt {
+  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:14px;
+  margin-top:2px;
+}
+.podium-step[data-pos="1"] { order:2; border-bottom-color:var(--gold); padding-top:6px }
+.podium-step[data-pos="1"] .pos { color:var(--gold); font-size:30px }
+.podium-step[data-pos="1"] .art { width:64px; height:64px }
+.podium-step[data-pos="2"] { order:1; border-bottom-color:var(--silver) }
+.podium-step[data-pos="2"] .pos { color:var(--silver) }
+.podium-step[data-pos="3"] { order:3; border-bottom-color:var(--bronze) }
+.podium-step[data-pos="3"] .pos { color:var(--bronze) }
+
+/* ---------- recap ----------
+   The fun-facts strip: pole position, streaks, the busiest day. Framed as a
+   timing-tower readout — a bordered card of stat tiles — separate in tone
+   from the ranked list beneath it, but built from the same tokens so it
+   doesn't feel like a bolted-on widget. */
+.recap {
+  background:var(--track); color:#fff; border-radius:12px;
+  padding:16px 14px 12px; margin:0 0 18px;
+  border:1px solid var(--line);
+}
+.recap-title {
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
+  font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--gold); margin-bottom:10px;
+  display:flex; align-items:center; gap:6px;
+}
+.recap-title::before { content:'🏁'; font-style:normal }
+.recap-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;
+}
+.recap-tile { min-width:0 }
+.recap-tile b {
+  display:block; font-family:"Titillium Web",sans-serif; font-weight:800;
+  font-size:14.5px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.recap-tile span {
+  display:block; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:rgba(255,255,255,.55); margin-bottom:2px;
+}
+.recap-tile em {
+  font-style:normal; font-size:11.5px; color:rgba(255,255,255,.7);
+}
 
 /* ---------- landing / states ---------- */
 .panel {
@@ -228,19 +340,20 @@ ol.dual .strip { height:11px; margin-top:4px }
 .panel h2 { font-family:"Bricolage Grotesque",sans-serif; font-size:19px; margin-bottom:8px }
 .panel p { font-size:13.5px; color:var(--mute); margin-bottom:12px; line-height:1.6 }
 .btn {
-  display:inline-block; font:inherit; font-weight:600; font-size:14px;
-  padding:11px 20px; border:none; border-radius:999px;
-  background:var(--indigo); color:var(--card); cursor:pointer; text-decoration:none;
+  display:inline-block; font:inherit; font-weight:700; font-size:14px;
+  padding:11px 22px; border:none;
+  clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);
+  background:var(--red); color:#fff; cursor:pointer; text-decoration:none;
 }
 .btn:disabled { background:var(--mute); cursor:default }
-.btn.ghost { background:transparent; color:var(--indigo); border:1.5px solid var(--indigo) }
-.btn:focus-visible { outline:2.5px solid var(--pink); outline-offset:2px }
+.btn.ghost { background:transparent; color:var(--red); border:1.5px solid var(--red) }
+.btn:focus-visible { outline:2.5px solid var(--gold); outline-offset:2px }
 
 .bar { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin:12px 0 6px }
-.bar > div { height:100%; background:var(--indigo); transition:width .2s }
+.bar > div { height:100%; background:var(--red); transition:width .2s }
 .more { display:flex; justify-content:center; padding:18px 0 4px }
 .note { font-size:12px; color:var(--mute); line-height:1.7 }
-.err { color:var(--pink); font-size:13px; font-weight:500 }
+.err { color:var(--red); font-size:13px; font-weight:500 }
 .foot { font-size:11.5px; color:var(--mute); padding:22px 2px 0; line-height:1.7 }
 
 input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
@@ -248,7 +361,7 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   display:flex; align-items:center; gap:7px;
   font-size:13px; color:var(--mute); margin:0 0 12px; cursor:pointer;
 }
-.check input { accent-color:var(--indigo); width:15px; height:15px; cursor:pointer }
+.check input { accent-color:var(--red); width:15px; height:15px; cursor:pointer }
 
 
 /* A standing caveat where a number would otherwise be read as comparable. */
@@ -269,13 +382,13 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   background:var(--card); border:1px solid var(--line);
   border-radius:10px; padding:9px 11px; margin:0 0 16px;
 }
-.estnote b { color:var(--indigo); font-weight:700 }
+.estnote b { color:var(--red); font-weight:700 }
 .val .est {
   font-style:normal; font-weight:600; color:var(--mute);
   margin-right:1px; font-size:14px;
 }
 .linkish {
-  font:inherit; font-weight:600; color:var(--indigo);
+  font:inherit; font-weight:600; color:var(--red);
   background:none; border:none; padding:0; cursor:pointer;
   text-decoration:underline; text-underline-offset:2px;
 }
@@ -285,8 +398,8 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   font:inherit; text-align:left; background:none; border:none; padding:0;
   cursor:pointer; color:inherit; width:100%;
 }
-.nm.as-link:hover b { color:var(--indigo) }
-.nm.as-link:focus-visible { outline:2px solid var(--pink); outline-offset:2px; border-radius:4px }
+.nm.as-link:hover b { color:var(--red) }
+.nm.as-link:focus-visible { outline:2px solid var(--gold); outline-offset:2px; border-radius:4px }
 
 /* ---------- detail sheet ---------- */
 .sheet-scrim {
@@ -312,15 +425,18 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   border-bottom:1.5px solid var(--line);
 }
 .chart i { flex:1 1 0; background:var(--line); border-radius:1px 1px 0 0; min-height:1px }
-.chart i[data-on=true] { background:var(--indigo) }
+.chart i[data-on=true] { background:var(--red) }
 
 /* ---------- trend ---------- */
-.trendbar { padding:14px 0 0 }
+.trendbar { padding:14px 0 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap }
 .trend { padding:6px 0 4px }
 .trend-svg {
   width:100%; height:200px; display:block;
   overflow:visible; margin-top:4px;
 }
+/* The checkered flag at the right edge — every line finishes at the current
+   total, so the finish line is the one honest place to put it. */
+.trend-finish { opacity:.5 }
 .trend-x {
   display:flex; justify-content:space-between;
   font-size:10.5px; color:var(--mute); padding:2px 2px 0;

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
+import { colorForRank } from '@/lib/palette';
 import Detail from './Detail';
 import Trend from './Trend';
 
@@ -255,6 +256,116 @@ function Delta({ value }) {
   );
 }
 
+/**
+ * The top three, drawn the way a race actually ends: P1 centred and tallest,
+ * P2 to the left, P3 to the right. CSS `order` does the reshuffling so the
+ * markup can stay rank-ordered (P1, P2, P3) for screen readers.
+ */
+function Podium({ rows, mode, covers, sort, unit, onSelect, isEst }) {
+  if (rows.length < 3) return null;
+  return (
+    <div className="podium">
+      {rows.slice(0, 3).map((r, i) => {
+        const img = covers[coverKeyFor(mode, r)];
+        return (
+          <button
+            key={rowKey(r)}
+            className="podium-step"
+            data-pos={i + 1}
+            style={{ borderBottomColor: colorForRank(i) }}
+            onClick={() => onSelect({ artist: r.artist, track: r.track ?? null })}
+          >
+            <span className="pos">P{i + 1}</span>
+            <div className="art">
+              {img
+                ? <img src={img} alt="" loading="lazy" width="64" height="64" />
+                : <span className="art-none" aria-hidden="true" />}
+            </div>
+            <span className="nm2">{r.track ?? r.artist}</span>
+            {r.track && <span className="sub">{r.artist}</span>}
+            <span className="amt">{isEst(r) ? '≈' : ''}{fmt(r[sort], sort)}{unit}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Fun-facts strip, in timing-tower language: who's on pole, the longest run
+ * without a day off, the single busiest day, and — when there's a previous
+ * window to compare against — who gained the most ground. Everything here is
+ * derived from data the page already fetched; no extra round trip.
+ */
+function Recap({ rows, daily, prevRank, prevComplete, mode, sort, unit, isEst }) {
+  const pole = rows[0];
+
+  const streak = useMemo(() => {
+    if (!daily?.length) return null;
+    const days = [...new Set(daily.map((d) => d.day))].sort();
+    let best = 1, cur = 1, bestEnd = days[0];
+    for (let i = 1; i < days.length; i++) {
+      const gap = Math.round((new Date(days[i]) - new Date(days[i - 1])) / DAY);
+      cur = gap === 1 ? cur + 1 : 1;
+      if (cur > best) { best = cur; bestEnd = days[i]; }
+    }
+    return { len: best, end: bestEnd };
+  }, [daily]);
+
+  const busiest = useMemo(() => {
+    if (!daily?.length) return null;
+    return daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a));
+  }, [daily]);
+
+  const riser = useMemo(() => {
+    if (!prevRank || !prevComplete) return null;
+    let best = null;
+    rows.forEach((r, i) => {
+      const before = prevRank.get(rowKey(r));
+      if (before === undefined) return;
+      const gain = before - (i + 1);
+      if (gain > 0 && (!best || gain > best.gain)) best = { r, gain };
+    });
+    return best;
+  }, [rows, prevRank, prevComplete]);
+
+  if (!pole) return null;
+
+  return (
+    <div className="recap">
+      <p className="recap-title">이번 기간 레카프</p>
+      <div className="recap-grid">
+        <div className="recap-tile">
+          <span>폴 포지션</span>
+          <b>{pole.track ?? pole.artist}</b>
+          <em>{isEst(pole) ? '≈' : ''}{fmt(pole[sort], sort)}{unit}</em>
+        </div>
+        {streak && streak.len > 1 && (
+          <div className="recap-tile">
+            <span>최다 연속 청취</span>
+            <b>{streak.len}일 연속</b>
+            <em>{dayLabel(streak.end)}까지</em>
+          </div>
+        )}
+        {busiest && (
+          <div className="recap-tile">
+            <span>가장 바쁜 날</span>
+            <b>{dayLabel(busiest.day)}</b>
+            <em>{Math.round(Number(busiest.plays)).toLocaleString()}회</em>
+          </div>
+        )}
+        {riser && (
+          <div className="recap-tile">
+            <span>최고 상승</span>
+            <b>{riser.r.track ?? riser.r.artist}</b>
+            <em>▲{riser.gain}계단 상승</em>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [sel, setSel] = useState(null);          // null = all time
   const [mode, setMode] = useState('tracks');
@@ -273,6 +384,7 @@ export default function Dashboard() {
   const [calendar, setCalendar] = useState([]);
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
+  const [trendN, setTrendN] = useState(5);
   // YouTube's export logs one entry per session however many times a track
   // actually ran, so its raw counts are far below the truth. On by default:
   // the calibrated figure is the closer one, and the server answers with the
@@ -657,12 +769,20 @@ export default function Dashboard() {
 
       <div className="trendbar">
         <button className="pill" aria-pressed={showTrend} onClick={() => setShowTrend((v) => !v)}>
-          {showTrend ? '추이 숨기기' : '상위 5개 추이 보기'}
+          {showTrend ? '추이 숨기기' : '추이 보기'}
         </button>
+        {showTrend && [5, 10].map((n) => (
+          <button
+            key={n} className="pill" aria-pressed={trendN === n}
+            onClick={() => setTrendN(n)}
+          >
+            상위 {n}개
+          </button>
+        ))}
       </div>
       {showTrend && (
         <Trend
-          mode={mode} source={src} estimate={estimating}
+          mode={mode} source={src} estimate={estimating} limit={trendN}
           from={range.from} to={range.to}
         />
       )}
@@ -699,6 +819,18 @@ export default function Dashboard() {
                     {' '}기준이 더 정확합니다.</>}
             </p>
           )}
+          {showCount && (
+            <Podium
+              rows={shown} mode={mode} covers={covers} sort={sort} unit={unit}
+              onSelect={setDetail} isEst={isEst}
+            />
+          )}
+
+          <Recap
+            rows={shown} daily={data.daily} prevRank={prevRank} prevComplete={prevComplete}
+            mode={mode} sort={sort} unit={unit} isEst={isEst}
+          />
+
           <div className="legend">
             <span>
               {mode === 'tracks' ? '곡' : '가수'} · {SORTS.find((x) => x[0] === sort)[1]} 순
@@ -746,7 +878,9 @@ export default function Dashboard() {
                     {fmt(r[sort], sort)}<i>{unit}</i>
                   </div>
                   {showCount && (
-                    <div className="meter" aria-hidden="true"><i style={{ width: pct + '%' }} /></div>
+                    <div className="meter" aria-hidden="true">
+                      <i style={{ width: pct + '%', background: colorForRank(i) }} />
+                    </div>
                   )}
                   {showSpan && <Strip days={data.daily} item={r} />}
                 </li>

@@ -200,14 +200,23 @@ li.item {
 }
 
 /* Rank: weight and medal tone on the number, nothing else. Genre owns hue,
-   so rank cannot be allowed to spend one. */
+   so rank cannot be allowed to spend one. Keyed by the actual (tie-aware)
+   rank via data-tier, not row position — two rows tied for first both get
+   the gold tone, which nth-child could never express. */
 .rk {
   font-family:"Titillium Web",sans-serif; font-weight:700;
   font-size:14px; color:var(--faint); text-align:right;
 }
-li.item:nth-child(1) .rk { color:var(--gold); font-size:19px; font-weight:900 }
-li.item:nth-child(2) .rk { color:var(--silver); font-size:17px; font-weight:900 }
-li.item:nth-child(3) .rk { color:var(--bronze); font-size:17px; font-weight:900 }
+.rk[data-tier="1"] { color:var(--gold); font-size:19px; font-weight:900 }
+.rk[data-tier="2"] { color:var(--silver); font-size:17px; font-weight:900 }
+.rk[data-tier="3"] { color:var(--bronze); font-size:17px; font-weight:900 }
+
+/* A tie shares its rank number, so it needs to say so — otherwise two rows
+   both reading "1" looks like a bug rather than a real dead heat. */
+.tie {
+  font-style:normal; display:block; font-size:8px; font-weight:600;
+  letter-spacing:.04em; color:var(--faint); margin-top:1px;
+}
 
 /* ---------- rank movement ---------- */
 .delta { display:block; font-weight:600; font-size:9.5px; letter-spacing:-.02em; margin-top:2px }
@@ -308,14 +317,21 @@ ol.dual .strip { height:8px; margin-top:6px; opacity:.72 }
   font-family:"Titillium Web",sans-serif; font-weight:700; font-size:15px;
   margin-top:1px;
 }
+/* data-pos is slot position (first/second/third row shown), purely for
+   layout — which block sits centred and biggest. It does not imply rank: two
+   rows tied for first can occupy the first and second slots and still both
+   need to read "P1". Rank's medal color is separate, below, keyed off the
+   printed rank via data-tier so a tie renders correctly regardless of slot. */
 .podium-step[data-pos="1"] { order:2; padding:22px 10px 16px }
-.podium-step[data-pos="1"] .pos { color:var(--gold); font-size:15px }
+.podium-step[data-pos="1"] .pos { font-size:15px }
 .podium-step[data-pos="1"] .art { width:66px; height:66px; border-radius:14px }
 .podium-step[data-pos="1"] .nm2 { font-size:14.5px }
 .podium-step[data-pos="2"] { order:1 }
-.podium-step[data-pos="2"] .pos { color:var(--silver) }
 .podium-step[data-pos="3"] { order:3 }
-.podium-step[data-pos="3"] .pos { color:var(--bronze) }
+
+.podium-step .pos[data-tier="1"] { color:var(--gold) }
+.podium-step .pos[data-tier="2"] { color:var(--silver) }
+.podium-step .pos[data-tier="3"] { color:var(--bronze) }
 
 /* ---------- recap ----------
    Pole position, the streaks, the genre that took the period. A calm card, so

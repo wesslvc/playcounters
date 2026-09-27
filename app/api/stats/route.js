@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic';
 const TZ = 'Asia/Seoul';
 
 const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 5000;
+// High enough that 펼치기 reaches the true end of anyone's real history rather
+// than stopping at an arbitrary wall.
+const MAX_LIMIT = 50000;
 
 export async function GET(req) {
   const userId = currentUserId();
@@ -37,7 +39,7 @@ export async function GET(req) {
   const prevTo = q.get('prevTo');
   const wantPrev = Boolean(prevFrom && prevTo);
 
-  const [items, daily, total, prev, calendar, calibrated, user] = await Promise.all([
+  const [items, daily, total, prev, prior, calendar, calibrated, user] = await Promise.all([
     db.rpc('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
       p_limit: limit, p_source: src, p_days: withDays, p_estimate: estimate,
@@ -50,6 +52,12 @@ export async function GET(req) {
           p_mode: mode, p_tz: TZ, p_limit: limit, p_source: src,
           p_estimate: estimate,
         })
+      : Promise.resolve({ data: null, error: null }),
+    // Only worth asking when there's a previous window to compare against —
+    // it's what tells "missing from last window" apart from "never played
+    // before," and the first is meaningless without the second.
+    wantPrev
+      ? db.rpc('prior_items', { p_user: userId, p_before: from, p_mode: mode, p_tz: TZ, p_source: src })
       : Promise.resolve({ data: null, error: null }),
     db.rpc('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }),
     db.rpc('has_youtube_estimate', { p_user: userId }),
@@ -69,6 +77,10 @@ export async function GET(req) {
     // Ranking depends on the metric the client is sorting by, so send the raw
     // previous window and let it rank both the same way.
     prev: prev.error ? null : prev.data,
+    // Every item with any play before this window started, regardless of how
+    // long ago — what the client checks before calling something NEW rather
+    // than just absent from the immediately preceding window.
+    prior: prior.error ? null : prior.data,
     // Every day that holds plays, newest first. The year/month/day picker
     // derives its options from this, so it can never offer an empty date.
     // Independent of the selected period.

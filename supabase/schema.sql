@@ -566,7 +566,43 @@ as $$
          or (p_source = 'spotify' and p.source <> 'youtube'));
 $$;
 
--- ---------- days that hold plays: powers the year/month/day picker ----------
+-- ---------- prior existence, for "NEW" ----------
+-- Whether an item was ever played before a cutoff, regardless of how many
+-- times or how long ago. The list's NEW badge used to mean only "missing from
+-- the immediately preceding equivalent window," which mislabelled anything
+-- that had simply gone quiet for a while — a track last played a year ago and
+-- picked up again this month is not new. This is what lets the client tell
+-- the two apart.
+--
+-- Grouped and named exactly as top_items does, so the identity matches: the
+-- client keys everything by this same (artist, track) display pair.
+create or replace function prior_items(
+  p_user uuid,
+  p_before timestamptz,
+  p_mode text default 'tracks',
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all'
+)
+returns table (artist text, track text)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select
+    mode() within group (order by p.artist)              as artist,
+    case when p_mode = 'artists' then null
+         else mode() within group (order by p.track) end as track
+  from plays p
+  where p.user_id = p_user
+    and p.played_at < p_before
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_source = 'all'
+         or (p_source = 'youtube' and p.source =  'youtube')
+         or (p_source = 'spotify' and p.source <> 'youtube'))
+  group by p.artist_key,
+           case when p_mode = 'artists' then null else p.track_key end;
+$$;
+
+
 -- Listening isn't continuous, so this lists the days that actually have
 -- something. The client derives years and months from the same list, which is
 -- what stops the picker ever offering an empty date.

@@ -20,8 +20,9 @@ const SOURCES = [['all', '전체'], ['spotify', 'Spotify'], ['youtube', 'YouTube
     wait on, and almost nobody reads past the first screen. 펼치기 asks the
     server for the next slice rather than shipping thousands up front. */
 const PAGE = 50;
-/** Ceiling on how deep 펼치기 will go. */
-const MAX_ROWS = 3000;
+/** Ceiling on how deep 펼치기 will go — high enough that it reaches the true
+    end of anyone's real history rather than stopping at an arbitrary wall. */
+const MAX_ROWS = 50000;
 /** Cover keys requested per round trip. */
 const COVER_BATCH = 60;
 /** Artists per genre lookup. Smaller than the cover batch: each miss costs a
@@ -120,6 +121,25 @@ function fmt(value, key) {
   const n = Number(value);
   if (key === 'minutes') return n >= 60 ? (n / 60).toFixed(1) + 'h' : n + '분';
   return n.toLocaleString();
+}
+
+/**
+ * Standard competition ranking: rows tied on the sort value share one rank
+ * number, and the rank after a tied group skips ahead by how many shared it
+ * (1, 1, 3 — not 1, 1, 2), which is how a tie reads on an actual chart.
+ * `rows` must already be sorted by `key` descending, which is how every
+ * caller here has them.
+ */
+function computeRanks(rows, key) {
+  const ranks = [];
+  for (let i = 0; i < rows.length; i++) {
+    ranks.push(
+      i > 0 && Number(rows[i][key]) === Number(rows[i - 1][key])
+        ? ranks[i - 1]
+        : i + 1
+    );
+  }
+  return ranks;
 }
 
 /** "방금" / "3분 전" / "2시간 전", falling back to a plain date after a week. */
@@ -265,21 +285,25 @@ function Delta({ value }) {
 }
 
 /**
- * The top three, drawn the way a race actually ends: P1 centred and tallest,
- * P2 to the left, P3 to the right. CSS `order` does the reshuffling so the
- * markup can stay rank-ordered (P1, P2, P3) for screen readers.
+ * The top three rows, drawn the way a race actually ends: the first row
+ * centred and tallest, the second to the left, the third to the right. CSS
+ * `order` does the reshuffling, keyed off row position so the layout holds
+ * even when two rows are tied — the markup stays row-ordered for screen
+ * readers, and only the label printed on each block is the real (tie-aware)
+ * rank, so two rows tied for first both read "P1".
  *
  * Rank is carried by the medal color on the P-label alone; the block's own
  * accent is the item's genre, as everywhere else. The two never compete for
  * the same element.
  */
-function Podium({ rows, mode, covers, sort, unit, onSelect, isEst, colorOf, genreOf }) {
+function Podium({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, colorOf, genreOf }) {
   if (rows.length < 3) return null;
   return (
     <div className="podium">
       {rows.slice(0, 3).map((r, i) => {
         const img = covers[coverKeyFor(mode, r)];
         const genre = genreOf(r);
+        const rank = ranks[i];
         return (
           <button
             key={rowKey(r)}
@@ -288,7 +312,7 @@ function Podium({ rows, mode, covers, sort, unit, onSelect, isEst, colorOf, genr
             style={{ borderBottomColor: colorOf(r) }}
             onClick={() => onSelect({ artist: r.artist, track: r.track ?? null })}
           >
-            <span className="pos">P{i + 1}</span>
+            <span className="pos" data-tier={rank <= 3 ? rank : undefined}>P{rank}</span>
             <div className="art">
               {img
                 ? <img src={img} alt="" loading="lazy" width="64" height="64" />
@@ -312,7 +336,7 @@ function Podium({ rows, mode, covers, sort, unit, onSelect, isEst, colorOf, genr
  * gained the most ground. Everything here is derived from data the page
  * already fetched; no extra round trip.
  */
-function Recap({ rows, daily, prevRank, prevComplete, sort, unit, isEst, familyOf }) {
+function Recap({ rows, ranks, daily, prevRank, prevComplete, sort, unit, isEst, familyOf }) {
   const pole = rows[0];
 
   const streak = useMemo(() => {
@@ -338,11 +362,11 @@ function Recap({ rows, daily, prevRank, prevComplete, sort, unit, isEst, familyO
     rows.forEach((r, i) => {
       const before = prevRank.get(rowKey(r));
       if (before === undefined) return;
-      const gain = before - (i + 1);
+      const gain = before - ranks[i];
       if (gain > 0 && (!best || gain > best.gain)) best = { r, gain };
     });
     return best;
-  }, [rows, prevRank, prevComplete]);
+  }, [rows, ranks, prevRank, prevComplete]);
 
   /** Which genre took the most plays. Only counts rows whose genre is known,
       so a half-filled cache understates rather than misattributes. */
@@ -584,18 +608,35 @@ export default function Dashboard() {
 
   const rows = useMemo(() => (data ? [...data.items].sort(cmp) : []), [data, cmp]);
 
-  /** Rank in the previous window, ordered by the same metric. */
+  /** Tie-aware rank per row in `rows`, aligned by index. The displayed rank
+      number and every rank-based comparison (movement, riser) read off this
+      rather than array position, so two rows tied on the sort value share a
+      rank instead of being handed consecutive ones that don't mean anything. */
+  const ranks = useMemo(() => computeRanks(rows, sort), [rows, sort]);
+
+  /** Rank in the previous window, ordered and tied the same way. */
   const prevRank = useMemo(() => {
     if (!data?.prev?.length) return null;
+    const prevRows = [...data.prev].sort(cmp);
+    const prevRanks = computeRanks(prevRows, sort);
     const m = new Map();
-    [...data.prev].sort(cmp).forEach((r, i) => m.set(rowKey(r), i + 1));
+    prevRows.forEach((r, i) => m.set(rowKey(r), prevRanks[i]));
     return m;
-  }, [data, cmp]);
+  }, [data, cmp, sort]);
 
   // The previous window is fetched under the same limit, so an item missing
   // from it may simply have ranked below the cutoff. Only call something NEW
   // when the previous list was short enough to be complete.
   const prevComplete = (data?.prev?.length ?? 0) < limit;
+
+  /** Every item with a play before this window, regardless of how long ago —
+      what tells "dropped out and came back" apart from "genuinely new," which
+      absence from the previous window alone cannot: a track last heard a year
+      ago and picked up again this month is not new, it just missed one window. */
+  const priorSet = useMemo(
+    () => new Set((data?.prior ?? []).map(rowKey)),
+    [data]
+  );
 
   // Fetch artwork for rows on screen, a batch at a time.
   //
@@ -932,13 +973,13 @@ export default function Dashboard() {
           )}
           {showCount && (
             <Podium
-              rows={shown} mode={mode} covers={covers} sort={sort} unit={unit}
+              rows={shown} ranks={ranks} mode={mode} covers={covers} sort={sort} unit={unit}
               onSelect={setDetail} isEst={isEst} colorOf={colorOf} genreOf={genreOf}
             />
           )}
 
           <Recap
-            rows={shown} daily={data.daily} prevRank={prevRank} prevComplete={prevComplete}
+            rows={shown} ranks={ranks} daily={data.daily} prevRank={prevRank} prevComplete={prevComplete}
             sort={sort} unit={unit} isEst={isEst} familyOf={familyOf}
           />
 
@@ -969,14 +1010,24 @@ export default function Dashboard() {
               const pct = max > 0 ? Math.max((Number(r[sort]) / max) * 100, 1.5) : 0;
               const key = rowKey(r);
               const img = covers[coverKeyFor(mode, r)];
+              const rank = ranks[i];
+              const tied = (i > 0 && ranks[i - 1] === rank)
+                || (i < ranks.length - 1 && ranks[i + 1] === rank);
               const before = prevRank?.get(key);
               const delta = !prevRank ? null
-                : before !== undefined ? before - (i + 1)
-                  : prevComplete ? undefined : null;
+                : before !== undefined ? before - rank
+                  // Missing from the immediately preceding window: only NEW
+                  // when there's truly nothing before it either. An item with
+                  // real prior history that simply missed one window gets no
+                  // badge at all, rather than a false NEW.
+                  : prevComplete ? (priorSet.has(key) ? null : undefined) : null;
 
               return (
                 <li className="item" key={key}>
-                  <div className="rk">{i + 1}<Delta value={delta} /></div>
+                  <div className="rk" data-tier={rank <= 3 ? rank : undefined}>
+                    {rank}{tied && <em className="tie">공동</em>}
+                    <Delta value={delta} />
+                  </div>
                   <div className="art">
                     {img
                       ? <img src={img} alt="" loading="lazy" decoding="async" width="38" height="38" />
@@ -1031,7 +1082,6 @@ export default function Dashboard() {
           )}
         </>
       )}
-
       <Detail target={detail} source={src} estimate={estimate} onClose={() => setDetail(null)} />
 
       <p className="foot">

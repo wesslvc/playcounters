@@ -533,7 +533,12 @@ as $$
          or (p_source = 'spotify' and p.source <> 'youtube'))
   group by p.artist_key,
            case when p_mode = 'artists' then null else p.track_key end
-  order by plays desc
+  -- Tie-broken on the grouping key itself, not just plays: the API layer now
+  -- pages through results past its own row cap with range requests, and a tie
+  -- on plays alone would let Postgres hand back a different arrangement
+  -- across separate calls, skipping or repeating a row at the page boundary.
+  order by plays desc, p.artist_key,
+           case when p_mode = 'artists' then null else p.track_key end
   limit p_limit;
 $$;
 
@@ -599,10 +604,16 @@ as $$
          or (p_source = 'youtube' and p.source =  'youtube')
          or (p_source = 'spotify' and p.source <> 'youtube'))
   group by p.artist_key,
+           case when p_mode = 'artists' then null else p.track_key end
+  -- A stable order, not just a correct one: pagination reads this back a
+  -- page at a time via range, and without an explicit order Postgres is free
+  -- to hand back a different arrangement on each call, which would skip or
+  -- repeat rows across pages.
+  order by p.artist_key,
            case when p_mode = 'artists' then null else p.track_key end;
 $$;
 
-
+-- ---------- days that hold plays: powers the year/month/day picker ----------
 -- Listening isn't continuous, so this lists the days that actually have
 -- something. The client derives years and months from the same list, which is
 -- what stops the picker ever offering an empty date.

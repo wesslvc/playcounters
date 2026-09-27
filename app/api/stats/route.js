@@ -10,6 +10,36 @@ const DEFAULT_LIMIT = 1000;
 // than stopping at an arbitrary wall.
 const MAX_LIMIT = 50000;
 
+/**
+ * PostgREST caps any single response at the project's configured max rows,
+ * whatever a `p_limit` argument or the lack of one asks for. A single-request
+ * `.rpc()` call silently comes back truncated past that cap rather than
+ * erroring — which is what quietly capped every ranked list at ~1,000 no
+ * matter how far 펼치기 was pushed, and (more subtly) truncated prior_items
+ * and the previous window's list the same way, so an item ranked below the
+ * cap read as absent from history entirely and came out mislabelled NEW
+ * instead of a real rank change.
+ *
+ * This pages through with `.range()` in slices safely under any realistic
+ * cap, and keeps going until either `want` rows are in hand or a slice comes
+ * back short of a full page — the only reliable "nothing more exists"
+ * signal, since asking for more than exists just returns what's there.
+ */
+const RPC_PAGE = 500;
+
+async function rpcAll(name, params, want) {
+  const out = [];
+  while (out.length < want) {
+    const page = Math.min(RPC_PAGE, want - out.length);
+    const { data, error } = await db.rpc(name, params).range(out.length, out.length + page - 1);
+    if (error) return { data: null, error };
+    const got = data ?? [];
+    out.push(...got);
+    if (got.length < page) break; // short page: truly exhausted, not just paused
+  }
+  return { data: out, error: null };
+}
+
 export async function GET(req) {
   const userId = currentUserId();
   if (!userId) return NextResponse.json({ error: 'not signed in' }, { status: 401 });
@@ -40,26 +70,34 @@ export async function GET(req) {
   const wantPrev = Boolean(prevFrom && prevTo);
 
   const [items, daily, total, prev, prior, calendar, calibrated, user] = await Promise.all([
-    db.rpc('top_items', {
+    rpcAll('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
       p_limit: limit, p_source: src, p_days: withDays, p_estimate: estimate,
-    }),
-    db.rpc('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src, p_estimate: estimate }),
+    }, limit),
+    // Unbounded, and it's what the header totals are summed from — a
+    // multi-year "전체" easily passes 1,000 distinct days, so this needs the
+    // same paging or the plays/minutes/days figures silently undercount.
+    rpcAll('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src, p_estimate: estimate }, MAX_LIMIT),
     db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_source: src }),
     wantPrev
-      ? db.rpc('top_items', {
+      ? rpcAll('top_items', {
           p_user: userId, p_from: prevFrom, p_to: prevTo,
           p_mode: mode, p_tz: TZ, p_limit: limit, p_source: src,
           p_estimate: estimate,
-        })
+        }, limit)
       : Promise.resolve({ data: null, error: null }),
     // Only worth asking when there's a previous window to compare against —
     // it's what tells "missing from last window" apart from "never played
-    // before," and the first is meaningless without the second.
+    // before," and the first is meaningless without the second. Unbounded in
+    // principle, so it's asked for up to the same generous ceiling as
+    // everything else here rather than a made-up smaller one.
     wantPrev
-      ? db.rpc('prior_items', { p_user: userId, p_before: from, p_mode: mode, p_tz: TZ, p_source: src })
+      ? rpcAll('prior_items', { p_user: userId, p_before: from, p_mode: mode, p_tz: TZ, p_source: src }, MAX_LIMIT)
       : Promise.resolve({ data: null, error: null }),
-    db.rpc('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }),
+    // Spans all of history regardless of the selected period, so this is the
+    // one most likely of all to pass the cap — and a truncated year would
+    // simply vanish from the picker with nothing on screen to say so.
+    rpcAll('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }, MAX_LIMIT),
     db.rpc('has_youtube_estimate', { p_user: userId }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);

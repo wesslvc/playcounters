@@ -360,17 +360,6 @@ ol.dual .strip { height:8px; margin-top:6px; opacity:.72 }
   font-family:"Titillium Web",sans-serif; font-weight:600;
 }
 
-/* ---------- genre key ----------
-   The legend for every hue on the page, so the colors can be read rather than
-   merely admired. */
-.genrekey {
-  display:flex; flex-wrap:wrap; gap:6px 14px;
-  padding:4px 2px 0; font-size:11.5px; color:var(--mute);
-}
-.genrekey span { display:inline-flex; align-items:center; gap:6px }
-.genrekey i { width:8px; height:8px; border-radius:50%; flex:0 0 auto }
-.genrekey em { font-style:normal; color:var(--faint); margin-left:1px }
-
 /* ---------- landing / states ---------- */
 .panel {
   background:var(--card); border:1px solid var(--line);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
-import { genreColor, familyColor, familyLabel } from '@/lib/genre';
+import { artistColor, familyLabel } from '@/lib/genre';
 import Detail from './Detail';
 import Trend from './Trend';
 
@@ -397,9 +397,7 @@ function Recap({ rows, ranks, daily, prevRank, prevComplete, sort, unit, isEst, 
         {topGenre && (
           <div className="recap-tile">
             <span>주력 장르</span>
-            <b style={{ color: familyColor(topGenre.family) }}>
-              {familyLabel(topGenre.family)}
-            </b>
+            <b>{familyLabel(topGenre.family)}</b>
             <em>알려진 장르 중 {topGenre.share}%</em>
           </div>
         )}
@@ -735,32 +733,18 @@ export default function Dashboard() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [shown, genres, genreTick]);
 
-  /* ---- genre as the one color key ----
-     Hue comes from the genre family, and the shade from the artist's name, so
-     everything by one artist is one color and everything in one genre is one
-     neighbourhood of color. Until the lookup lands a row is neutral grey
-     rather than a placeholder hue it would later change out of. */
+  /* ---- artist as the one color key ----
+     Every artist gets one stable color, spread by name across the full
+     wheel — not by genre, which put every track of one genre in the same
+     neighbourhood of hue and left an artist with no color of their own. Genre
+     is still looked up and shown as a label (rowgenre, Recap's 주력 장르),
+     it just no longer decides what anything is painted. */
+  const colorOf = useCallback((row) => artistColor(row.artist), []);
   const familyOf = useCallback((row) => genres[row.artist]?.family ?? null, [genres]);
-  const colorOf = useCallback(
-    (row) => genreColor(familyOf(row) ?? 'other', row.artist),
-    [familyOf]
-  );
   const genreOf = useCallback((row) => {
     const fam = familyOf(row);
     return fam && fam !== 'other' ? familyLabel(fam) : null;
   }, [familyOf]);
-
-  /** The genres actually on screen, most common first — the key that makes the
-      colors in the list readable rather than decorative. */
-  const genreMix = useMemo(() => {
-    const byFamily = new Map();
-    for (const r of shown) {
-      const fam = genres[r.artist]?.family;
-      if (!fam || fam === 'other') continue;
-      byFamily.set(fam, (byFamily.get(fam) ?? 0) + 1);
-    }
-    return [...byFamily].sort((a, b) => b[1] - a[1]).slice(0, 7);
-  }, [shown, genres]);
 
   const max = rows.length ? Number(rows[0][sort]) : 0;
   const unit = SORTS.find((s) => s[0] === sort)[2];
@@ -982,17 +966,6 @@ export default function Dashboard() {
             rows={shown} ranks={ranks} daily={data.daily} prevRank={prevRank} prevComplete={prevComplete}
             sort={sort} unit={unit} isEst={isEst} familyOf={familyOf}
           />
-
-          {genreMix.length > 1 && (
-            <div className="genrekey">
-              {genreMix.map(([family, n]) => (
-                <span key={family}>
-                  <i style={{ background: familyColor(family) }} />
-                  {familyLabel(family)}<em>{n}</em>
-                </span>
-              ))}
-            </div>
-          )}
 
           <div className="legend">
             <span>

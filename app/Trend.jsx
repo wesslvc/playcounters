@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { genreColor, familyLabel } from '@/lib/genre';
+import { artistColor, familyLabel } from '@/lib/genre';
 
 const W = 720;
 const H = 200;
@@ -62,9 +62,9 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           return `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(run).toFixed(1)}`;
         })
         .join(' ');
-      // Where the line finishes. Five tracks by the same kind of artist come
-      // out five shades of one hue — which is the honest picture — so the
-      // lines are told apart by where they cross the line, not by color.
+      // Where the line finishes — marked separately below, since color alone
+      // (now per artist) is already enough to tell most lines apart, but a
+      // close finish is still easier to read off a marker than a hue.
       return { ...s, d, ex: x(buckets.length - 1), ey: y(run) };
     });
     return { buckets, lines, peak };
@@ -78,10 +78,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
     ? buckets
     : [buckets[0], buckets[Math.floor(buckets.length / 2)], buckets[buckets.length - 1]];
 
-  // Same key as the list: hue by genre family, shade by artist. A chart of five
-  // K-pop tracks comes out five pinks, which is the honest picture of what the
-  // period held.
-  const colorOf = (s) => genreColor(genres[s.artist]?.family ?? 'other', s.artist);
+  // Same key as the list: color by artist, not genre — every artist gets a
+  // stable shade of their own, rather than sharing one neighbourhood of hue
+  // with everyone else in their genre. Genre still names itself in the
+  // legend below, just no longer decides the color.
+  const colorOf = (s) => artistColor(s.artist);
   const genreOf = (s) => {
     const fam = genres[s.artist]?.family;
     return fam && fam !== 'other' ? familyLabel(fam) : null;

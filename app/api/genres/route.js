@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { findGenre } from '@/lib/artwork';
+import { findGenreMB } from '@/lib/musicbrainz';
 import { familyOfGenres } from '@/lib/genre';
 
 export const dynamic = 'force-dynamic';
@@ -8,14 +9,18 @@ export const maxDuration = 60;
 
 /** Artists accepted per call; the client asks again for whatever is still missing. */
 const MAX_NAMES = 80;
-/** Cache misses actually looked up per call, bounding latency. */
-const MAX_SEARCH = 16;
-/** Lookups in flight at once. Each one is one or two Deezer calls. */
+/** Cache misses actually looked up per call. MusicBrainz's own pacing (about
+    one request a second, and every miss can cost two) is the real ceiling on
+    how many of these fit before the function's own time limit. */
+const MAX_SEARCH = 12;
+/** Lookups in flight at once. MusicBrainz calls all funnel through one
+    serialized queue regardless of this, so it only bounds the Deezer
+    fallback's concurrency. */
 const CONCURRENCY = 3;
 
 /**
- * Set when Deezer starts refusing, so a scroll doesn't throw another burst at
- * a closed door. Per-instance, which is enough to break the feedback loop.
+ * Set when a source starts refusing, so a scroll doesn't throw another burst
+ * at a closed door. Per-instance, which is enough to break the feedback loop.
  */
 let pausedUntil = 0;
 
@@ -28,13 +33,26 @@ async function inBatches(items, size, fn) {
 }
 
 /**
- * Resolve genres for a batch of artists, so the list and the charts can color
- * by genre rather than by rank.
- *
- * Cache first, then Deezer, then written back — including the misses, which are
- * a real answer and cost a lookup to learn. The response is keyed by the artist
- * name exactly as it was asked for, so the client can look it up without
- * normalising anything.
+ * MusicBrainz first: it's community-tagged the way Spotify's genres used to
+ * be ("k-pop", "city pop", "hyperpop"), where Deezer only offers ~20 broad
+ * buckets and files most of East Asia under one of them regardless of what it
+ * sounds like. Deezer is asked only when MusicBrainz has nothing at all —
+ * still no key needed, and it answers for a fair number of smaller acts
+ * MusicBrainz has no genre tags for.
+ */
+async function resolveGenre(artist) {
+  const mb = await findGenreMB(artist);
+  if (mb.genre) return { genre: mb.genre, source: 'mb' };
+  const dz = await findGenre(artist);
+  return { genre: dz.genre, source: dz.genre ? 'dz' : 'none' };
+}
+
+/**
+ * Resolve genres for a batch of artists, so the list and the charts can show
+ * genre as a label. Cache first, then the sources above, then written back —
+ * including the misses, which are a real answer and cost a lookup to learn.
+ * The response is keyed by the artist name exactly as it was asked for, so
+ * the client can look it up without normalising anything.
  */
 export async function POST(req) {
   if (!currentUserId()) {
@@ -80,16 +98,16 @@ export async function POST(req) {
   }
 
   const searching = misses.slice(0, MAX_SEARCH);
-  // Outcome counts, logged once per call. Without them a lookup that quietly
-  // finds nothing is indistinguishable from one that never ran — which is
-  // exactly how the previous source's silent failure went unnoticed.
-  const tally = { search: 0, album: 0, 'no-genre': 0, 'no-albums': 0, unusable: 0, limited: 0, failed: 0 };
+  // Outcome counts, logged once per call — which source actually answered,
+  // or why neither did. Without this a lookup that quietly finds nothing is
+  // indistinguishable from one that never ran.
+  const tally = { mb: 0, dz: 0, none: 0, limited: 0, failed: 0 };
 
   const found = await inBatches(searching, CONCURRENCY, async (artist) => {
     try {
-      const { genre: name, stage } = await findGenre(artist);
+      const { genre: name, source } = await resolveGenre(artist);
       const { family, genre } = familyOfGenres(name ? [name] : []);
-      tally[stage] = (tally[stage] ?? 0) + 1;
+      tally[source]++;
       return { artist, family, genre };
     } catch (e) {
       if (e.rateLimited) {

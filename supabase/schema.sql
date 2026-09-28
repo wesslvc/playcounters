@@ -38,10 +38,18 @@ as $$
            norm_artist(p_artist) as a
   ),
   s1 as (
-    -- YouTube titles are usually prefixed with the artist.
-    select case when a <> '' and t like a || ' - %'
-                then substr(t, length(a) + 4)
-                else t end as t
+    -- The artist is often glued to the title, but not always on the same
+    -- side: "Artist - Song" is common, and so is "Song - Artist" (a lot of
+    -- topic-channel and single uploads go this way round). Checked both
+    -- ways, or a track whose title happens to end the same way a collab's
+    -- credit list starts splits into two rows for no audible reason —
+    -- exactly what happened to "Lose My Mind - Justin Bieber, Don Toliver"
+    -- next to a plain "Lose My Mind" from another source.
+    select case
+      when a <> '' and t like a || ' - %'   then substr(t, length(a) + 4)
+      when a <> '' and t like '% - ' || a   then substr(t, 1, length(t) - length(a) - 3)
+      else t
+    end as t
     from s0
   ),
   s2 as (
@@ -636,6 +644,18 @@ as $$
          or (p_source = 'spotify' and p.source <> 'youtube'))
   group by 1
   order by 1 desc;
+$$;
+
+-- ---------- first play ever: powers the all-time championship ----------
+-- Just the earliest timestamp, so the season API knows where a career-long
+-- standings run has to start without paging through the whole calendar just
+-- to find one edge of it.
+create or replace function first_play_at(p_user uuid)
+returns timestamptz
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select min(played_at) from plays where user_id = p_user;
 $$;
 
 -- ---------- daily totals: powers the summary tiles ----------

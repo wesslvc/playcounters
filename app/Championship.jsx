@@ -20,6 +20,12 @@ export default function Championship() {
   const [src, setSrc] = useState('all');
   const [calendar, setCalendar] = useState([]);
   const [year, setYear] = useState(null);
+  // Per-year season vs. every Grand Prix ever run, added into one career
+  // total — a separate question, so it's a separate toggle rather than
+  // folded into the year picker (there is no "연도: 전체" that would mean
+  // this; "전체" already means all of history everywhere else in the app,
+  // and here it would be ambiguous with a single very long season).
+  const [allTime, setAllTime] = useState(false);
   const [theme, setTheme] = useState('light');
 
   useEffect(() => {
@@ -96,18 +102,24 @@ export default function Championship() {
         </div>
       </div>
       <div className="grp" style={{ marginBottom: 18 }}>
-        <span className="lbl">연도</span>
+        <span className="lbl">기간</span>
         <div className="row" style={{ overflow: 'visible' }}>
+          <button className="pill" aria-pressed={allTime} onClick={() => setAllTime(true)}>
+            역대 통산
+          </button>
           <Picker
             value={year} label={year ? `${year}년` : '연도'}
-            options={years} onChange={setYear}
+            options={years} onChange={(v) => { setYear(v); setAllTime(false); }}
+            disabled={!years.length}
           />
         </div>
       </div>
 
-      {year != null
-        ? <Season mode={mode} source={src} estimate year={year} />
-        : <p className="note" style={{ padding: '20px 2px' }}>불러오는 중…</p>}
+      {allTime
+        ? <Season mode={mode} source={src} estimate allTime />
+        : year != null
+          ? <Season mode={mode} source={src} estimate year={year} />
+          : <p className="note" style={{ padding: '20px 2px' }}>불러오는 중…</p>}
 
       <p className="foot">
         순위는 재생 횟수 기준으로 고정됩니다 — 대시보드의 정렬 기준과 무관합니다.

@@ -49,10 +49,53 @@ async function runGrandPrix(userId, y, m, mode, src, estimate) {
 }
 
 /**
+ * Every (year, month) a Grand Prix should run for.
+ *
+ * A single year is exactly the months already elapsed — nothing past "now"
+ * has happened yet, so asking for it would just be an empty round trip. The
+ * all-time list is the same idea stretched across a whole career: it starts
+ * at whichever month the very first recorded play falls in, so a listener
+ * whose history starts mid-2019 doesn't get five empty years counted against
+ * nothing.
+ */
+async function racesToRun(userId, year) {
+  const now = new Date(Date.now() + KST);
+  if (year != null) {
+    const isCurrentYear = year === now.getUTCFullYear();
+    const monthCount = isCurrentYear ? now.getUTCMonth() + 1 : 12;
+    return {
+      months: Array.from({ length: monthCount }, (_, i) => ({ y: year, m: i + 1 })),
+      complete: !isCurrentYear,
+    };
+  }
+
+  const { data: firstAt, error } = await db.rpc('first_play_at', { p_user: userId });
+  if (error) throw new Error(error.message);
+  if (!firstAt) return { months: [], complete: false };
+
+  const start = new Date(new Date(firstAt).getTime() + KST);
+  const startY = start.getUTCFullYear();
+  const startM = start.getUTCMonth() + 1;
+  const endY = now.getUTCFullYear();
+  const endM = now.getUTCMonth() + 1;
+
+  const months = [];
+  for (let y = startY; y <= endY; y++) {
+    for (let m = (y === startY ? startM : 1); m <= (y === endY ? endM : 12); m++) {
+      months.push({ y, m });
+    }
+  }
+  // Always "in progress": a career total has no natural finish line while
+  // the listener keeps listening, unlike one calendar year.
+  return { months, complete: false };
+}
+
+/**
  * A season standings, F1-style: every month is one Grand Prix, its top ten
  * by play count pay championship points on the FIA's own scale
- * (25-18-15-12-10-8-6-4-2-1), and the year's champion is whoever has the
- * most at the end of it.
+ * (25-18-15-12-10-8-6-4-2-1). One calendar year's standings crown that
+ * year's champion; the all-time standings (no year given) are every Grand
+ * Prix ever run, added up — a driver's career total rather than a season.
  *
  * Drivers are whatever the list itself is ranking — tracks or artists,
  * whichever mode is selected. Constructors exist only in track mode: they
@@ -72,22 +115,18 @@ export async function GET(req) {
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
   const estimate = q.get('estimate') === '1';
 
-  const year = Number(q.get('year'));
-  if (!Number.isFinite(year)) return NextResponse.json({ error: 'year required' }, { status: 400 });
+  const allTime = q.get('all') === '1';
+  let year = null;
+  if (!allTime) {
+    year = Number(q.get('year'));
+    if (!Number.isFinite(year)) return NextResponse.json({ error: 'year required' }, { status: 400 });
+  }
 
-  // Months after the current one in the current year haven't happened yet;
-  // asking for them just costs an empty round trip.
-  const now = new Date(Date.now() + KST);
-  const isCurrentYear = year === now.getUTCFullYear();
-  const monthCount = isCurrentYear ? now.getUTCMonth() + 1 : 12;
-
-  let races, calibrated;
+  let months, complete, races, calibrated;
   try {
+    ({ months, complete } = await racesToRun(userId, year));
     [races, calibrated] = await Promise.all([
-      Promise.all(
-        Array.from({ length: monthCount }, (_, i) =>
-          runGrandPrix(userId, year, i + 1, mode, src, estimate))
-      ),
+      Promise.all(months.map(({ y, m }) => runGrandPrix(userId, y, m, mode, src, estimate))),
       db.rpc('has_youtube_estimate', { p_user: userId }),
     ]);
   } catch (e) {
@@ -129,8 +168,8 @@ export async function GET(req) {
     || a.artist.localeCompare(b.artist);
 
   return NextResponse.json({
-    year, mode, source: src,
-    complete: !isCurrentYear,
+    year, allTime, mode, source: src,
+    complete,
     // Whether a Recap calibration exists, so the page only offers the
     // estimate toggle when there is something real behind it — same rule
     // the main dashboard uses.
@@ -138,7 +177,7 @@ export async function GET(req) {
     estimate: estimate && !calibrated.error && Boolean(calibrated.data),
     racesRun: races.filter((r) => r.length).length,
     months: races.map((results, i) => ({
-      month: i + 1,
+      year: months[i].y, month: months[i].m,
       top: results.map((r) => ({
         artist: r.artist, track: r.track ?? null, rank: r.rank, points: r.points,
         plays: r.plays, yt: r.yt,

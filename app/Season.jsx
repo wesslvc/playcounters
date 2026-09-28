@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { rowKey } from '@/lib/keys';
 
-const MONTH_NAMES = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-
 /**
  * One row of a championship — driver (track or artist) or constructor
  * (artist, in track mode). The same shape either way: a name, an optional
@@ -42,24 +40,32 @@ function StandingsRow({ rank, name, sub, points, wins, podiums }) {
  * track, a genuinely different question from switching to artist mode, which
  * would rank by an artist's own play count instead of by how their tracks
  * actually finished.
+ *
+ * `year` selects one calendar year's championship; passing `allTime` instead
+ * runs every Grand Prix in the whole history and adds them into one career
+ * total — a different question from any single year's, the way a driver's
+ * career points and one season's are both real numbers but never confused
+ * for each other.
  */
-export default function Season({ mode, source, estimate, year }) {
+export default function Season({ mode, source, estimate, year, allTime }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (year == null) return;
+    if (!allTime && year == null) return;
     const ctl = new AbortController();
     setData(null);
     setError(null);
-    const qs = new URLSearchParams({ mode, source, year: String(year) });
+    const qs = new URLSearchParams({ mode, source });
+    if (allTime) qs.set('all', '1');
+    else qs.set('year', String(year));
     if (estimate) qs.set('estimate', '1');
     fetch(`/api/season?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [mode, source, estimate, year]);
+  }, [mode, source, estimate, year, allTime]);
 
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;
@@ -68,28 +74,35 @@ export default function Season({ mode, source, estimate, year }) {
   const driverChamp = drivers[0];
   const constructorChamp = constructors?.[0];
   const label = mode === 'tracks' ? '곡' : '가수';
+  const title = allTime ? '역대 통산' : `${year}년 시즌`;
+  const driverTag = allTime ? '통산 1위' : (complete ? '드라이버 챔피언' : '드라이버 선두');
+  const constructorTag = allTime ? '통산 1위' : (complete ? '컨스트럭터 챔피언' : '컨스트럭터 선두');
 
   if (!racesRun) {
-    return <p className="note" style={{ padding: '12px 2px' }}>이 해에는 기록이 없습니다.</p>;
+    return (
+      <p className="note" style={{ padding: '12px 2px' }}>
+        {allTime ? '아직 기록이 없습니다.' : '이 해에는 기록이 없습니다.'}
+      </p>
+    );
   }
 
   return (
     <div className="season">
       <div className="recap">
         <p className="recap-title">
-          {year}년 시즌{complete ? '' : ' · 진행 중'} · GP {racesRun}회
+          {title}{!allTime && !complete ? ' · 진행 중' : ''} · GP {racesRun}회
         </p>
         <div className="recap-grid">
           {driverChamp && (
             <div className="recap-tile">
-              <span>{complete ? '드라이버 챔피언' : '드라이버 선두'}</span>
+              <span>{driverTag}</span>
               <b>{driverChamp.track ?? driverChamp.artist}</b>
               <em>{driverChamp.points.toLocaleString()}pt · {driverChamp.wins}승</em>
             </div>
           )}
           {constructorChamp && (
             <div className="recap-tile">
-              <span>{complete ? '컨스트럭터 챔피언' : '컨스트럭터 선두'}</span>
+              <span>{constructorTag}</span>
               <b>{constructorChamp.artist}</b>
               <em>{constructorChamp.points.toLocaleString()}pt · {constructorChamp.wins}승</em>
             </div>
@@ -128,8 +141,8 @@ export default function Season({ mode, source, estimate, year }) {
         {data.months.filter((m) => m.top.length).map((m) => {
           const winner = m.top.find((t) => t.rank === 1);
           return (
-            <li key={m.month}>
-              <span className="gp-mo">{MONTH_NAMES[m.month - 1]}</span>
+            <li key={`${m.year}-${m.month}`}>
+              <span className="gp-mo">{allTime ? `${m.year}.${String(m.month).padStart(2, '0')}` : `${m.month}월`}</span>
               <span className="gp-nm">{winner.track ?? winner.artist}</span>
               <span className="gp-pt">{winner.points}pt · {Number(winner.plays).toLocaleString()}회</span>
             </li>

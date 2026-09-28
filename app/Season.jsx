@@ -62,11 +62,32 @@ function ConstructorLog({ log, allTime }) {
 }
 
 /**
+ * The column headers for a standings table — printed once, so every row
+ * below can be bare numbers instead of an icon it hopes reads at the same
+ * size as its neighbour. (A 🏆 and a 🏁 are not drawn at the same size by
+ * most emoji sets, whatever font-size asks for — a real table column
+ * doesn't have that problem.)
+ */
+function StandingsHead({ label }) {
+  return (
+    <div className="season-cols" aria-hidden="true">
+      <span />
+      <span>{label}</span>
+      <span>포인트</span>
+      <span>우승</span>
+      <span>포디움</span>
+      <span />
+    </div>
+  );
+}
+
+/**
  * One row of a championship — driver (track or artist) or constructor
  * (artist, in track mode). The same shape either way: a name, an optional
- * team line, and the season's tally. The left edge carries the artist's own
- * color, the same one the main dashboard uses — a driver and their team are
- * still, visually, that one artist.
+ * team line, and the season's tally in three plain numeric columns (points,
+ * wins, podiums) rather than icon badges. The left edge carries the
+ * artist's own color, the same one the main dashboard uses — a driver and
+ * their team are still, visually, that one artist.
  */
 function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allTime, open, onToggle, kind }) {
   return (
@@ -82,15 +103,9 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
           <b>{name}</b>
           {sub && <span>{sub}</span>}
         </div>
-        <div className="pts">
-          {points.toLocaleString()}<i>PT</i>
-          {(wins > 0 || podiums > 0) && (
-            <div className="gpstat">
-              {wins > 0 && <span className="badge win">🏆{wins}</span>}
-              {podiums > 0 && <span className="badge podium">🏁{podiums}</span>}
-            </div>
-          )}
-        </div>
+        <div className="cell-pt">{points.toLocaleString()}</div>
+        <div className="cell-w">{wins}</div>
+        <div className="cell-p">{podiums}</div>
         <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
       </li>
       {open && (
@@ -276,6 +291,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       </div>
 
       <p className="legend"><span>드라이버 챔피언십 · {label} 기준</span></p>
+      <StandingsHead label={label} />
       <ol className="season-list">
         {drivers.slice(0, driverShown).map((d, i) => {
           const key = rowKey(d);
@@ -302,6 +318,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       {constructors && (
         <>
           <p className="legend"><span>컨스트럭터 챔피언십 · 가수 기준</span></p>
+          <StandingsHead label="가수" />
           <ol className="season-list">
             {constructors.slice(0, constructorShown).map((c, i) => (
               <StandingsRow

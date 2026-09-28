@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
 import { artistColor, familyLabel } from '@/lib/genre';
+import { computeRanks } from '@/lib/rank';
 import Detail from './Detail';
 import Trend from './Trend';
+import Season from './Season';
 
 const MODES = [['tracks', '곡'], ['artists', '가수']];
 const SORTS = [
@@ -121,25 +123,6 @@ function fmt(value, key) {
   const n = Number(value);
   if (key === 'minutes') return n >= 60 ? (n / 60).toFixed(1) + 'h' : n + '분';
   return n.toLocaleString();
-}
-
-/**
- * Standard competition ranking: rows tied on the sort value share one rank
- * number, and the rank after a tied group skips ahead by how many shared it
- * (1, 1, 3 — not 1, 1, 2), which is how a tie reads on an actual chart.
- * `rows` must already be sorted by `key` descending, which is how every
- * caller here has them.
- */
-function computeRanks(rows, key) {
-  const ranks = [];
-  for (let i = 0; i < rows.length; i++) {
-    ranks.push(
-      i > 0 && Number(rows[i][key]) === Number(rows[i - 1][key])
-        ? ranks[i - 1]
-        : i + 1
-    );
-  }
-  return ranks;
 }
 
 /** "방금" / "3분 전" / "2시간 전", falling back to a plain date after a week. */
@@ -447,6 +430,8 @@ export default function Dashboard() {
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
   const [trendN, setTrendN] = useState(5);
+  const [showSeason, setShowSeason] = useState(false);
+  const [seasonYear, setSeasonYear] = useState(null);
   // YouTube's export logs one entry per session however many times a track
   // actually ran, so its raw counts are far below the truth. On by default:
   // the calibrated figure is the closer one, and the server answers with the
@@ -486,6 +471,13 @@ export default function Dashboard() {
     return [...m].sort((a, b) => b[0] - a[0])
       .map(([y, n]) => ({ value: y, label: `${y}년`, count: n }));
   }, [calendar]);
+
+  // A season needs a concrete year — "전체" has no Grand Prix calendar — so
+  // opening it for the first time picks the most recent year with anything
+  // in it, same as every other picker here defaults to what's actually there.
+  useEffect(() => {
+    if (seasonYear == null && years.length) setSeasonYear(years[0].value);
+  }, [seasonYear, years]);
 
   const months = useMemo(() => {
     if (!sel?.y) return [];
@@ -921,6 +913,23 @@ export default function Dashboard() {
           mode={mode} source={src} estimate={estimating} limit={trendN}
           from={range.from} to={range.to} genres={genres}
         />
+      )}
+
+      <div className="trendbar">
+        <button className="pill" aria-pressed={showSeason} onClick={() => setShowSeason((v) => !v)}>
+          {showSeason ? '시즌 챔피언십 숨기기' : '시즌 챔피언십 보기'}
+        </button>
+        {showSeason && (
+          <Picker
+            value={seasonYear}
+            label={seasonYear ? `${seasonYear}년` : '연도'}
+            options={years}
+            onChange={setSeasonYear}
+          />
+        )}
+      </div>
+      {showSeason && seasonYear != null && (
+        <Season mode={mode} source={src} sort={sort} estimate={estimating} year={seasonYear} />
       )}
 
       {error && <p className="err" style={{ padding: '20px 2px' }}>{error}</p>}

@@ -3,10 +3,19 @@
 import { Fragment, useMemo, useState, useEffect } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
+import { computeRanks } from '@/lib/rank';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
 const STANDINGS_PAGE = 10;
+
+const CHART_W = 720;
+const CHART_H = 220;
+const CHART_PAD = { l: 28, r: 10, t: 14, b: 22 };
+/** The position chart's scale never needs to go past P10 — only the ten
+    point-scoring finishes are tracked at all, so there is no lower rank to
+    plot even if the field itself is bigger. */
+const MAX_POS = 10;
 
 const moLabel = (m, allTime) =>
   allTime ? `${m.year}.${String(m.month).padStart(2, '0')}` : `${m.month}월`;
@@ -169,6 +178,132 @@ function GrandPrixResult({ year, month, mode, source, estimate }) {
 }
 
 /**
+ * The season's own trend chart — how the leaders actually got to their
+ * totals, race by race, in one of two readings:
+ *
+ * "points" is the running total, same idea as the dashboard's own play-count
+ * trend — a flat stretch is a month a driver didn't score in, not a month
+ * with no data.
+ *
+ * "position" is the F1 broadcast's own chart: each driver's actual finishing
+ * position, race by race, plotted on an inverted scale so P1 sits at the
+ * top. A driver who didn't finish in the points that month has no position
+ * to plot — the line breaks there rather than interpolating a rank that was
+ * never earned, the same way a real standings tracker leaves a gap for a
+ * round a driver sat out.
+ */
+function SeasonChart({ labels, series, view }) {
+  const [hover, setHover] = useState(null);
+  const n = labels.length;
+
+  const innerW = CHART_W - CHART_PAD.l - CHART_PAD.r;
+  const innerH = CHART_H - CHART_PAD.t - CHART_PAD.b;
+  const x = (i) => CHART_PAD.l + (n <= 1 ? 0 : (i / (n - 1)) * innerW);
+
+  const peak = view === 'points'
+    ? Math.max(1, ...series.map((s) => s.pts[s.pts.length - 1].cum))
+    : MAX_POS;
+  const y = view === 'points'
+    ? (v) => CHART_PAD.t + (1 - v / peak) * innerH
+    : (rank) => CHART_PAD.t + ((rank - 1) / (MAX_POS - 1)) * innerH;
+
+  const lines = series.map((s) => {
+    if (view === 'points') {
+      const d = s.pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.cum).toFixed(1)}`).join(' ');
+      return { ...s, segs: [d], ex: x(n - 1), ey: y(s.pts[n - 1].cum) };
+    }
+    const segs = [];
+    let cur = [];
+    let lastIdx = -1, lastRank = null;
+    s.pts.forEach((p, i) => {
+      if (p.rank == null) {
+        if (cur.length) { segs.push(cur.join(' ')); cur = []; }
+        return;
+      }
+      cur.push(`${cur.length ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`);
+      lastIdx = i; lastRank = p.rank;
+    });
+    if (cur.length) segs.push(cur.join(' '));
+    return { ...s, segs, ex: lastIdx >= 0 ? x(lastIdx) : null, ey: lastRank != null ? y(lastRank) : null };
+  });
+
+  const yTicks = view === 'points'
+    ? [0, Math.round(peak / 2), peak]
+    : [1, 5, 10];
+  const xTicks = n <= 6 ? labels.map((l, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
+  const binW = innerW / n;
+
+  const tipSide = hover == null ? 'mid' : hover / (n - 1 || 1) < 0.25 ? 'start' : hover / (n - 1 || 1) > 0.75 ? 'end' : 'mid';
+
+  return (
+    <div className="chart-wrap">
+      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" className="chart-svg" role="img"
+           aria-label={view === 'points' ? '누적 포인트 추이' : '레이스별 순위 추이'}
+           onMouseLeave={() => setHover(null)}>
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line x1={CHART_PAD.l} x2={CHART_W - CHART_PAD.r} y1={y(t)} y2={y(t)}
+                  className="chart-grid" vectorEffect="non-scaling-stroke" />
+            <text x={CHART_PAD.l - 6} y={y(t)} className="chart-ytext" textAnchor="end" dominantBaseline="middle">
+              {view === 'points' ? t.toLocaleString() : `P${t}`}
+            </text>
+          </g>
+        ))}
+        {hover != null && (
+          <line x1={x(hover)} x2={x(hover)} y1={CHART_PAD.t} y2={CHART_H - CHART_PAD.b}
+                className="chart-hover-line" vectorEffect="non-scaling-stroke" />
+        )}
+        {lines.map((s) => s.segs.map((d, si) => (
+          <path key={`${s.key}-${si}`} d={d} fill="none" stroke={s.color}
+                strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+                vectorEffect="non-scaling-stroke" opacity={hover == null || s.pts[hover]?.[view === 'points' ? 'cum' : 'rank'] != null ? 1 : .35} />
+        )))}
+        {lines.map((s) => s.ex != null && (
+          <rect key={`p-${s.key}`} x={s.ex - 7} y={s.ey - 3.5} width="14" height="7" rx="3.5"
+                fill={s.color} stroke="var(--paper)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        ))}
+        {hover != null && lines.map((s) => {
+          const p = s.pts[hover];
+          const v = view === 'points' ? p.cum : p.rank;
+          if (v == null) return null;
+          return (
+            <circle key={`h-${s.key}`} cx={x(hover)} cy={y(v)} r="3.5"
+                    fill={s.color} stroke="var(--paper)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          );
+        })}
+        {labels.map((_, i) => (
+          <rect key={`hit-${i}`} x={CHART_PAD.l + i * binW} y="0" width={binW} height={CHART_H}
+                fill="transparent" onMouseEnter={() => setHover(i)} />
+        ))}
+      </svg>
+
+      <div className="chart-x">
+        {xTicks.map((i) => <span key={i}>{labels[i]}</span>)}
+      </div>
+
+      {hover != null && (
+        <div className={`chart-tip tip-${tipSide}`} style={{ left: `${(x(hover) / CHART_W) * 100}%` }}>
+          <b>{labels[hover]}</b>
+          <ul>
+            {series.map((s) => {
+              const p = s.pts[hover];
+              const v = view === 'points' ? p.cum : p.rank;
+              return (
+                <li key={s.key}>
+                  <i style={{ background: s.color }} />
+                  <span>{s.label}</span>
+                  <em>{v == null ? '—' : view === 'points' ? `${v.toLocaleString()}pt` : `P${v}`}</em>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * A season, treated the way F1 treats one: every month is a Grand Prix, its
  * top ten by play count pay championship points, and the standings are the
  * running total. This is deliberately the one ranking in the app that isn't
@@ -195,6 +330,9 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   const [openGP, setOpenGP] = useState(null);
   const [driverShown, setDriverShown] = useState(STANDINGS_PAGE);
   const [constructorShown, setConstructorShown] = useState(STANDINGS_PAGE);
+  const [chartKind, setChartKind] = useState('drivers');
+  const [chartView, setChartView] = useState('points');
+  const [chartN, setChartN] = useState(5);
 
   useEffect(() => {
     if (!allTime && year == null) return;
@@ -248,6 +386,52 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     return log;
   }, [data, openConstructor]);
 
+  // The chart's own series: each shown driver's race-by-race record, plus —
+  // in track mode — the same thing regrouped onto constructors. A
+  // constructor has no monthly rank of its own coming out of the API (only
+  // the cumulative championship does), so it's rebuilt here: sum that
+  // month's charting tracks onto their artist, then rank the constructors
+  // that actually scored against each other, month by month.
+  const chartData = useMemo(() => {
+    if (!data) return null;
+    const months = data.months;
+    const labels = months.map((m) => moLabel(m, allTime));
+
+    const driverSeries = data.drivers.slice(0, chartN).map((d) => {
+      const key = normRowKey(d);
+      let cum = 0;
+      const pts = months.map((m) => {
+        const hit = m.top.find((t) => normRowKey(t) === key);
+        cum += hit ? hit.points : 0;
+        return { rank: hit ? hit.rank : null, cum };
+      });
+      return { key, label: d.track ?? d.artist, color: artistColor(d.artist), pts };
+    });
+
+    let constructorSeries = null;
+    if (data.constructors) {
+      const monthly = months.map((m) => {
+        const sums = new Map();
+        for (const t of m.top) sums.set(t.artist_key, (sums.get(t.artist_key) ?? 0) + t.points);
+        const rows = [...sums.entries()].map(([artist_key, points]) => ({ artist_key, points }));
+        rows.sort((a, b) => b.points - a.points);
+        const ranks = computeRanks(rows, 'points');
+        return new Map(rows.map((r, i) => [r.artist_key, { points: r.points, rank: ranks[i] }]));
+      });
+      constructorSeries = data.constructors.slice(0, chartN).map((c) => {
+        let cum = 0;
+        const pts = monthly.map((byKey) => {
+          const hit = byKey.get(c.artist_key);
+          cum += hit ? hit.points : 0;
+          return { rank: hit ? hit.rank : null, cum };
+        });
+        return { key: c.artist_key, label: c.artist, color: artistColor(c.artist), pts };
+      });
+    }
+
+    return { labels, driverSeries, constructorSeries };
+  }, [data, chartN]);
+
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;
 
@@ -292,6 +476,41 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           )}
         </div>
       </div>
+
+      {(() => {
+        const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
+        const activeSeries = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
+        return (
+          <div className="season-chart">
+            <div className="chart-head">
+              <p className="legend"><span>시즌 차트 · {chartView === 'points' ? '누적 포인트' : '레이스별 순위'}</span></p>
+              <div className="chart-controls">
+                {chartData.constructorSeries && (
+                  <div className="seg">
+                    <button className="pill" aria-pressed={activeKind === 'drivers'} onClick={() => setChartKind('drivers')}>드라이버</button>
+                    <button className="pill" aria-pressed={activeKind === 'constructors'} onClick={() => setChartKind('constructors')}>컨스트럭터</button>
+                  </div>
+                )}
+                <div className="seg">
+                  <button className="pill" aria-pressed={chartView === 'points'} onClick={() => setChartView('points')}>포인트</button>
+                  <button className="pill" aria-pressed={chartView === 'position'} onClick={() => setChartView('position')}>순위</button>
+                </div>
+                <div className="seg">
+                  {[5, 10].map((n) => (
+                    <button key={n} className="pill" aria-pressed={chartN === n} onClick={() => setChartN(n)}>상위 {n}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
+            <ol className="chart-key">
+              {activeSeries.map((s) => (
+                <li key={s.key}><i style={{ background: s.color }} />{s.label}</li>
+              ))}
+            </ol>
+          </div>
+        );
+      })()}
 
       <p className="legend"><span>드라이버 챔피언십 · {label} 기준</span></p>
       <StandingsHead label={label} />

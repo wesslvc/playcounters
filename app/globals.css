@@ -514,6 +514,53 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .season-hero .recap-tile em { color:rgba(255,255,255,.8); font-weight:700 }
 
+/* The season's own trend chart — a plain cumulative-points line by default,
+   or (F1 broadcast-style) each driver's actual race-by-race finishing
+   position on an inverted P1-at-top scale. Built the same way .trend is:
+   inline SVG, no charting library, colored by artist so a line here is the
+   same color as that artist everywhere else in the app. */
+.season-chart { margin:4px 0 22px }
+.chart-head {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px 14px; margin-bottom:2px;
+}
+.chart-head .legend { margin:0 }
+.chart-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+.seg { display:flex; gap:4px }
+.chart-wrap { position:relative; padding:8px 0 4px }
+.chart-svg { width:100%; height:206px; display:block; overflow:visible }
+.chart-grid { stroke:var(--hair); stroke-width:1 }
+.chart-ytext {
+  fill:var(--faint); font-size:9.5px; font-family:"Titillium Web",sans-serif; font-weight:600;
+}
+.chart-hover-line { stroke:var(--line); stroke-width:1.5; stroke-dasharray:2,3 }
+.chart-x {
+  display:flex; justify-content:space-between;
+  font-size:10.5px; color:var(--faint); padding:4px 2px 0 28px;
+}
+/* The hover tooltip: anchored to the crosshair's x position, flipped near
+   either edge so it never runs off the card. */
+.chart-tip {
+  position:absolute; top:6px; transform:translateX(-50%);
+  background:var(--paper); border:1px solid var(--line); border-radius:10px;
+  padding:8px 10px; font-size:11.5px; min-width:120px; pointer-events:none;
+  box-shadow:0 8px 20px -10px rgba(0,0,0,.35); z-index:2;
+}
+.chart-tip.tip-start { transform:translateX(0) }
+.chart-tip.tip-end { transform:translateX(-100%) }
+.chart-tip b { display:block; font-size:11px; color:var(--mute); margin-bottom:4px }
+.chart-tip ul { list-style:none }
+.chart-tip li { display:flex; align-items:center; gap:6px; padding:2px 0; white-space:nowrap }
+.chart-tip i { width:8px; height:8px; border-radius:50%; flex:0 0 auto }
+.chart-tip span { min-width:0; overflow:hidden; text-overflow:ellipsis }
+.chart-tip em {
+  font-style:normal; font-weight:700; margin-left:auto; padding-left:10px;
+  font-family:"Titillium Web",sans-serif;
+}
+.chart-key { list-style:none; display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px }
+.chart-key li { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--mute) }
+.chart-key i { width:9px; height:9px; border-radius:50%; flex:0 0 auto }
+
 .season-list {
   list-style:none; margin-bottom:6px;
   /* One shared grid for the whole table, not one per row — a plain numeric

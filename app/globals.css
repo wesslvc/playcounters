@@ -514,9 +514,17 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .season-hero .recap-tile em { color:rgba(255,255,255,.8); font-weight:700 }
 
-.season-list { list-style:none; margin-bottom:6px }
-.season-row {
+.season-list {
+  list-style:none; margin-bottom:6px;
+  /* One shared grid for the whole list, not one per row — each row used to
+     size its own "points" column independently, so the number landed at a
+     different x-position depending on whether that particular row had a
+     badge next to it. Subgrid makes every row's rank/name/points/chevron
+     line up on the same four tracks. */
   display:grid; grid-template-columns:32px 1fr auto 14px; gap:0 12px;
+}
+.season-row {
+  display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
   align-items:center; padding:11px 6px; border-radius:10px;
   cursor:pointer; transition:background .12s;
 }
@@ -557,18 +565,19 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 /* A row's own race-by-race record (month, finish, points), or one race's
    full classification (finish, name, points) — same nested-panel look,
    different column shape, picked by a modifier class. */
-.gp-history-wrap { list-style:none; margin:-2px 0 6px }
+.gp-history-wrap { list-style:none; grid-column:1 / -1; margin:-2px 0 6px }
 .gp-history {
   list-style:none; background:var(--sunk); border-radius:10px;
   padding:6px 12px; margin:0 0 8px;
+  display:grid; gap:0 10px;
 }
+.gp-history.log { grid-template-columns:52px 40px 1fr }
+.gp-history.result { grid-template-columns:40px 1fr auto }
 .gph-row {
-  display:grid; gap:0 10px; align-items:baseline;
-  padding:5px 2px; font-size:12.5px; border-bottom:1px solid var(--hair);
+  display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
+  align-items:baseline; padding:5px 2px; font-size:12.5px; border-bottom:1px solid var(--hair);
 }
 .gph-row:last-child { border-bottom:none }
-.gph-row.log { grid-template-columns:52px 40px 1fr }
-.gph-row.result { grid-template-columns:40px 1fr auto }
 .gph-mo { color:var(--faint); font-size:11px }
 .gph-rk {
   font-family:"Titillium Web",sans-serif; font-weight:800; font-size:12px;
@@ -587,9 +596,12 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 
 /* The race calendar: one line per month, its winner named, clickable open
    to the full result — the season read as a timeline, not only a table. */
-.gp-cal { list-style:none }
-.gp-cal-row {
+.gp-cal {
+  list-style:none;
   display:grid; grid-template-columns:52px 1fr auto 14px; gap:0 10px;
+}
+.gp-cal-row {
+  display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
   align-items:baseline; padding:8px 6px; border-bottom:1px solid var(--hair);
   font-size:13px; cursor:pointer; border-radius:8px;
 }

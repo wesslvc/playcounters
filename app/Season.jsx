@@ -20,9 +20,9 @@ const moLabel = (m, allTime) =>
 function RaceLog({ log, allTime }) {
   if (!log.length) return <p className="note" style={{ padding: '6px 8px' }}>득점 기록이 없습니다.</p>;
   return (
-    <ol className="gp-history">
+    <ol className="gp-history log">
       {log.map((r) => (
-        <li className="gph-row log" key={`${r.year}-${r.month}`}>
+        <li className="gph-row" key={`${r.year}-${r.month}`}>
           <span className="gph-mo">{moLabel(r, allTime)}</span>
           <span className="gph-rk" data-tier={r.rank <= 3 ? r.rank : undefined}>P{r.rank}</span>
           <span className="gph-pt">{r.points}pt</span>
@@ -82,9 +82,9 @@ function GrandPrixResult({ m, allTime, mode }) {
   const label = mode === 'tracks' ? '곡' : '가수';
   return (
     <li className="gp-history-wrap">
-      <ol className="gp-history">
+      <ol className="gp-history result">
         {m.top.map((t) => (
-          <li className="gph-row result" key={rowKey(t)}>
+          <li className="gph-row" key={rowKey(t)}>
             <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>P{t.rank}</span>
             <span className="gph-nm">
               <b>{t.track ?? t.artist}</b>

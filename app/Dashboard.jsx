@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { coverKeyFor, rowKey } from '@/lib/keys';
 import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
+import { yearsFromCalendar } from '@/lib/calendar';
 import Detail from './Detail';
 import Trend from './Trend';
-import Season from './Season';
+import Picker from './Picker';
 
 const MODES = [['tracks', '곡'], ['artists', '가수']];
 const SORTS = [
@@ -136,50 +137,6 @@ function ago(iso) {
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}일 전`;
   return new Date(iso).toLocaleDateString('ko-KR');
-}
-
-/**
- * A dropdown built from the same pill vocabulary as the rest of the controls.
- * A native <select> can't be styled to match across platforms, and this list
- * also has to carry a play count beside each option.
- */
-function Picker({ value, label, options, onChange, disabled }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
-
-  return (
-    <>
-      {open && (
-        <button className="scrim" aria-hidden="true" tabIndex={-1} onClick={() => setOpen(false)} />
-      )}
-      <div className="pick" data-open={open}>
-        <button
-          className="pill"
-          disabled={disabled}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {label}
-        </button>
-        {open && (
-          <div className="menu" role="listbox">
-            {options.map((o) => (
-              <button
-                key={String(o.value)}
-                role="option"
-                aria-selected={o.value === value}
-                onClick={() => { onChange(o.value); setOpen(false); }}
-              >
-                <span>{o.label}</span>
-                {o.count != null && <em>{Number(o.count).toLocaleString()}</em>}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  );
 }
 
 /**
@@ -430,8 +387,6 @@ export default function Dashboard() {
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
   const [trendN, setTrendN] = useState(5);
-  const [showSeason, setShowSeason] = useState(false);
-  const [seasonYear, setSeasonYear] = useState(null);
   // YouTube's export logs one entry per session however many times a track
   // actually ran, so its raw counts are far below the truth. On by default:
   // the calibrated figure is the closer one, and the server answers with the
@@ -462,22 +417,7 @@ export default function Dashboard() {
   useEffect(() => { setLimit(PAGE); }, [sel, mode, src]);
 
   /* ---- picker options, derived from days that actually hold plays ---- */
-  const years = useMemo(() => {
-    const m = new Map();
-    for (const c of calendar) {
-      const y = Number(c.day.slice(0, 4));
-      m.set(y, (m.get(y) || 0) + Number(c.plays));
-    }
-    return [...m].sort((a, b) => b[0] - a[0])
-      .map(([y, n]) => ({ value: y, label: `${y}년`, count: n }));
-  }, [calendar]);
-
-  // A season needs a concrete year — "전체" has no Grand Prix calendar — so
-  // opening it for the first time picks the most recent year with anything
-  // in it, same as every other picker here defaults to what's actually there.
-  useEffect(() => {
-    if (seasonYear == null && years.length) setSeasonYear(years[0].value);
-  }, [seasonYear, years]);
+  const years = useMemo(() => yearsFromCalendar(calendar), [calendar]);
 
   const months = useMemo(() => {
     if (!sel?.y) return [];
@@ -760,6 +700,7 @@ export default function Dashboard() {
       <nav className="nav">
         <a className="pill" href="/" aria-current="page">홈</a>
         <a className="pill" href="/import">가져오기</a>
+        <a className="pill" href="/championship">챔피언십</a>
         <button className="pill act" onClick={refresh} disabled={syncing}>
           {syncing ? '갱신 중…' : '지금 갱신'}
         </button>
@@ -913,23 +854,6 @@ export default function Dashboard() {
           mode={mode} source={src} estimate={estimating} limit={trendN}
           from={range.from} to={range.to} genres={genres}
         />
-      )}
-
-      <div className="trendbar">
-        <button className="pill" aria-pressed={showSeason} onClick={() => setShowSeason((v) => !v)}>
-          {showSeason ? '시즌 챔피언십 숨기기' : '시즌 챔피언십 보기'}
-        </button>
-        {showSeason && (
-          <Picker
-            value={seasonYear}
-            label={seasonYear ? `${seasonYear}년` : '연도'}
-            options={years}
-            onChange={setSeasonYear}
-          />
-        )}
-      </div>
-      {showSeason && seasonYear != null && (
-        <Season mode={mode} source={src} sort={sort} estimate={estimating} year={seasonYear} />
       )}
 
       {error && <p className="err" style={{ padding: '20px 2px' }}>{error}</p>}

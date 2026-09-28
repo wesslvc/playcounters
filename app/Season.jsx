@@ -32,14 +32,18 @@ function StandingsRow({ rank, name, sub, points, wins, podiums }) {
 
 /**
  * A season, treated the way F1 treats one: every month is a Grand Prix, its
- * top ten pay championship points, and the standings are the running total.
- * Drivers are whatever the dashboard is already ranking (tracks or artists);
- * constructors — track mode only — regroup those same points onto the
- * artist behind each track, a genuinely different question from switching
- * to artist mode, which would rank by the artist's own play count instead
- * of by how their tracks actually finished.
+ * top ten by play count pay championship points, and the standings are the
+ * running total. This is deliberately the one ranking in the app that isn't
+ * re-sortable — a championship needs one fixed metric to mean anything
+ * across months and years, the way a race is always timed in seconds.
+ *
+ * Drivers are whatever this page is ranking (tracks or artists); constructors
+ * — track mode only — regroup those same points onto the artist behind each
+ * track, a genuinely different question from switching to artist mode, which
+ * would rank by an artist's own play count instead of by how their tracks
+ * actually finished.
  */
-export default function Season({ mode, source, sort, estimate, year }) {
+export default function Season({ mode, source, estimate, year }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -48,14 +52,14 @@ export default function Season({ mode, source, sort, estimate, year }) {
     const ctl = new AbortController();
     setData(null);
     setError(null);
-    const qs = new URLSearchParams({ mode, source, sort, year: String(year) });
+    const qs = new URLSearchParams({ mode, source, year: String(year) });
     if (estimate) qs.set('estimate', '1');
     fetch(`/api/season?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [mode, source, sort, estimate, year]);
+  }, [mode, source, estimate, year]);
 
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;
@@ -127,7 +131,7 @@ export default function Season({ mode, source, sort, estimate, year }) {
             <li key={m.month}>
               <span className="gp-mo">{MONTH_NAMES[m.month - 1]}</span>
               <span className="gp-nm">{winner.track ?? winner.artist}</span>
-              <span className="gp-pt">{winner.points}pt</span>
+              <span className="gp-pt">{winner.points}pt · {Number(winner.plays).toLocaleString()}회</span>
             </li>
           );
         })}

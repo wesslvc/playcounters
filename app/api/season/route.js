@@ -8,10 +8,9 @@ export const dynamic = 'force-dynamic';
 const TZ = 'Asia/Seoul';
 const KST = 9 * 3600e3;
 /** A month's field of runners, generously sized: what matters is that the
-    real top 10 by whichever metric is selected is never cut off, and a
-    month is a small enough window that this is cheap either way. */
+    real top 10 is never cut off, and a month is a small enough window that
+    this is cheap either way. */
 const MONTH_LIMIT = 200;
-const SORT_KEYS = ['plays', 'days', 'weeks', 'minutes'];
 
 /** Same KST-anchored month boundary the client's own range picker uses, so a
     Grand Prix here covers exactly the month the "월" picker would show. */
@@ -21,11 +20,13 @@ const monthBounds = (y, m) => ({
 });
 
 /**
- * One month's races, run against whichever metric the dashboard is currently
- * sorted by — the "finishing order" a Grand Prix pays points on on is the
- * same ranking the list itself already shows, not a separate fixed one.
+ * One month's race, always on plays — a Grand Prix result has to be one
+ * fixed thing to be comparable across a season and across years, the way a
+ * lap time is always seconds and never whichever unit a viewer prefers. The
+ * ranked list elsewhere in the app can be sorted by days or minutes instead;
+ * the championship is deliberately not one of the places that choice reaches.
  */
-async function runGrandPrix(userId, y, m, mode, src, estimate, sortKey) {
+async function runGrandPrix(userId, y, m, mode, src, estimate) {
   const { from, to } = monthBounds(y, m);
   const { data, error } = await db.rpc('top_items', {
     p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
@@ -33,9 +34,8 @@ async function runGrandPrix(userId, y, m, mode, src, estimate, sortKey) {
   });
   if (error) throw new Error(error.message);
 
-  const rows = [...(data ?? [])].sort((a, b) =>
-    Number(b[sortKey]) - Number(a[sortKey]) || Number(b.plays) - Number(a.plays));
-  const ranks = computeRanks(rows, sortKey);
+  const rows = [...(data ?? [])].sort((a, b) => Number(b.plays) - Number(a.plays));
+  const ranks = computeRanks(rows, 'plays');
 
   const results = [];
   for (let i = 0; i < rows.length; i++) {
@@ -50,8 +50,9 @@ async function runGrandPrix(userId, y, m, mode, src, estimate, sortKey) {
 
 /**
  * A season standings, F1-style: every month is one Grand Prix, its top ten
- * pay championship points on the FIA's own scale (25-18-15-12-10-8-6-4-2-1),
- * and the year's champion is whoever has the most at the end of it.
+ * by play count pay championship points on the FIA's own scale
+ * (25-18-15-12-10-8-6-4-2-1), and the year's champion is whoever has the
+ * most at the end of it.
  *
  * Drivers are whatever the list itself is ranking — tracks or artists,
  * whichever mode is selected. Constructors exist only in track mode: they
@@ -70,7 +71,6 @@ export async function GET(req) {
   const mode = q.get('mode') === 'artists' ? 'artists' : 'tracks';
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
   const estimate = q.get('estimate') === '1';
-  const sortKey = SORT_KEYS.includes(q.get('sort')) ? q.get('sort') : 'plays';
 
   const year = Number(q.get('year'));
   if (!Number.isFinite(year)) return NextResponse.json({ error: 'year required' }, { status: 400 });
@@ -81,12 +81,15 @@ export async function GET(req) {
   const isCurrentYear = year === now.getUTCFullYear();
   const monthCount = isCurrentYear ? now.getUTCMonth() + 1 : 12;
 
-  let races;
+  let races, calibrated;
   try {
-    races = await Promise.all(
-      Array.from({ length: monthCount }, (_, i) =>
-        runGrandPrix(userId, year, i + 1, mode, src, estimate, sortKey))
-    );
+    [races, calibrated] = await Promise.all([
+      Promise.all(
+        Array.from({ length: monthCount }, (_, i) =>
+          runGrandPrix(userId, year, i + 1, mode, src, estimate))
+      ),
+      db.rpc('has_youtube_estimate', { p_user: userId }),
+    ]);
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
@@ -126,14 +129,19 @@ export async function GET(req) {
     || a.artist.localeCompare(b.artist);
 
   return NextResponse.json({
-    year, mode, source: src, sort: sortKey,
+    year, mode, source: src,
     complete: !isCurrentYear,
+    // Whether a Recap calibration exists, so the page only offers the
+    // estimate toggle when there is something real behind it — same rule
+    // the main dashboard uses.
+    calibrated: calibrated.error ? false : Boolean(calibrated.data),
+    estimate: estimate && !calibrated.error && Boolean(calibrated.data),
     racesRun: races.filter((r) => r.length).length,
     months: races.map((results, i) => ({
       month: i + 1,
       top: results.map((r) => ({
         artist: r.artist, track: r.track ?? null, rank: r.rank, points: r.points,
-        value: r[sortKey], yt: r.yt,
+        plays: r.plays, yt: r.yt,
       })),
     })),
     drivers: [...drivers.values()].sort(byPoints),

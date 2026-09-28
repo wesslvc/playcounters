@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
+import { rpcAll } from '@/lib/rpcPage';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,36 +10,6 @@ const DEFAULT_LIMIT = 1000;
 // High enough that 펼치기 reaches the true end of anyone's real history rather
 // than stopping at an arbitrary wall.
 const MAX_LIMIT = 50000;
-
-/**
- * PostgREST caps any single response at the project's configured max rows,
- * whatever a `p_limit` argument or the lack of one asks for. A single-request
- * `.rpc()` call silently comes back truncated past that cap rather than
- * erroring — which is what quietly capped every ranked list at ~1,000 no
- * matter how far 펼치기 was pushed, and (more subtly) truncated prior_items
- * and the previous window's list the same way, so an item ranked below the
- * cap read as absent from history entirely and came out mislabelled NEW
- * instead of a real rank change.
- *
- * This pages through with `.range()` in slices safely under any realistic
- * cap, and keeps going until either `want` rows are in hand or a slice comes
- * back short of a full page — the only reliable "nothing more exists"
- * signal, since asking for more than exists just returns what's there.
- */
-const RPC_PAGE = 500;
-
-async function rpcAll(name, params, want) {
-  const out = [];
-  while (out.length < want) {
-    const page = Math.min(RPC_PAGE, want - out.length);
-    const { data, error } = await db.rpc(name, params).range(out.length, out.length + page - 1);
-    if (error) return { data: null, error };
-    const got = data ?? [];
-    out.push(...got);
-    if (got.length < page) break; // short page: truly exhausted, not just paused
-  }
-  return { data: out, error: null };
-}
 
 export async function GET(req) {
   const userId = currentUserId();

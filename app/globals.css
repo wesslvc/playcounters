@@ -542,8 +542,16 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .season-row .pts i { font-style:normal; font-size:10.5px; color:var(--mute); font-weight:400 }
 .season-row .pts .gpstat {
-  display:block; font-style:normal; font-size:10px; color:var(--faint); font-weight:600;
+  display:flex; gap:5px; justify-content:flex-end; margin-top:5px;
 }
+.gpstat .badge {
+  display:inline-flex; align-items:center; gap:3px;
+  font-family:"IBM Plex Sans KR",sans-serif; font-style:normal;
+  font-size:12px; font-weight:700; line-height:1; color:var(--ink);
+  padding:4px 8px; border-radius:999px; white-space:nowrap;
+}
+.gpstat .badge.win { background:rgba(232,185,60,.3) }
+.gpstat .badge.podium { background:rgba(185,190,204,.28) }
 .season-row .chev { color:var(--faint); font-size:11px; justify-self:end }
 
 /* A row's own race-by-race record (month, finish, points), or one race's

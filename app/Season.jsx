@@ -56,9 +56,10 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
         <div className="pts">
           {points.toLocaleString()}<i>PT</i>
           {(wins > 0 || podiums > 0) && (
-            <em className="gpstat">
-              {wins > 0 && `🏆${wins}`}{podiums > 0 && ` 🏁${podiums}`}
-            </em>
+            <div className="gpstat">
+              {wins > 0 && <span className="badge win">🏆{wins}</span>}
+              {podiums > 0 && <span className="badge podium">🏁{podiums}</span>}
+            </div>
           )}
         </div>
         <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>

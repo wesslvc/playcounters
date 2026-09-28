@@ -473,6 +473,7 @@ $$;
 -- leaving two candidates that differ only by p_estimate invites the wrong one.
 drop function if exists top_items(uuid, timestamptz, timestamptz, text, text, int, text);
 drop function if exists top_items(uuid, timestamptz, timestamptz, text, text, int, text, boolean);
+drop function if exists top_items(uuid, timestamptz, timestamptz, text, text, int, text, boolean, boolean);
 
 create or replace function top_items(
   p_user uuid,
@@ -496,7 +497,16 @@ returns table (
   first_at timestamptz,
   last_at  timestamptz,
   day_nums integer[],
-  yt       boolean
+  yt       boolean,
+  -- The normalised identity, not just the display label. Every reader that
+  -- groups rows across more than one call to this function — the season
+  -- standings chief among them, one call per month — needs this: the mode()
+  -- label above can pick a different surface variant in different months
+  -- even when the underlying recording is the same one, and matching on
+  -- that label instead of the key it was chosen from is what let one song
+  -- split back into two rows the moment two calls disagreed on wording.
+  artist_key text,
+  track_key  text
 )
 language sql stable
 -- search_path is pinned so the function always resolves `plays` in this
@@ -527,7 +537,9 @@ as $$
     case when p_days then
       array_agg(distinct ((p.played_at at time zone p_tz)::date - date '1970-01-01'))
     end                                                     as day_nums,
-    bool_or(p.source = 'youtube')                           as yt
+    bool_or(p.source = 'youtube')                           as yt,
+    p.artist_key                                            as artist_key,
+    case when p_mode = 'artists' then null else p.track_key end as track_key
   from plays p
   where p.user_id = p_user
     and p.played_at >= p_from

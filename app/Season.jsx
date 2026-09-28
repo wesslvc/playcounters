@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, useEffect } from 'react';
-import { rowKey } from '@/lib/keys';
+import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
@@ -219,11 +219,14 @@ export default function Season({ mode, source, estimate, year, allTime }) {
 
   // Every race a given driver or constructor actually scored in, in order —
   // built from the months already in hand rather than a second round trip.
+  // Matched on the normalised key, not the display label: two months can
+  // legitimately show slightly different wording for the same recording,
+  // and matching on the label would silently drop those months from the log.
   const driverLog = useMemo(() => {
     if (!data || openDriver == null) return [];
     const log = [];
     for (const m of data.months) {
-      const hit = m.top.find((t) => rowKey(t) === openDriver);
+      const hit = m.top.find((t) => normRowKey(t) === openDriver);
       if (hit) log.push({ year: m.year, month: m.month, rank: hit.rank, points: hit.points });
     }
     return log;
@@ -233,7 +236,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     if (!data || openConstructor == null) return [];
     const log = [];
     for (const m of data.months) {
-      const hits = m.top.filter((t) => t.artist === openConstructor);
+      const hits = m.top.filter((t) => t.artist_key === openConstructor);
       if (hits.length) {
         log.push({
           year: m.year, month: m.month,
@@ -294,7 +297,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       <StandingsHead label={label} />
       <ol className="season-list">
         {drivers.slice(0, driverShown).map((d, i) => {
-          const key = rowKey(d);
+          const key = normRowKey(d);
           return (
             <StandingsRow
               key={key} rank={i + 1}
@@ -322,12 +325,12 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           <ol className="season-list">
             {constructors.slice(0, constructorShown).map((c, i) => (
               <StandingsRow
-                key={c.artist} rank={i + 1}
+                key={c.artist_key} rank={i + 1}
                 name={c.artist} sub={null}
                 points={c.points} wins={c.wins} podiums={c.podiums}
                 color={artistColor(c.artist)} kind="constructor"
-                open={openConstructor === c.artist} log={constructorLog} allTime={allTime}
-                onToggle={() => setOpenConstructor((a) => (a === c.artist ? null : c.artist))}
+                open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
+                onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}
               />
             ))}
           </ol>

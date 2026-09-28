@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
-import { rowKey } from '@/lib/keys';
+import { normRowKey } from '@/lib/keys';
 import { rankByPlays, pointsForRank } from '@/lib/rank';
 
 export const dynamic = 'force-dynamic';
@@ -137,9 +137,18 @@ export async function GET(req) {
 
   races.forEach((results, i) => {
     for (const r of results) {
-      const key = rowKey(r);
+      // Grouped on the normalised key, not the display label — top_items
+      // picks its label per call, and two different months can genuinely
+      // disagree on wording for the same recording. Keying on that label
+      // instead of the key it came from is exactly what split "Lose My
+      // Mind" back into two rows the moment two months' mode() picks
+      // didn't match, even though the ranked list (one query, one label)
+      // never showed a split at all.
+      const key = normRowKey(r);
       const d = drivers.get(key) ?? {
-        artist: r.artist, track: r.track ?? null, points: 0, wins: 0, podiums: 0, starts: 0,
+        artist: r.artist, track: r.track ?? null,
+        artist_key: r.artist_key, track_key: r.track_key ?? null,
+        points: 0, wins: 0, podiums: 0, starts: 0,
       };
       d.points += r.points;
       d.starts += 1;
@@ -148,14 +157,16 @@ export async function GET(req) {
       drivers.set(key, d);
 
       if (mode === 'tracks') {
-        const c = constructors.get(r.artist) ?? {
-          artist: r.artist, points: 0, wins: 0, podiums: 0, starts: 0,
+        const ckey = r.artist_key;
+        const c = constructors.get(ckey) ?? {
+          artist: r.artist, artist_key: r.artist_key,
+          points: 0, wins: 0, podiums: 0, starts: 0,
         };
         c.points += r.points;
         c.starts += 1;
         if (r.rank === 1) c.wins += 1;
         if (r.rank <= 3) c.podiums += 1;
-        constructors.set(r.artist, c);
+        constructors.set(ckey, c);
       }
     }
   });
@@ -178,8 +189,9 @@ export async function GET(req) {
     months: races.map((results, i) => ({
       year: months[i].y, month: months[i].m,
       top: results.map((r) => ({
-        artist: r.artist, track: r.track ?? null, rank: r.rank, points: r.points,
-        plays: r.plays, yt: r.yt,
+        artist: r.artist, track: r.track ?? null,
+        artist_key: r.artist_key, track_key: r.track_key ?? null,
+        rank: r.rank, points: r.points, plays: r.plays, yt: r.yt,
       })),
     })),
     drivers: [...drivers.values()].sort(byPoints),

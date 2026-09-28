@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { rowKey } from '@/lib/keys';
-import { computeRanks, pointsForRank } from '@/lib/rank';
+import { rankByPlays, pointsForRank } from '@/lib/rank';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +34,7 @@ async function runGrandPrix(userId, y, m, mode, src, estimate) {
   });
   if (error) throw new Error(error.message);
 
-  const rows = [...(data ?? [])].sort((a, b) => Number(b.plays) - Number(a.plays));
-  const ranks = computeRanks(rows, 'plays');
+  const { rows, ranks } = rankByPlays(data ?? []);
 
   const results = [];
   for (let i = 0; i < rows.length; i++) {

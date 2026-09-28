@@ -594,6 +594,16 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   text-align:right; justify-self:end; white-space:nowrap;
 }
 
+/* A constructor's month can hold more than one charting track, so its log
+   groups them under a month heading rather than collapsing to one line. */
+.cxlog-month { margin:0 0 8px }
+.cxlog-month:last-child { margin-bottom:0 }
+.cxlog-mo {
+  font-size:11px; color:var(--faint); font-weight:600;
+  padding:4px 12px 2px;
+}
+.cxlog-month .gp-history { margin:0 }
+
 /* The race calendar: one line per month, its winner named, clickable open
    to the full result — the season read as a timeline, not only a table. */
 .gp-cal {

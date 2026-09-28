@@ -33,13 +33,42 @@ function RaceLog({ log, allTime }) {
 }
 
 /**
+ * A constructor's own record is one level deeper than a driver's: a month
+ * can hold more than one of its tracks charting at once, and collapsing
+ * that to a single "best rank" line hid which songs actually did the work.
+ * Every contributing track gets its own line, grouped under the month it
+ * scored in.
+ */
+function ConstructorLog({ log, allTime }) {
+  if (!log.length) return <p className="note" style={{ padding: '6px 8px' }}>득점 기록이 없습니다.</p>;
+  return (
+    <div className="cxlog">
+      {log.map((m) => (
+        <div className="cxlog-month" key={`${m.year}-${m.month}`}>
+          <p className="cxlog-mo">{moLabel(m, allTime)}</p>
+          <ol className="gp-history result">
+            {m.tracks.map((t, i) => (
+              <li className="gph-row" key={i}>
+                <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>P{t.rank}</span>
+                <span className="gph-nm"><b>{t.track}</b></span>
+                <span className="gph-pt">{t.points}pt</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * One row of a championship — driver (track or artist) or constructor
  * (artist, in track mode). The same shape either way: a name, an optional
  * team line, and the season's tally. The left edge carries the artist's own
  * color, the same one the main dashboard uses — a driver and their team are
  * still, visually, that one artist.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allTime, open, onToggle }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allTime, open, onToggle, kind }) {
   return (
     <>
       <li
@@ -66,7 +95,9 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
       </li>
       {open && (
         <li className="gp-history-wrap">
-          <RaceLog log={log} allTime={allTime} />
+          {kind === 'constructor'
+            ? <ConstructorLog log={log} allTime={allTime} />
+            : <RaceLog log={log} allTime={allTime} />}
         </li>
       )}
     </>
@@ -74,27 +105,50 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
 }
 
 /**
- * One Grand Prix's full classification, revealed by clicking its line in the
- * race calendar — the calendar itself only ever names the winner, and "who
- * won" is a different, smaller question than "how did it actually go."
+ * One Grand Prix's full field, revealed by clicking its line in the race
+ * calendar — the calendar itself only ever names the winner, and "who won"
+ * is a different, smaller question than "how did everyone actually place."
+ * The season fetch only ever carries the point-scoring top ten, so this
+ * fetches the rest on demand rather than bloating every load with a detail
+ * almost nobody opens.
  */
-function GrandPrixResult({ m, allTime, mode }) {
-  const label = mode === 'tracks' ? '곡' : '가수';
+function GrandPrixResult({ year, month, mode, source, estimate }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const ctl = new AbortController();
+    const qs = new URLSearchParams({ mode, source, year: String(year), month: String(month) });
+    if (estimate) qs.set('estimate', '1');
+    fetch(`/api/season/month?${qs}`, { signal: ctl.signal })
+      .then((r) => r.json())
+      .then((j) => { if (j.error) throw new Error(j.error); setItems(j.items); })
+      .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
+    return () => ctl.abort();
+  }, [year, month, mode, source, estimate]);
+
   return (
     <li className="gp-history-wrap">
-      <ol className="gp-history result">
-        {m.top.map((t) => (
-          <li className="gph-row" key={rowKey(t)}>
-            <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>P{t.rank}</span>
-            <span className="gph-nm">
-              <b>{t.track ?? t.artist}</b>
-              {t.track && <span> · {t.artist}</span>}
-            </span>
-            <span className="gph-pt">{t.points}pt · {Number(t.plays).toLocaleString()}회</span>
-          </li>
-        ))}
-      </ol>
-      <p className="note" style={{ padding: '4px 8px 0' }}>{label} 기준 상위 {m.top.length}개</p>
+      {error && <p className="err" style={{ padding: '6px 8px' }}>{error}</p>}
+      {!error && !items && <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>}
+      {items && (
+        <ol className="gp-history result">
+          {items.map((t) => (
+            <li className="gph-row" key={rowKey(t)}>
+              <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>
+                {t.points > 0 ? `P${t.rank}` : t.rank}
+              </span>
+              <span className="gph-nm">
+                <b>{t.track ?? t.artist}</b>
+                {t.track && <span> · {t.artist}</span>}
+              </span>
+              <span className="gph-pt">
+                {t.points > 0 ? `${t.points}pt · ` : ''}{t.plays.toLocaleString()}회
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </li>
   );
 }
@@ -166,11 +220,11 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     for (const m of data.months) {
       const hits = m.top.filter((t) => t.artist === openConstructor);
       if (hits.length) {
-        // A constructor's month can be more than one charting track; the rank
-        // shown is its best, since there's no single "constructor rank" a
-        // race itself hands out.
-        const best = hits.reduce((a, b) => (b.rank < a.rank ? b : a));
-        log.push({ year: m.year, month: m.month, rank: best.rank, points: hits.reduce((s, h) => s + h.points, 0) });
+        log.push({
+          year: m.year, month: m.month,
+          tracks: [...hits].sort((a, b) => a.rank - b.rank)
+            .map((h) => ({ track: h.track ?? h.artist, rank: h.rank, points: h.points })),
+        });
       }
     }
     return log;
@@ -230,7 +284,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
               key={key} rank={i + 1}
               name={d.track ?? d.artist} sub={d.track ? d.artist : null}
               points={d.points} wins={d.wins} podiums={d.podiums}
-              color={artistColor(d.artist)}
+              color={artistColor(d.artist)} kind="driver"
               open={openDriver === key} log={driverLog} allTime={allTime}
               onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
             />
@@ -254,7 +308,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                 key={c.artist} rank={i + 1}
                 name={c.artist} sub={null}
                 points={c.points} wins={c.wins} podiums={c.podiums}
-                color={artistColor(c.artist)}
+                color={artistColor(c.artist)} kind="constructor"
                 open={openConstructor === c.artist} log={constructorLog} allTime={allTime}
                 onToggle={() => setOpenConstructor((a) => (a === c.artist ? null : c.artist))}
               />
@@ -288,7 +342,11 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                 <span className="gp-pt">{winner.points}pt · {Number(winner.plays).toLocaleString()}회</span>
                 <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
               </li>
-              {open && <GrandPrixResult m={m} allTime={allTime} mode={mode} />}
+              {open && (
+                <GrandPrixResult
+                  year={m.year} month={m.month} mode={mode} source={source} estimate={estimate}
+                />
+              )}
             </Fragment>
           );
         })}

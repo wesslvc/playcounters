@@ -384,6 +384,7 @@ export default function Dashboard() {
   const [covers, setCovers] = useState({});
   const [genres, setGenres] = useState({});
   const [calendar, setCalendar] = useState([]);
+  const calSrc = useRef(null);
   const [detail, setDetail] = useState(null);
   const [showTrend, setShowTrend] = useState(false);
   const [trendN, setTrendN] = useState(5);
@@ -485,9 +486,13 @@ export default function Dashboard() {
     if (viz !== 'count') qs.set('days', '1');
     if (estimate) qs.set('estimate', '1');
     if (prevFrom && prevTo) { qs.set('prevFrom', prevFrom); qs.set('prevTo', prevTo); }
+    // The calendar is the same whatever period is selected, so it's only
+    // asked for when this source's copy isn't already held.
+    if (calSrc.current !== src) qs.set('cal', '1');
     const res = await fetch(`/api/stats?${qs}`, { signal });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
+    if (json.calendar) calSrc.current = src;
     return json;
   }, [range, mode, src, viz, limit, estimate]);
 
@@ -523,6 +528,7 @@ export default function Dashboard() {
           : json.added ? `${json.added}곡 새로 가져왔습니다.`
             : '새로 들어온 기록이 없습니다.'
       );
+      calSrc.current = null; // new plays can mean a new day on the calendar
       setData(await fetchStats());
     } catch (e) {
       setSyncMsg(`갱신 실패: ${e.message}`);

@@ -39,6 +39,10 @@ export async function GET(req) {
   const prevFrom = q.get('prevFrom');
   const prevTo = q.get('prevTo');
   const wantPrev = Boolean(prevFrom && prevTo);
+  // The calendar covers all of history and never changes with the selected
+  // period, so the client asks for it once (and again when the source
+  // changes or after a sync) instead of on every period switch.
+  const wantCal = q.get('cal') === '1';
 
   const [items, daily, total, prev, prior, calendar, calibrated, user] = await Promise.all([
     rpcAll('top_items', {
@@ -68,7 +72,9 @@ export async function GET(req) {
     // Spans all of history regardless of the selected period, so this is the
     // one most likely of all to pass the cap — and a truncated year would
     // simply vanish from the picker with nothing on screen to say so.
-    rpcAll('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }, MAX_LIMIT),
+    wantCal
+      ? rpcAll('play_calendar', { p_user: userId, p_tz: TZ, p_source: src }, MAX_LIMIT)
+      : Promise.resolve({ data: null, error: null }),
     db.rpc('has_youtube_estimate', { p_user: userId }),
     db.from('users').select('display_name, avatar_url, last_synced_at').eq('id', userId).single(),
   ]);
@@ -93,7 +99,8 @@ export async function GET(req) {
     // Every day that holds plays, newest first. The year/month/day picker
     // derives its options from this, so it can never offer an empty date.
     // Independent of the selected period.
-    calendar: calendar.error ? [] : (calendar.data ?? []),
+    // null when not asked for, so the client keeps the one it already holds.
+    calendar: !wantCal ? null : calendar.error ? [] : (calendar.data ?? []),
     // Whether a Recap calibration exists, so the UI only offers the estimate
     // when there is something real behind it.
     calibrated: calibrated.error ? false : Boolean(calibrated.data),

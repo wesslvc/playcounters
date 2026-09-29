@@ -1,50 +1,50 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { normRowKey } from '@/lib/keys';
-import { rankByPlays, pointsForRank } from '@/lib/rank';
+import { pointsForRank } from '@/lib/rank';
+import { rpcAll } from '@/lib/rpcPage';
 
 export const dynamic = 'force-dynamic';
 
 const TZ = 'Asia/Seoul';
 const KST = 9 * 3600e3;
-/** A month's field of runners, generously sized: what matters is that the
-    real top 10 is never cut off, and a month is a small enough window that
-    this is cheap either way. */
-const MONTH_LIMIT = 200;
-
+/** Ten scoring rows a month, for a career of any realistic length. */
+const MAX_ROWS = 20000;
 /** Same KST-anchored month boundary the client's own range picker uses, so a
     Grand Prix here covers exactly the month the "월" picker would show. */
-const monthBounds = (y, m) => ({
-  from: new Date(Date.UTC(y, m - 1, 1) - KST).toISOString(),
-  to: new Date(Date.UTC(y, m, 1) - KST).toISOString(),
-});
+const monthStart = (y, m) => new Date(Date.UTC(y, m - 1, 1) - KST).toISOString();
 
 /**
- * One month's race, always on plays — a Grand Prix result has to be one
+ * Every month's race, always on plays — a Grand Prix result has to be one
  * fixed thing to be comparable across a season and across years, the way a
  * lap time is always seconds and never whichever unit a viewer prefers. The
  * ranked list elsewhere in the app can be sorted by days or minutes instead;
  * the championship is deliberately not one of the places that choice reaches.
+ *
+ * One query for the whole span rather than one per month: an all-time
+ * standings is a hundred-odd months, and a round trip apiece was most of
+ * what made this page slow. season_races does the month bucketing, the
+ * ranking (plays, then whoever got there later), and keeps only the top ten
+ * of each; all that's left here is attaching the points.
  */
-async function runGrandPrix(userId, y, m, mode, src, estimate) {
-  const { from, to } = monthBounds(y, m);
-  const { data, error } = await db.rpc('top_items', {
-    p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
-    p_limit: MONTH_LIMIT, p_source: src, p_days: false, p_estimate: estimate,
-  });
+async function runGrandPrix(userId, months, mode, src, estimate) {
+  const first = months[0];
+  const last = months[months.length - 1];
+  const { data, error } = await rpcAll('season_races', {
+    p_user: userId,
+    p_from: monthStart(first.y, first.m),
+    p_to: monthStart(last.y, last.m + 1),
+    p_mode: mode, p_tz: TZ, p_source: src, p_estimate: estimate,
+  }, MAX_ROWS);
   if (error) throw new Error(error.message);
 
-  const { rows, ranks } = rankByPlays(data ?? []);
-
-  const results = [];
-  for (let i = 0; i < rows.length; i++) {
-    const rank = ranks[i];
-    if (rank > 10) break; // ranks only rise from here — nothing past this scores
-    const points = pointsForRank(rank);
-    if (points <= 0) continue;
-    results.push({ ...rows[i], rank, points });
+  const byMonth = new Map();
+  for (const r of data) {
+    const key = `${r.yr}-${r.mo}`;
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push({ ...r, rank: r.place, points: pointsForRank(r.place) });
   }
-  return results;
+  return months.map(({ y, m }) => byMonth.get(`${y}-${m}`) ?? []);
 }
 
 /**
@@ -125,7 +125,7 @@ export async function GET(req) {
   try {
     ({ months, complete } = await racesToRun(userId, year));
     [races, calibrated] = await Promise.all([
-      Promise.all(months.map(({ y, m }) => runGrandPrix(userId, y, m, mode, src, estimate))),
+      months.length ? runGrandPrix(userId, months, mode, src, estimate) : [],
       db.rpc('has_youtube_estimate', { p_user: userId }),
     ]);
   } catch (e) {

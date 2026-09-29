@@ -562,6 +562,78 @@ as $$
   limit p_limit;
 $$;
 
+-- ---------- season races, all months in one pass ----------
+-- The championship used to call top_items once per month — an all-time
+-- standings is easily a hundred round trips, each shipping up to 200 rows
+-- of which ten scored. This buckets by month itself and keeps only each
+-- month's top ten, so the whole season is one query and about a thousand
+-- rows. Ordering matches the old per-month ranking: plays, then whoever
+-- reached that total later placing ahead (last_at desc).
+drop function if exists season_races(uuid, timestamptz, timestamptz, text, text, text, boolean);
+
+create or replace function season_races(
+  p_user uuid,
+  p_from timestamptz,
+  p_to   timestamptz,
+  p_mode text default 'tracks',
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (
+  yr       int,
+  mo       int,
+  place    int,
+  artist   text,
+  track    text,
+  plays    bigint,
+  last_at  timestamptz,
+  yt       boolean,
+  artist_key text,
+  track_key  text
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with g as (
+    select
+      extract(year  from p.played_at at time zone p_tz)::int as yr,
+      extract(month from p.played_at at time zone p_tz)::int as mo,
+      mode() within group (order by p.artist)              as artist,
+      case when p_mode = 'artists' then null
+           else mode() within group (order by p.track) end as track,
+      (case when p_estimate then round(sum(p.est_plays))
+            else count(*) end)::bigint                     as plays,
+      max(p.played_at)                                     as last_at,
+      bool_or(p.source = 'youtube')                        as yt,
+      p.artist_key                                         as artist_key,
+      case when p_mode = 'artists' then null else p.track_key end as track_key
+    from plays p
+    where p.user_id = p_user
+      and p.played_at >= p_from
+      and p.played_at <  p_to
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2, p.artist_key,
+             case when p_mode = 'artists' then null else p.track_key end
+  ),
+  ranked as (
+    select g.*,
+           rank() over (partition by g.yr, g.mo
+                        order by g.plays desc, g.last_at desc)::int as place
+    from g
+  )
+  select r.yr, r.mo, r.place, r.artist, r.track, r.plays, r.last_at, r.yt,
+         r.artist_key, r.track_key
+  from ranked r
+  where r.place <= 10
+  -- Fully ordered, ties included, because the API pages through this with
+  -- range requests and needs the same arrangement on every call.
+  order by r.yr, r.mo, r.place, r.artist_key, r.track_key;
+$$;
+
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as
 -- anyone passes the cap. This counts the real thing.

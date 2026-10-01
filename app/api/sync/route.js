@@ -6,12 +6,11 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Called every 30 minutes by GitHub Actions with:
+ * Called every 5 minutes by GitHub Actions with:
  *   Authorization: Bearer $CRON_SECRET
  *
  * Spotify only remembers a listener's last 50 plays, so the polling interval
- * is what decides whether anything is lost. 30 minutes covers roughly 100
- * tracks/hour of listening — heavier than anyone actually listens.
+ * is what decides whether anything is lost — and how fresh the numbers are.
  */
 export async function GET(req) {
   const auth = req.headers.get('authorization');

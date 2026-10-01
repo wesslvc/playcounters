@@ -6,7 +6,7 @@ name: Sync Spotify plays
 # here and just calls the same endpoint.
 on:
   schedule:
-    - cron: '*/30 * * * *'   # every 30 minutes, UTC
+    - cron: '*/5 * * * *'    # every 5 minutes (GitHub's minimum); free on a public repo
   workflow_dispatch:          # lets you trigger a run by hand from the Actions tab
 
 jobs:

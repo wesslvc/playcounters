@@ -139,7 +139,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
  * so it reads as a running order with no points attached yet.
  */
 function GrandPrixResult({ year, month, mode, source, estimate, live }) {
-  const [items, setItems] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -148,14 +148,18 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
     if (estimate) qs.set('estimate', '1');
     fetch(`/api/season/month?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
-      .then((j) => { if (j.error) throw new Error(j.error); setItems(j.items); })
+      .then((j) => { if (j.error) throw new Error(j.error); setDetail(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
   }, [year, month, mode, source, estimate]);
 
   if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
-  if (!items) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
+  if (!detail) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
+  const { items, leaders, days } = detail;
   return (
+    <>
+    {leaders?.length > 0 && <RaceLeaders stints={leaders} days={days} live={live} />}
+    <p className="gp-sub">{live ? '현재 순위' : '최종 순위'}</p>
     <ol className="gp-history result">
       {items.map((t) => (
         <li className="gph-row" key={rowKey(t)}>
@@ -172,6 +176,72 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
         </li>
       ))}
     </ol>
+    </>
+  );
+}
+
+/**
+ * Who led the month's running total, day by day — a Grand Prix's lap-leader
+ * chart. The strip shows every spell at the front across the month in the
+ * leader's color; the list under it reads the same thing as text, with the
+ * margin each leader held at the end of their spell.
+ */
+function RaceLeaders({ stints, days, live }) {
+  const changes = stints.length - 1;
+  const span = stints[stints.length - 1].to - stints[0].from + 1;
+  const most = new Map();
+  for (const st of stints) most.set(st.key, (most.get(st.key) ?? 0) + (st.to - st.from + 1));
+  return (
+    <div className="leaders-box">
+      <div className="leaders-top">
+        <b>레이스 리더</b>
+        <span>{changes ? `선두 교체 ${changes}회` : '처음부터 끝까지 선두'}</span>
+      </div>
+      <div className="lead-strip" role="img" aria-label="날짜별 선두">
+        {stints.map((st) => (
+          <i
+            key={`${st.key}-${st.from}`}
+            title={`${st.from}일–${st.to}일 · ${st.track ?? st.artist}`}
+            style={{ flexGrow: st.to - st.from + 1, background: artistColor(st.artist) }}
+          />
+        ))}
+        {live && stints[stints.length - 1].to < days && (
+          <i className="lead-rest" style={{ flexGrow: days - stints[stints.length - 1].to }} />
+        )}
+      </div>
+      <div className="lead-axis">
+        <span>{stints[0].from}일</span>
+        <span>{live ? '오늘' : `${days}일`}</span>
+      </div>
+      <ol className="lead-list">
+        {stints.map((st) => {
+          const n = st.to - st.from + 1;
+          return (
+            <li key={`${st.key}-${st.from}`}>
+              <span className="lead-days">
+                {st.from === st.to ? `${st.from}일` : `${st.from}–${st.to}일`}
+              </span>
+              <span className="lead-nm" style={{ borderLeftColor: artistColor(st.artist) }}>
+                <b>{st.track ?? st.artist}</b>
+                {st.track && <span>{st.artist}</span>}
+              </span>
+              <span className="lead-n">
+                {n}일{st.gap != null && st.gap > 0 ? ` · +${Math.round(st.gap)}회` : ''}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {span > 0 && most.size > 1 && (
+        <p className="lead-note">
+          {(() => {
+            const [k, n] = [...most].sort((a, b) => b[1] - a[1])[0];
+            const st = stints.find((x) => x.key === k);
+            return `최장 선두 · ${st.track ?? st.artist} ${n}일`;
+          })()}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -367,6 +367,9 @@ function Recap({ rows, ranks, daily, prevRank, prevComplete, sort, unit, isEst, 
   );
 }
 
+/** How stale the last sync can be before opening the page triggers one. */
+const AUTO_SYNC_AFTER_MS = 2 * 60 * 1000;
+
 export default function Dashboard() {
   const [sel, setSel] = useState(null);          // null = all time
   const [mode, setMode] = useState('tracks');
@@ -515,14 +518,22 @@ export default function Dashboard() {
     return () => ctl.abort();
   }, [fetchStats, limit]);
 
-  /** Pull straight from Spotify, then redraw — doesn't wait for the 30-minute cron. */
-  async function refresh() {
+  /** Pull straight from Spotify, then redraw — doesn't wait for the cron.
+      `quiet` is the automatic sync on open: it only speaks up when it
+      actually brought something in, and skips the redraw when it didn't. */
+  async function refresh({ quiet = false } = {}) {
     setSyncing(true);
-    setSyncMsg(null);
+    if (!quiet) setSyncMsg(null);
     try {
       const res = await fetch('/api/sync/me', { method: 'POST' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      if (quiet && !json.added) {
+        if (json.last_synced_at) {
+          setData((d) => d && ({ ...d, user: { ...d.user, last_synced_at: json.last_synced_at } }));
+        }
+        return;
+      }
       setSyncMsg(
         json.cooled ? '방금 갱신했습니다. 잠시 후 다시 눌러 주세요.'
           : json.added ? `${json.added}곡 새로 가져왔습니다.`
@@ -531,11 +542,23 @@ export default function Dashboard() {
       calSrc.current = null; // new plays can mean a new day on the calendar
       setData(await fetchStats());
     } catch (e) {
-      setSyncMsg(`갱신 실패: ${e.message}`);
+      if (!quiet) setSyncMsg(`갱신 실패: ${e.message}`);
     } finally {
       setSyncing(false);
     }
   }
+
+  // Opening the page catches up on its own if the last sync is more than a
+  // couple of minutes old, so what's on screen is current without waiting
+  // for the next scheduled run or pressing 지금 갱신.
+  const autoSynced = useRef(false);
+  useEffect(() => {
+    const at = data?.user?.last_synced_at;
+    if (autoSynced.current || !data) return;
+    autoSynced.current = true;
+    if (!at || Date.now() - new Date(at).getTime() > AUTO_SYNC_AFTER_MS) refresh({ quiet: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const cmp = useCallback(
     (a, b) => Number(b[sort]) - Number(a[sort]) || Number(b.plays) - Number(a.plays),
@@ -707,7 +730,7 @@ export default function Dashboard() {
         <a className="pill" href="/" aria-current="page">홈</a>
         <a className="pill" href="/import">가져오기</a>
         <a className="pill" href="/championship">챔피언십</a>
-        <button className="pill act" onClick={refresh} disabled={syncing}>
+        <button className="pill act" onClick={() => refresh()} disabled={syncing}>
           {syncing ? '갱신 중…' : '지금 갱신'}
         </button>
         <button className="pill" onClick={toggleTheme} aria-label="화면 밝기 전환">

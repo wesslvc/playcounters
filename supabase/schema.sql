@@ -634,6 +634,75 @@ as $$
   order by r.yr, r.mo, r.place, r.artist_key, r.track_key;
 $$;
 
+-- ---------- race leader, day by day ----------
+-- Who led a month's running total at the end of each day it had plays —
+-- the Grand Prix's lap-leader chart. Same tie rule as the race result:
+-- equal totals go to whoever reached that total later. One row per day
+-- with plays; a day without plays keeps the previous day's leader.
+drop function if exists month_leaders(uuid, timestamptz, timestamptz, text, text, text, boolean);
+
+create or replace function month_leaders(
+  p_user uuid,
+  p_from timestamptz,
+  p_to   timestamptz,
+  p_mode text default 'tracks',
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (
+  day        date,
+  artist_key text,
+  track_key  text,
+  plays      numeric,
+  runner_up  numeric
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with d as (
+    select
+      (p.played_at at time zone p_tz)::date                       as day,
+      p.artist_key                                                as ak,
+      case when p_mode = 'artists' then null else p.track_key end as tk,
+      (case when p_estimate then sum(p.est_plays)
+            else count(*) end)::numeric                           as plays,
+      max(p.played_at)                                            as last_at
+    from plays p
+    where p.user_id = p_user
+      and p.played_at >= p_from
+      and p.played_at <  p_to
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2, 3
+  ),
+  c as (
+    select day, ak, tk,
+           sum(plays) over w     as cum,
+           max(last_at) over w   as last_at
+    from d
+    window w as (partition by ak, tk order by day)
+  ),
+  days as (select distinct day from d)
+  select dd.day, l.ak, l.tk, l.cum, l.second
+  from days dd
+  cross join lateral (
+    select x.ak, x.tk, x.cum,
+           lead(x.cum) over (order by x.cum desc, x.last_at desc, x.ak, x.tk) as second
+    from (
+      select distinct on (c.ak, c.tk) c.ak, c.tk, c.cum, c.last_at
+      from c
+      where c.day <= dd.day
+      order by c.ak, c.tk, c.day desc
+    ) x
+    order by x.cum desc, x.last_at desc, x.ak, x.tk
+    limit 1
+  ) l
+  order by dd.day;
+$$;
+
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as
 -- anyone passes the cap. This counts the real thing.

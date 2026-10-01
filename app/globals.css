@@ -706,21 +706,63 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 .gp-history.result { grid-template-columns:40px 1fr auto }
 .gph-row {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
-  align-items:baseline; padding:5px 2px; font-size:12.5px; border-bottom:1px solid var(--hair);
+  align-items:baseline; padding:6px 2px; font-size:13px; border-bottom:1px solid var(--hair);
 }
 .gph-row:last-child { border-bottom:none }
-.gph-mo { color:var(--faint); font-size:11px }
+.gph-mo { color:var(--mute); font-size:12px }
+/* Every finishing position reads clearly; the podium three keep their
+   medal tones here, inside a race's own record, where they mean a result. */
 .gph-rk {
-  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:12px;
-  color:var(--mute);
+  font-family:"Titillium Web",sans-serif; font-weight:800; font-size:13.5px;
+  color:var(--ink);
 }
-.gph-rk[data-tier="1"] { color:var(--ink) }
+.gph-rk[data-tier="1"] { color:var(--gold); font-weight:900 }
+.gph-rk[data-tier="2"] { color:var(--silver); font-weight:900 }
+.gph-rk[data-tier="3"] { color:var(--bronze); font-weight:900 }
 .gph-nm { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .gph-nm b { font-weight:600 }
 .gph-nm span { color:var(--mute) }
 .gph-pt {
   font-family:"Titillium Web",sans-serif; font-weight:700; font-size:12px;
   text-align:right; justify-self:end; white-space:nowrap;
+}
+
+/* Race leader: the month's lead, day by day, as a strip and a list. */
+.leaders-box {
+  background:var(--sunk); border-radius:10px; padding:12px 12px 10px; margin:0 0 8px;
+}
+.leaders-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:8px }
+.leaders-top b {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:900; font-size:14px;
+}
+.leaders-top span { font-size:11.5px; color:var(--mute); font-weight:600 }
+.lead-strip { display:flex; gap:2px; height:12px }
+.lead-strip i { display:block; flex-basis:0; min-width:3px; border-radius:2px }
+.lead-strip i.lead-rest {
+  background:repeating-linear-gradient(135deg, var(--line) 0 3px, transparent 3px 6px);
+}
+.lead-axis {
+  display:flex; justify-content:space-between; font-size:10.5px; color:var(--faint); padding:3px 0 6px;
+}
+.lead-list { list-style:none; display:grid; grid-template-columns:58px 1fr auto; gap:0 10px }
+.lead-list li {
+  display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center;
+  padding:6px 0; border-top:1px solid var(--hair);
+}
+.lead-days {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:700; font-size:12.5px;
+}
+.lead-nm { min-width:0; border-left:3px solid transparent; padding-left:8px }
+.lead-nm b { display:block; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.lead-nm span { display:block; font-size:11px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.lead-n {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:700; font-size:12px;
+  color:var(--mute); white-space:nowrap;
+}
+.lead-note { font-size:11.5px; color:var(--mute); padding-top:6px; border-top:1px solid var(--hair) }
+.gp-sub {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:900; font-size:14px;
+  padding:4px 2px 6px;
 }
 
 .cxlog-month { margin:0 0 8px }

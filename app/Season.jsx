@@ -292,9 +292,24 @@ function LeaderCard({ tag, name, sub, points, wins, color }) {
  * but it scores nothing until the month is over, the same way a Grand Prix
  * pays out at the chequered flag and not from the middle of the race.
  */
-function LiveRace({ m, round, allTime, mode, source, estimate }) {
+function LiveRace({ m, round, allTime, mode, source, estimate, drivers, constructors }) {
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState('drivers');
   const top = m.top.slice(0, 3);
+  const projected = useMemo(
+    () => ({
+      drivers: projectStandings(drivers, m.top, normRowKey, (t) => ({
+        artist: t.artist, track: t.track ?? null, artist_key: t.artist_key, track_key: t.track_key ?? null,
+      })),
+      constructors: constructors && projectStandings(constructors, m.top, (t) => t.artist_key, (t) => ({
+        artist: t.artist, artist_key: t.artist_key,
+      })),
+    }),
+    [m, drivers, constructors],
+  );
+  const activeKind = kind === 'constructors' && projected.constructors ? 'constructors' : 'drivers';
+  const rows = projected[activeKind];
+
   return (
     <div className="live-card">
       <div className="live-head">
@@ -323,8 +338,73 @@ function LiveRace({ m, round, allTime, mode, source, estimate }) {
       {open && (
         <GrandPrixResult year={m.year} month={m.month} mode={mode} source={source} estimate={estimate} live />
       )}
+
+      <div className="proj">
+        <div className="proj-top">
+          <b>이대로 끝나면</b>
+          <span>챔피언십 TOP 10 · 지금 순위 대비</span>
+        </div>
+        {projected.constructors && (
+          <div className="f1-tabs" role="tablist">
+            <button role="tab" aria-selected={activeKind === 'drivers'} onClick={() => setKind('drivers')}>드라이버</button>
+            <button role="tab" aria-selected={activeKind === 'constructors'} onClick={() => setKind('constructors')}>컨스트럭터</button>
+          </div>
+        )}
+        <ol className="proj-list">
+          {rows.slice(0, 10).map((r) => (
+            <li key={r.key}>
+              <span className="proj-pos">{r.pos}</span>
+              <Move from={r.prevPos} to={r.pos} />
+              <span className="proj-nm" style={{ borderLeftColor: artistColor(r.artist) }}>
+                <b>{r.track ?? r.artist}</b>
+                {r.track && <span>{r.artist}</span>}
+              </span>
+              <span className="proj-pts">
+                {r.points.toLocaleString()}
+                {r.gained > 0 && <em>+{r.gained}</em>}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   );
+}
+
+/** The ▲/▼ beside a projected position — or NEW for someone not yet in the standings at all. */
+function Move({ from, to }) {
+  if (from == null) return <span className="mv new">NEW</span>;
+  const d = from - to;
+  if (!d) return <span className="mv same">–</span>;
+  return <span className={`mv ${d > 0 ? 'up' : 'down'}`}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>;
+}
+
+/**
+ * The championship as it would stand if the month still under way finished
+ * exactly as it is now: today's standings plus this month's provisional
+ * points, wins and podiums, re-sorted with the same tie rule the real
+ * standings use (points, then wins, then podiums). Each row carries where it
+ * sits today, so the move can be shown.
+ */
+function projectStandings(current, liveTop, keyOf, fieldsOf) {
+  const rows = new Map(current.map((c, i) => [keyOf(c), {
+    ...c, key: keyOf(c), prevPos: i + 1, gained: 0,
+  }]));
+  for (const t of liveTop) {
+    const k = keyOf(t);
+    const r = rows.get(k) ?? {
+      ...fieldsOf(t), key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0,
+    };
+    r.points += t.points;
+    r.gained += t.points;
+    if (t.rank === 1) r.wins += 1;
+    if (t.rank <= 3) r.podiums += 1;
+    rows.set(k, r);
+  }
+  const sorted = [...rows.values()].sort((a, b) =>
+    b.points - a.points || b.wins - a.wins || b.podiums - a.podiums
+    || a.artist.localeCompare(b.artist));
+  return sorted.map((r, i) => ({ ...r, pos: i + 1 }));
 }
 
 /**
@@ -646,6 +726,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
         <LiveRace
           m={liveRace} round={liveRace.round} allTime={allTime}
           mode={mode} source={source} estimate={estimate}
+          drivers={drivers} constructors={constructors}
         />
       )}
 

@@ -473,60 +473,152 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 
 /* ---------- season ----------
-   The one place in the app that leans fully into F1 broadcast styling
-   rather than the calm, achromatic chrome everywhere else — a championship
-   is meant to read as a big deal, and a plain muted card was reading as
-   just another stat tile. Standings rows drop the cover-art column the
-   ranked list has — a championship table is text, not artwork — and reuse
-   .rk's tier coloring for 1st/2nd/3rd, same gold/silver/bronze as everywhere
-   else rank appears. */
-.season { padding-top:2px }
+   Set in the manner of the F1 site rather than dressed up as racing: the
+   app's neutral chrome stays, and the F1 language comes from typography
+   and structure — heavy Titillium numerals and headings, the thin rule
+   that runs along the top of a section and turns down its right side,
+   team-color bars beside names, red kept for exactly one thing (a race
+   that is live right now). No medal-tinted rows, no flag wallpaper. */
+:root { --f1:#E10600 }
+:root[data-theme="dark"] { --f1:#FF2A1F }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --f1:#FF2A1F } }
 
-/* The champion card: deliberately dark in both themes, like a timing-tower
-   graphic that doesn't change with the room lighting, with a checkered
-   strip along the top standing in for a real flag rather than the racing
-   stripe the rest of the app dropped. */
-.season-hero {
-  position:relative; overflow:hidden; border-radius:18px;
-  padding:22px 20px 22px; margin:0 0 20px; color:#fff;
-  background:linear-gradient(155deg, #100e14 0%, #22131a 55%, #431019 100%);
-  box-shadow:0 14px 32px -14px rgba(0,0,0,.55);
+.f1-page { padding:26px 0 22px }
+.f1-kicker {
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:11.5px;
+  letter-spacing:.18em; text-transform:uppercase; color:var(--f1); margin-bottom:6px;
 }
-.season-hero::before {
-  content:''; position:absolute; top:0; left:0; right:0; height:6px;
-  background-color:#0a0a0c;
-  background-image:
-    linear-gradient(45deg, #fff 25%, transparent 25%),
-    linear-gradient(-45deg, #fff 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #fff 75%),
-    linear-gradient(-45deg, transparent 75%, #fff 75%);
-  background-size:12px 12px;
-  background-position:0 0, 0 6px, 6px -6px, -6px 0;
+.f1-title {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:900;
+  font-size:clamp(30px,7.6vw,44px); line-height:1.08; letter-spacing:-.02em;
+  margin-bottom:12px;
 }
-.season-hero .recap-title {
-  color:rgba(255,255,255,.55); margin:8px 0 16px;
-  font-family:"Titillium Web",sans-serif; font-weight:700; letter-spacing:.1em;
-}
-.season-hero .recap-tile span { color:rgba(255,255,255,.5) }
-.season-hero .recap-tile b {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-style:italic;
-  font-size:20px; color:var(--gold); letter-spacing:-.01em; line-height:1.25;
-}
-.season-hero .recap-tile em { color:rgba(255,255,255,.8); font-weight:700 }
+.f1-title span { font-weight:400 }
+.f1-lede { font-size:13px; color:var(--mute); max-width:46em }
 
-/* The season's own trend chart — a plain cumulative-points line by default,
-   or (F1 broadcast-style) each driver's actual race-by-race finishing
-   position on an inverted P1-at-top scale. Built the same way .trend is:
-   inline SVG, no charting library, colored by artist so a line here is the
-   same color as that artist everywhere else in the app. */
-.season-chart { margin:4px 0 22px }
-.chart-head {
-  display:flex; align-items:center; justify-content:space-between;
-  flex-wrap:wrap; gap:8px 14px; margin-bottom:2px;
+.season { padding-top:6px }
+
+.season-status {
+  display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center;
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:700;
+  font-size:12px; letter-spacing:.04em; color:var(--mute); margin:0 0 12px;
 }
-.chart-head .legend { margin:0 }
+.season-status span + span::before {
+  content:''; display:inline-block; width:3px; height:3px; border-radius:50%;
+  background:var(--faint); margin-right:14px; vertical-align:middle;
+}
+.season-status .done { color:var(--ink) }
+.season-status .on { color:var(--f1) }
+
+/* The section rule: along the top, rounded down the right — the F1 site's
+   own signature frame for headings and cards. */
+.f1-head {
+  display:flex; justify-content:space-between; align-items:flex-end; gap:10px 14px;
+  flex-wrap:wrap; margin:34px 0 14px; padding:10px 14px 0 0;
+  border-top:2px solid var(--ink); border-right:2px solid var(--ink);
+  border-top-right-radius:14px;
+}
+.f1-head h2 {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:900;
+  font-size:21px; letter-spacing:-.01em; line-height:1.2;
+}
+.f1-head p { font-size:11.5px; color:var(--faint); margin-top:2px }
+
+/* Leader / champion cards: same frame as a heading, in the artist's color,
+   with the position as an oversized numeral behind the name. */
+.leaders { display:grid; grid-template-columns:1fr 1fr; gap:12px }
+.leader {
+  position:relative; overflow:hidden; min-width:0;
+  display:flex; flex-direction:column; padding:14px 16px 14px 0;
+  background:linear-gradient(90deg, transparent 55%, color-mix(in srgb, var(--team) 9%, transparent));
+  border-top:3px solid var(--team); border-right:3px solid var(--team);
+  border-top-right-radius:16px;
+}
+.leader-tag {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:700;
+  font-size:11px; letter-spacing:.06em; color:var(--mute); margin-bottom:10px;
+}
+.leader-pos {
+  position:absolute; right:12px; top:4px; pointer-events:none;
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:76px; line-height:1;
+  color:var(--team); opacity:.16;
+}
+.leader-name {
+  position:relative; font-family:"Titillium Web","IBM Plex Sans KR",sans-serif;
+  font-weight:900; font-size:21px; line-height:1.2; letter-spacing:-.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.leader-sub {
+  font-size:12px; color:var(--mute); margin-top:1px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.leader-pts {
+  display:flex; align-items:baseline; gap:4px; margin-top:12px;
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:28px; line-height:1;
+}
+.leader-pts small { font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--mute) }
+.leader-pts em {
+  font-style:normal; font-family:"IBM Plex Sans KR",sans-serif; font-weight:600;
+  font-size:12px; color:var(--mute); margin-left:auto;
+}
+
+/* The race under way this month — the one place red is used. */
+.live-card {
+  margin:16px 0 0; padding:14px 16px 12px; border-radius:14px;
+  background:var(--card); border:1px solid var(--line);
+  position:relative; overflow:hidden;
+}
+.live-card::before {
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--f1);
+}
+.live-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px }
+.live-head b {
+  font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:900; font-size:17px;
+}
+.live-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  background:var(--f1); color:#fff; border-radius:4px; padding:2px 7px 2px 6px;
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:11px; letter-spacing:.1em;
+}
+.live-badge i { width:6px; height:6px; border-radius:50%; background:#fff; animation:livepulse 1.6s ease-in-out infinite }
+@keyframes livepulse { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+.live-round {
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:11.5px;
+  letter-spacing:.12em; color:var(--mute);
+}
+.live-top { display:grid; grid-template-columns:22px 1fr auto; gap:0 10px }
+.live-top li {
+  display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center;
+  padding:7px 0; border-bottom:1px solid var(--hair);
+}
+.live-pos { font-family:"Titillium Web",sans-serif; font-weight:900; font-size:16px }
+.live-nm { min-width:0; border-left:3px solid var(--team); padding-left:9px }
+.live-nm b { display:block; font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.live-nm span { display:block; font-size:11.5px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.live-plays { font-family:"Titillium Web",sans-serif; font-weight:700; font-size:13px; color:var(--mute) }
+.live-foot {
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding-top:9px; font-size:11.5px; color:var(--faint);
+}
+.live-card .gp-history { margin:10px 0 0 }
+.linkish {
+  font:inherit; font-size:12px; font-weight:600; color:var(--ink);
+  background:none; border:none; cursor:pointer; padding:2px 0;
+  border-bottom:1px solid var(--line);
+}
+.linkish:hover { border-bottom-color:var(--ink) }
+
+/* Season chart: inline SVG, colored by artist like everywhere else. */
 .chart-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
 .seg { display:flex; gap:4px }
+.f1-tabs { display:flex; gap:22px; border-bottom:1px solid var(--line); margin:0 0 6px }
+.f1-tabs button {
+  font:inherit; font-size:13.5px; font-weight:600; color:var(--mute);
+  background:none; border:none; cursor:pointer; padding:6px 0 9px; margin-bottom:-1px;
+  border-bottom:3px solid transparent;
+}
+.f1-tabs button[aria-selected=true] { color:var(--ink); border-bottom-color:var(--f1) }
+.f1-tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
 .chart-wrap { position:relative; padding:8px 0 4px }
 .chart-svg { width:100%; height:206px; display:block; overflow:visible }
 .chart-grid { stroke:var(--hair); stroke-width:1 }
@@ -538,13 +630,11 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   display:flex; justify-content:space-between;
   font-size:10.5px; color:var(--faint); padding:4px 2px 0 28px;
 }
-/* The hover tooltip: anchored to the crosshair's x position, flipped near
-   either edge so it never runs off the card. */
 .chart-tip {
   position:absolute; top:6px; transform:translateX(-50%);
-  background:var(--paper); border:1px solid var(--line); border-radius:10px;
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
   padding:8px 10px; font-size:11.5px; min-width:120px; pointer-events:none;
-  box-shadow:0 8px 20px -10px rgba(0,0,0,.35); z-index:2;
+  box-shadow:0 8px 20px -10px var(--shadow-lg); z-index:2;
 }
 .chart-tip.tip-start { transform:translateX(0) }
 .chart-tip.tip-end { transform:translateX(-100%) }
@@ -559,39 +649,34 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .chart-key { list-style:none; display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px }
 .chart-key li { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--mute) }
-.chart-key i { width:9px; height:9px; border-radius:50%; flex:0 0 auto }
+.chart-key i { width:9px; height:9px; border-radius:2px; flex:0 0 auto }
 
+/* Standings: a plain results table, the way the F1 site prints one —
+   position, a team-color bar, the name, points, then wins and podiums. */
 .season-list {
   list-style:none; margin-bottom:6px;
-  /* One shared grid for the whole table, not one per row — a plain numeric
-     table (rank, name, points, wins, podiums) only reads as a table if the
-     numbers actually line up in columns; subgrid is what makes that true
-     across every row instead of each one sizing itself. */
-  display:grid; grid-template-columns:26px 1fr 46px 34px 42px 12px; gap:0 8px;
+  display:grid; grid-template-columns:28px 1fr 50px 34px 42px 12px; gap:0 8px;
+  border-top:1px solid var(--line);
 }
-/* The header printed once above the table — after this, a row is nothing
-   but its own numbers, no icon has to carry what a heading already said. */
 .season-cols {
-  display:grid; grid-template-columns:26px 1fr 46px 34px 42px 12px; gap:0 8px;
-  padding:0 6px 6px; font-size:10.5px; color:var(--faint); font-weight:700;
-  letter-spacing:.02em;
+  display:grid; grid-template-columns:28px 1fr 50px 34px 42px 12px; gap:0 8px;
+  padding:0 6px 7px; font-size:10.5px; color:var(--faint); font-weight:700;
+  letter-spacing:.04em;
 }
 .season-cols span:nth-child(3),
 .season-cols span:nth-child(4),
 .season-cols span:nth-child(5) { text-align:right }
 .season-row {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
-  align-items:center; padding:11px 6px; border-radius:10px;
+  align-items:center; padding:11px 6px; border-bottom:1px solid var(--hair);
   cursor:pointer; transition:background .12s;
 }
 .season-row:hover { background:var(--sunk) }
-.season-row[data-tier="1"] { background:rgba(232,185,60,.14) }
-.season-row[data-tier="2"] { background:rgba(185,190,204,.14) }
-.season-row[data-tier="3"] { background:rgba(208,138,82,.12) }
-.season-row:not([data-tier]) { border-bottom:1px solid var(--hair) }
-.season-row .nm3 {
-  min-width:0; border-left:3px solid transparent; padding-left:10px;
+.season-row .pos {
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:17px; line-height:1;
 }
+.season-row[data-leader] .pos { color:var(--ink) }
+.season-row .nm3 { min-width:0; border-left:4px solid transparent; border-radius:1px; padding-left:10px }
 .season-row .nm3 b {
   display:block; font-weight:700; font-size:14.5px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -610,16 +695,14 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .season-row .chev { color:var(--faint); font-size:11px; justify-self:end }
 
-/* A row's own race-by-race record (month, finish, points), or one race's
-   full classification (finish, name, points) — same nested-panel look,
-   different column shape, picked by a modifier class. */
-.gp-history-wrap { list-style:none; grid-column:1 / -1; margin:-2px 0 6px }
+/* A row's own race-by-race record, or one race's full classification. */
+.gp-history-wrap { list-style:none; grid-column:1 / -1; margin:6px 0 8px }
 .gp-history {
   list-style:none; background:var(--sunk); border-radius:10px;
   padding:6px 12px; margin:0 0 8px;
   display:grid; gap:0 10px;
 }
-.gp-history.log { grid-template-columns:52px 40px 1fr }
+.gp-history.log { grid-template-columns:58px 40px 1fr }
 .gp-history.result { grid-template-columns:40px 1fr auto }
 .gph-row {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
@@ -631,9 +714,7 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   font-family:"Titillium Web",sans-serif; font-weight:800; font-size:12px;
   color:var(--mute);
 }
-.gph-rk[data-tier="1"] { color:var(--gold) }
-.gph-rk[data-tier="2"] { color:var(--silver) }
-.gph-rk[data-tier="3"] { color:var(--bronze) }
+.gph-rk[data-tier="1"] { color:var(--ink) }
 .gph-nm { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .gph-nm b { font-weight:600 }
 .gph-nm span { color:var(--mute) }
@@ -642,33 +723,44 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   text-align:right; justify-self:end; white-space:nowrap;
 }
 
-/* A constructor's month can hold more than one charting track, so its log
-   groups them under a month heading rather than collapsing to one line. */
 .cxlog-month { margin:0 0 8px }
 .cxlog-month:last-child { margin-bottom:0 }
-.cxlog-mo {
-  font-size:11px; color:var(--faint); font-weight:600;
-  padding:4px 12px 2px;
-}
+.cxlog-mo { font-size:11px; color:var(--faint); font-weight:600; padding:4px 12px 2px }
 .cxlog-month .gp-history { margin:0 }
 
-/* The race calendar: one line per month, its winner named, clickable open
-   to the full result — the season read as a timeline, not only a table. */
-.gp-cal {
-  list-style:none;
-  display:grid; grid-template-columns:52px 1fr auto 14px; gap:0 10px;
+/* Race results: round, Grand Prix, winner, plays — newest first, each one
+   opening to that race's full classification. */
+.gp-cols, .gp-cal { grid-template-columns:54px 60px 1fr auto 12px; gap:0 10px }
+.gp-cols {
+  display:grid; padding:0 6px 7px; font-size:10.5px; color:var(--faint);
+  font-weight:700; letter-spacing:.04em;
 }
+.gp-cols span:nth-child(4) { text-align:right }
+.gp-cal { list-style:none; display:grid; border-top:1px solid var(--line) }
 .gp-cal-row {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
-  align-items:baseline; padding:8px 6px; border-bottom:1px solid var(--hair);
-  font-size:13px; cursor:pointer; border-radius:8px;
+  align-items:center; padding:10px 6px; border-bottom:1px solid var(--hair);
+  font-size:13px; cursor:pointer;
 }
 .gp-cal-row:hover { background:var(--sunk) }
-.gp-mo { color:var(--faint); font-size:11.5px }
-.gp-nm { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.gp-rd {
+  display:flex; align-items:center; gap:6px;
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:12.5px; color:var(--mute);
+}
+.chq { width:12px; height:12px; flex:0 0 auto }
+.gp-mo { font-weight:700; font-size:13px }
+.gp-nm { min-width:0; border-left:3px solid transparent; padding-left:9px }
+.gp-nm b { display:block; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.gp-nm span { display:block; font-size:11.5px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .gp-pt {
-  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:12.5px;
-  color:var(--mute);
+  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:13px;
+  color:var(--mute); text-align:right;
+}
+.gp-cal-row .chev { color:var(--faint); font-size:11px; justify-self:end }
+
+@media (max-width:480px) {
+  .leaders { grid-template-columns:1fr }
+  .gp-cols, .gp-cal { grid-template-columns:44px 52px 1fr auto 10px; gap:0 8px }
 }
 
 @media (max-width:420px) {

@@ -102,12 +102,12 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
   return (
     <>
       <li
-        className="season-row" data-tier={rank <= 3 ? rank : undefined}
+        className="season-row" data-leader={rank === 1 || undefined}
         role="button" tabIndex={0} aria-expanded={open}
         onClick={onToggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
       >
-        <div className="rk" data-tier={rank <= 3 ? rank : undefined}>{rank}</div>
+        <div className="pos">{rank}</div>
         <div className="nm3" style={{ borderLeftColor: color }}>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
@@ -129,14 +129,16 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
 }
 
 /**
- * One Grand Prix's full field, revealed by clicking its line in the race
- * calendar — the calendar itself only ever names the winner, and "who won"
- * is a different, smaller question than "how did everyone actually place."
- * The season fetch only ever carries the point-scoring top ten, so this
- * fetches the rest on demand rather than bloating every load with a detail
- * almost nobody opens.
+ * One Grand Prix's full field, revealed on demand — the calendar itself only
+ * names the winner, and "who won" is a different, smaller question than
+ * "how did everyone actually place." The season fetch only carries the
+ * point-scoring top ten, so this fetches the rest when opened rather than
+ * bloating every load with a detail almost nobody opens.
+ *
+ * `live` is the month still under way: the order is real but provisional,
+ * so it reads as a running order with no points attached yet.
  */
-function GrandPrixResult({ year, month, mode, source, estimate }) {
+function GrandPrixResult({ year, month, mode, source, estimate, live }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
 
@@ -151,29 +153,107 @@ function GrandPrixResult({ year, month, mode, source, estimate }) {
     return () => ctl.abort();
   }, [year, month, mode, source, estimate]);
 
+  if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
+  if (!items) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
   return (
-    <li className="gp-history-wrap">
-      {error && <p className="err" style={{ padding: '6px 8px' }}>{error}</p>}
-      {!error && !items && <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>}
-      {items && (
-        <ol className="gp-history result">
-          {items.map((t) => (
-            <li className="gph-row" key={rowKey(t)}>
-              <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>
-                {t.points > 0 ? `P${t.rank}` : t.rank}
-              </span>
-              <span className="gph-nm">
-                <b>{t.track ?? t.artist}</b>
-                {t.track && <span> · {t.artist}</span>}
-              </span>
-              <span className="gph-pt">
-                {t.points > 0 ? `${t.points}pt · ` : ''}{t.plays.toLocaleString()}회
-              </span>
-            </li>
-          ))}
-        </ol>
+    <ol className="gp-history result">
+      {items.map((t) => (
+        <li className="gph-row" key={rowKey(t)}>
+          <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>
+            {t.rank <= 10 ? `P${t.rank}` : t.rank}
+          </span>
+          <span className="gph-nm">
+            <b>{t.track ?? t.artist}</b>
+            {t.track && <span> · {t.artist}</span>}
+          </span>
+          <span className="gph-pt">
+            {!live && t.points > 0 ? `${t.points}pt · ` : ''}{t.plays.toLocaleString()}회
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** A section title in the F1 site's own manner: a heavy heading set inside
+    a thin rule that runs along the top and turns down the right side. */
+function SectionHead({ title, sub, children }) {
+  return (
+    <div className="f1-head">
+      <div>
+        <h2>{title}</h2>
+        {sub && <p>{sub}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The chequered flag a finished round is marked with. */
+function Chequered() {
+  return (
+    <svg className="chq" viewBox="0 0 12 12" aria-hidden="true">
+      <rect width="12" height="12" rx="1.5" fill="var(--card)" stroke="var(--ink)" strokeWidth="1" />
+      {[0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((c) => ((r + c) % 2 === 0 ? (
+        <rect key={`${r}${c}`} x={c * 3} y={r * 3} width="3" height="3" fill="var(--ink)" />
+      ) : null)))}
+    </svg>
+  );
+}
+
+/** The championship leader (or champion), as a card in that artist's color. */
+function LeaderCard({ tag, name, sub, points, wins, color }) {
+  return (
+    <div className="leader" style={{ '--team': color }}>
+      <span className="leader-tag">{tag}</span>
+      <span className="leader-pos" aria-hidden="true">1</span>
+      <b className="leader-name">{name}</b>
+      <span className="leader-sub">{sub || '\u00a0'}</span>
+      <span className="leader-pts">
+        {points.toLocaleString()}<small>PTS</small>
+        <em>{wins}승</em>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The race under way this month. Shown live — the running order is real —
+ * but it scores nothing until the month is over, the same way a Grand Prix
+ * pays out at the chequered flag and not from the middle of the race.
+ */
+function LiveRace({ m, round, allTime, mode, source, estimate }) {
+  const [open, setOpen] = useState(false);
+  const top = m.top.slice(0, 3);
+  return (
+    <div className="live-card">
+      <div className="live-head">
+        <span className="live-badge"><i />LIVE</span>
+        <span className="live-round">ROUND {round}</span>
+        <b>{moLabel(m, allTime)} 그랑프리</b>
+      </div>
+      <ol className="live-top">
+        {top.map((t) => (
+          <li key={normRowKey(t)} style={{ '--team': artistColor(t.artist) }}>
+            <span className="live-pos">{t.rank}</span>
+            <span className="live-nm">
+              <b>{t.track ?? t.artist}</b>
+              {t.track && <span>{t.artist}</span>}
+            </span>
+            <span className="live-plays">{Number(t.plays).toLocaleString()}회</span>
+          </li>
+        ))}
+      </ol>
+      <div className="live-foot">
+        <span>잠정 순위 · 포인트는 이달이 끝나면 확정됩니다</span>
+        <button className="linkish" onClick={() => setOpen((v) => !v)}>
+          {open ? '접기' : '전체 순위'}
+        </button>
+      </div>
+      {open && (
+        <GrandPrixResult year={m.year} month={m.month} mode={mode} source={source} estimate={estimate} live />
       )}
-    </li>
+    </div>
   );
 }
 
@@ -364,6 +444,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     if (!data || openDriver == null) return [];
     const log = [];
     for (const m of data.months) {
+      if (m.live) continue;
       const hit = m.top.find((t) => normRowKey(t) === openDriver);
       if (hit) log.push({ year: m.year, month: m.month, rank: hit.rank, points: hit.points });
     }
@@ -374,6 +455,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     if (!data || openConstructor == null) return [];
     const log = [];
     for (const m of data.months) {
+      if (m.live) continue;
       const hits = m.top.filter((t) => t.artist_key === openConstructor);
       if (hits.length) {
         log.push({
@@ -394,7 +476,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   // that actually scored against each other, month by month.
   const chartData = useMemo(() => {
     if (!data) return null;
-    const months = data.months;
+    // Only finished rounds: a race still under way hasn't scored anything.
+    const months = data.months.filter((m) => !m.live);
     const labels = months.map((m) => moLabel(m, allTime));
 
     const driverSeries = data.drivers.slice(0, chartN).map((d) => {
@@ -439,11 +522,17 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   const driverChamp = drivers[0];
   const constructorChamp = constructors?.[0];
   const label = mode === 'tracks' ? '곡' : '가수';
-  const title = allTime ? '역대 통산' : `${year}년 시즌`;
   const driverTag = allTime ? '통산 1위' : (complete ? '드라이버 챔피언' : '드라이버 선두');
   const constructorTag = allTime ? '통산 1위' : (complete ? '컨스트럭터 챔피언' : '컨스트럭터 선두');
 
-  if (!racesRun) {
+  // Rounds are numbered by races actually held, the way a calendar counts
+  // Grands Prix — a month with no plays at all simply wasn't a round.
+  const held = data.months.filter((m) => m.top.length);
+  const rounds = held.map((m, i) => ({ ...m, round: i + 1 }));
+  const liveRace = rounds.find((m) => m.live);
+  const results = rounds.filter((m) => !m.live).reverse();
+
+  if (!racesRun && !liveRace) {
     return (
       <p className="note" style={{ padding: '12px 2px' }}>
         {allTime ? '아직 기록이 없습니다.' : '이 해에는 기록이 없습니다.'}
@@ -451,145 +540,163 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     );
   }
 
-  const gpList = data.months.filter((m) => m.top.length);
+  const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
+  const activeSeries = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
 
   return (
     <div className="season">
-      <div className="season-hero">
-        <p className="recap-title">
-          {title}{!allTime && !complete ? ' · 진행 중' : ''} · GP {racesRun}회
-        </p>
-        <div className="recap-grid">
+      <p className="season-status">
+        <span>{allTime ? '역대 통산' : `${year} 시즌`}</span>
+        <span>{racesRun}라운드 완료</span>
+        {complete && <span className="done">시즌 종료</span>}
+        {liveRace && <span className="on">ROUND {liveRace.round} 진행 중</span>}
+      </p>
+
+      {racesRun > 0 && (
+        <div className="leaders">
           {driverChamp && (
-            <div className="recap-tile">
-              <span>{driverTag}</span>
-              <b>{driverChamp.track ?? driverChamp.artist}</b>
-              <em>{driverChamp.points.toLocaleString()}pt · {driverChamp.wins}승</em>
-            </div>
+            <LeaderCard
+              tag={driverTag} name={driverChamp.track ?? driverChamp.artist}
+              sub={driverChamp.track ? driverChamp.artist : null}
+              points={driverChamp.points} wins={driverChamp.wins}
+              color={artistColor(driverChamp.artist)}
+            />
           )}
           {constructorChamp && (
-            <div className="recap-tile">
-              <span>{constructorTag}</span>
-              <b>{constructorChamp.artist}</b>
-              <em>{constructorChamp.points.toLocaleString()}pt · {constructorChamp.wins}승</em>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {(() => {
-        const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
-        const activeSeries = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
-        return (
-          <div className="season-chart">
-            <div className="chart-head">
-              <p className="legend"><span>시즌 차트 · {chartView === 'points' ? '누적 포인트' : '레이스별 순위'}</span></p>
-              <div className="chart-controls">
-                {chartData.constructorSeries && (
-                  <div className="seg">
-                    <button className="pill" aria-pressed={activeKind === 'drivers'} onClick={() => setChartKind('drivers')}>드라이버</button>
-                    <button className="pill" aria-pressed={activeKind === 'constructors'} onClick={() => setChartKind('constructors')}>컨스트럭터</button>
-                  </div>
-                )}
-                <div className="seg">
-                  <button className="pill" aria-pressed={chartView === 'points'} onClick={() => setChartView('points')}>포인트</button>
-                  <button className="pill" aria-pressed={chartView === 'position'} onClick={() => setChartView('position')}>순위</button>
-                </div>
-                <div className="seg">
-                  {[5, 10].map((n) => (
-                    <button key={n} className="pill" aria-pressed={chartN === n} onClick={() => setChartN(n)}>상위 {n}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
-            <ol className="chart-key">
-              {activeSeries.map((s) => (
-                <li key={s.key}><i style={{ background: s.color }} />{s.label}</li>
-              ))}
-            </ol>
-          </div>
-        );
-      })()}
-
-      <p className="legend"><span>드라이버 챔피언십 · {label} 기준</span></p>
-      <StandingsHead label={label} />
-      <ol className="season-list">
-        {drivers.slice(0, driverShown).map((d, i) => {
-          const key = normRowKey(d);
-          return (
-            <StandingsRow
-              key={key} rank={i + 1}
-              name={d.track ?? d.artist} sub={d.track ? d.artist : null}
-              points={d.points} wins={d.wins} podiums={d.podiums}
-              color={artistColor(d.artist)} kind="driver"
-              open={openDriver === key} log={driverLog} allTime={allTime}
-              onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
+            <LeaderCard
+              tag={constructorTag} name={constructorChamp.artist} sub={null}
+              points={constructorChamp.points} wins={constructorChamp.wins}
+              color={artistColor(constructorChamp.artist)}
             />
-          );
-        })}
-      </ol>
-      {drivers.length > driverShown && (
-        <div className="more">
-          <button className="btn ghost" onClick={() => setDriverShown((n) => n + STANDINGS_PAGE * 2)}>
-            펼치기 · {drivers.length - driverShown}명 더
-          </button>
+          )}
         </div>
       )}
 
-      {constructors && (
+      {liveRace && (
+        <LiveRace
+          m={liveRace} round={liveRace.round} allTime={allTime}
+          mode={mode} source={source} estimate={estimate}
+        />
+      )}
+
+      {racesRun > 0 && (
         <>
-          <p className="legend"><span>컨스트럭터 챔피언십 · 가수 기준</span></p>
-          <StandingsHead label="가수" />
-          <ol className="season-list">
-            {constructors.slice(0, constructorShown).map((c, i) => (
-              <StandingsRow
-                key={c.artist_key} rank={i + 1}
-                name={c.artist} sub={null}
-                points={c.points} wins={c.wins} podiums={c.podiums}
-                color={artistColor(c.artist)} kind="constructor"
-                open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
-                onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}
-              />
+          <SectionHead title="시즌 차트" sub={chartView === 'points' ? '누적 포인트' : '레이스별 순위 · P1이 맨 위'}>
+            <div className="chart-controls">
+              <div className="seg">
+                <button className="pill" aria-pressed={chartView === 'points'} onClick={() => setChartView('points')}>포인트</button>
+                <button className="pill" aria-pressed={chartView === 'position'} onClick={() => setChartView('position')}>순위</button>
+              </div>
+              <div className="seg">
+                {[5, 10].map((n) => (
+                  <button key={n} className="pill" aria-pressed={chartN === n} onClick={() => setChartN(n)}>TOP {n}</button>
+                ))}
+              </div>
+            </div>
+          </SectionHead>
+          {chartData.constructorSeries && (
+            <div className="f1-tabs" role="tablist">
+              <button role="tab" aria-selected={activeKind === 'drivers'} onClick={() => setChartKind('drivers')}>드라이버</button>
+              <button role="tab" aria-selected={activeKind === 'constructors'} onClick={() => setChartKind('constructors')}>컨스트럭터</button>
+            </div>
+          )}
+          <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
+          <ol className="chart-key">
+            {activeSeries.map((s) => (
+              <li key={s.key}><i style={{ background: s.color }} />{s.label}</li>
             ))}
           </ol>
-          {constructors.length > constructorShown && (
+
+          <SectionHead title="드라이버 스탠딩" sub={`${label} 기준`} />
+          <StandingsHead label={label} />
+          <ol className="season-list">
+            {drivers.slice(0, driverShown).map((d, i) => {
+              const key = normRowKey(d);
+              return (
+                <StandingsRow
+                  key={key} rank={i + 1}
+                  name={d.track ?? d.artist} sub={d.track ? d.artist : null}
+                  points={d.points} wins={d.wins} podiums={d.podiums}
+                  color={artistColor(d.artist)} kind="driver"
+                  open={openDriver === key} log={driverLog} allTime={allTime}
+                  onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
+                />
+              );
+            })}
+          </ol>
+          {drivers.length > driverShown && (
             <div className="more">
-              <button className="btn ghost" onClick={() => setConstructorShown((n) => n + STANDINGS_PAGE * 2)}>
-                펼치기 · {constructors.length - constructorShown}팀 더
+              <button className="btn ghost" onClick={() => setDriverShown((n) => n + STANDINGS_PAGE * 2)}>
+                펼치기 · {drivers.length - driverShown}명 더
               </button>
             </div>
           )}
+
+          {constructors && (
+            <>
+              <SectionHead title="컨스트럭터 스탠딩" sub="가수별 · 곡들이 딴 포인트 합산" />
+              <StandingsHead label="가수" />
+              <ol className="season-list">
+                {constructors.slice(0, constructorShown).map((c, i) => (
+                  <StandingsRow
+                    key={c.artist_key} rank={i + 1}
+                    name={c.artist} sub={null}
+                    points={c.points} wins={c.wins} podiums={c.podiums}
+                    color={artistColor(c.artist)} kind="constructor"
+                    open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
+                    onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}
+                  />
+                ))}
+              </ol>
+              {constructors.length > constructorShown && (
+                <div className="more">
+                  <button className="btn ghost" onClick={() => setConstructorShown((n) => n + STANDINGS_PAGE * 2)}>
+                    펼치기 · {constructors.length - constructorShown}팀 더
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          <SectionHead title="레이스 결과" sub="최근 라운드부터 · 눌러서 전체 순위" />
+          <div className="gp-cols" aria-hidden="true">
+            <span>라운드</span><span>그랑프리</span><span>우승</span><span>재생</span><span />
+          </div>
+          <ol className="gp-cal">
+            {results.map((m) => {
+              const winner = m.top.find((t) => t.rank === 1) ?? m.top[0];
+              const key = `${m.year}-${m.month}`;
+              const open = openGP === key;
+              const toggle = () => setOpenGP((k) => (k === key ? null : key));
+              return (
+                <Fragment key={key}>
+                  <li
+                    className="gp-cal-row" role="button" tabIndex={0} aria-expanded={open}
+                    onClick={toggle}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                  >
+                    <span className="gp-rd"><Chequered />R{m.round}</span>
+                    <span className="gp-mo">{moLabel(m, allTime)}</span>
+                    <span className="gp-nm" style={{ borderLeftColor: artistColor(winner.artist) }}>
+                      <b>{winner.track ?? winner.artist}</b>
+                      {winner.track && <span>{winner.artist}</span>}
+                    </span>
+                    <span className="gp-pt">{Number(winner.plays).toLocaleString()}회</span>
+                    <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                  </li>
+                  {open && (
+                    <li className="gp-history-wrap">
+                      <GrandPrixResult
+                        year={m.year} month={m.month} mode={mode} source={source} estimate={estimate}
+                      />
+                    </li>
+                  )}
+                </Fragment>
+              );
+            })}
+          </ol>
         </>
       )}
-
-      <p className="legend"><span>그랑프리 결과 · 눌러서 전체 순위 보기</span></p>
-      <ol className="gp-cal">
-        {gpList.map((m) => {
-          const winner = m.top.find((t) => t.rank === 1);
-          const key = `${m.year}-${m.month}`;
-          const open = openGP === key;
-          return (
-            <Fragment key={key}>
-              <li
-                className="gp-cal-row" role="button" tabIndex={0} aria-expanded={open}
-                onClick={() => setOpenGP((k) => (k === key ? null : key))}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenGP((k) => (k === key ? null : key)); } }}
-              >
-                <span className="gp-mo">{moLabel(m, allTime)}</span>
-                <span className="gp-nm">{winner.track ?? winner.artist}</span>
-                <span className="gp-pt">{winner.points}pt · {Number(winner.plays).toLocaleString()}회</span>
-                <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
-              </li>
-              {open && (
-                <GrandPrixResult
-                  year={m.year} month={m.month} mode={mode} source={source} estimate={estimate}
-                />
-              )}
-            </Fragment>
-          );
-        })}
-      </ol>
     </div>
   );
 }

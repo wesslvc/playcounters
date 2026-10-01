@@ -132,10 +132,18 @@ export async function GET(req) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 
+  // The month still under way is a race in progress: it's shown (as a live,
+  // provisional classification) but scores nothing until it's over — the
+  // same way a Grand Prix pays no points from the middle of the race.
+  const now = new Date(Date.now() + KST);
+  const liveIdx = months.findIndex(({ y, m }) =>
+    y === now.getUTCFullYear() && m === now.getUTCMonth() + 1);
+
   const drivers = new Map();
   const constructors = new Map();
 
   races.forEach((results, i) => {
+    if (i === liveIdx) return;
     for (const r of results) {
       // Grouped on the normalised key, not the display label — top_items
       // picks its label per call, and two different months can genuinely
@@ -185,9 +193,9 @@ export async function GET(req) {
     // the main dashboard uses.
     calibrated: calibrated.error ? false : Boolean(calibrated.data),
     estimate: estimate && !calibrated.error && Boolean(calibrated.data),
-    racesRun: races.filter((r) => r.length).length,
+    racesRun: races.filter((r, i) => r.length && i !== liveIdx).length,
     months: races.map((results, i) => ({
-      year: months[i].y, month: months[i].m,
+      year: months[i].y, month: months[i].m, live: i === liveIdx,
       top: results.map((r) => ({
         artist: r.artist, track: r.track ?? null,
         artist_key: r.artist_key, track_key: r.track_key ?? null,

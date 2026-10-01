@@ -71,13 +71,15 @@ export default function Championship() {
         </button>
       </nav>
 
-      <header>
-        <p className="eyebrow">Season</p>
-        <h1>시즌 <em>챔피언십</em></h1>
-        <p className="note" style={{ padding: '4px 2px 0' }}>
-          매달을 그랑프리 한 번으로 쳐서, 그 달 재생 횟수 1~10위에 F1 포인트
-          (25-18-15-12-10-8-6-4-2-1)를 줍니다. 연말 누적 포인트가 가장 많은
-          쪽이 그 해의 챔피언입니다.
+      <header className="f1-page">
+        <p className="f1-kicker">Championship</p>
+        <h1 className="f1-title">
+          {allTime ? '역대 통산' : year ? `${year} 시즌` : '시즌'} <span>스탠딩</span>
+        </h1>
+        <p className="f1-lede">
+          매달이 그랑프리 한 라운드입니다. 그 달 재생 횟수 1~10위가 F1 포인트
+          (25·18·15·12·10·8·6·4·2·1)를 받고, 진행 중인 달은 끝나야 포인트가
+          확정됩니다.
         </p>
       </header>
 

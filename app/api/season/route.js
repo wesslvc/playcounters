@@ -176,11 +176,10 @@ export async function GET(req) {
         const c = constructors.get(ckey) ?? {
           artist: r.artist, artist_key: r.artist_key,
           points: 0, wins: 0, podiums: 0, starts: 0,
-          finishes: r.artist_entries ?? null, scoredIn: new Set(),
+          finishes: r.artist_entries ?? null,
         };
         c.points += r.points;
         c.starts += 1;
-        c.scoredIn.add(i);
         if (r.rank === 1) c.wins += 1;
         if (r.rank <= 3) c.podiums += 1;
         constructors.set(ckey, c);
@@ -213,15 +212,14 @@ export async function GET(req) {
         rank: r.rank, points: r.points, plays: r.plays, yt: r.yt,
       })),
     })),
-    // starts is every scoring finish (= points finishes for a driver);
-    // finishes is every race entered, scoring or not. A constructor's are
-    // counted per race: a month where any of its tracks scored, a month
-    // where any of them played.
+    // starts is every scoring finish; finishes is every race entered,
+    // scoring or not. A constructor's are its tracks' added together, each
+    // track counting as a car, the same way its wins and podiums are.
     drivers: [...drivers.values()].sort(byPoints)
       .map((d) => ({ ...d, pointsFinishes: d.starts })),
     constructors: mode === 'tracks'
       ? [...constructors.values()].sort(byPoints)
-        .map(({ scoredIn, ...c }) => ({ ...c, pointsFinishes: scoredIn.size }))
+        .map((c) => ({ ...c, pointsFinishes: c.starts }))
       : null,
   });
 }

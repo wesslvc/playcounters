@@ -631,9 +631,10 @@ returns table (
   yt       boolean,
   artist_key text,
   track_key  text,
-  -- Months in the range this item (and, separately, its artist) had any
-  -- counted play at all — the races it finished, scoring or not. Only the
-  -- top ten come back as rows, so this can't be counted from them.
+  -- Months in the range this item had any counted play at all — the races
+  -- it finished, scoring or not — and, for its artist, the same summed over
+  -- every one of the artist's tracks (each track is a car). Only the top
+  -- ten come back as rows, so neither can be counted from them.
   entries        int,
   artist_entries int
 )
@@ -672,7 +673,7 @@ as $$
     from g
   ),
   a as (
-    select artist_key, count(distinct (yr * 100 + mo))::int as artist_entries
+    select artist_key, count(*)::int as artist_entries
     from g
     group by artist_key
   )

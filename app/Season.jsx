@@ -406,9 +406,9 @@ function projectStandings(current, liveTop, keyOf, fieldsOf) {
     r.gained += t.points;
     if (t.rank === 1) r.wins += 1;
     if (t.rank <= 3) r.podiums += 1;
-    // Finishing this month counts once, however many of a constructor's
-    // tracks are in it.
-    if (!r.finishedLive) { r.finishes = (r.finishes ?? 0) + 1; r.finishedLive = true; }
+    // One finish per track in this month's running order — for a
+    // constructor, each of its tracks adds its own.
+    r.finishes = (r.finishes ?? 0) + 1;
     rows.set(k, r);
   }
   const sorted = [...rows.values()].sort((a, b) =>

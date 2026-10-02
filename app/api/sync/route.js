@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Called every 5 minutes by GitHub Actions with:
+ * Called every 20 minutes (Supabase pg_cron, with GitHub Actions as backup) with:
  *   Authorization: Bearer $CRON_SECRET
  *
  * Spotify only remembers a listener's last 50 plays, so the polling interval

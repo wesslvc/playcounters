@@ -6,7 +6,7 @@ name: Sync Spotify plays
 # here and just calls the same endpoint.
 on:
   schedule:
-    - cron: '*/5 * * * *'    # every 5 minutes (GitHub's minimum); free on a public repo
+    - cron: '*/20 * * * *'   # every 20 minutes; GitHub often runs these late, so Supabase pg_cron is the primary trigger
   workflow_dispatch:          # lets you trigger a run by hand from the Actions tab
 
 jobs:

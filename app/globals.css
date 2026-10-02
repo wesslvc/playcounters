@@ -577,7 +577,7 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 }
 .leader-wins b {
   font-family:"Titillium Web",sans-serif; font-weight:900; font-size:60px; line-height:.95;
-  color:var(--team);
+  color:var(--team); opacity:.3;
 }
 .leader-wins small {
   font-family:"Titillium Web",sans-serif; font-weight:700; font-size:10.5px;

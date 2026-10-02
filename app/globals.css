@@ -573,9 +573,11 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
    name — the headline number, read at a glance rather than labelled. */
 .leader-wins {
   position:absolute; right:12px; top:4px; pointer-events:none;
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:76px; line-height:1;
-  color:var(--team); opacity:.3;
+  display:flex; flex-direction:column; align-items:flex-end;
+  font-family:"Titillium Web",sans-serif; color:var(--team); opacity:.3;
 }
+.leader-wins b { font-weight:900; font-size:76px; line-height:.9 }
+.leader-wins small { font-weight:700; font-size:11px; letter-spacing:.16em; margin-top:2px }
 .leader-tag, .leader-name, .leader-sub { padding-right:92px }
 .leader-name {
   position:relative; font-family:"Titillium Web","IBM Plex Sans KR",sans-serif;

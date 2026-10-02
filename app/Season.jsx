@@ -280,7 +280,10 @@ function LeaderCard({ tag, name, sub, points, wins, podiums, color }) {
   return (
     <div className="leader" style={{ '--team': color }}>
       <span className="leader-tag">{tag}</span>
-      <span className="leader-wins" aria-label={`${wins}승`}>{wins}</span>
+      <span className="leader-wins" aria-label={`${wins}승`}>
+        <b>{wins}</b>
+        <small>{wins === 1 ? 'WIN' : 'WINS'}</small>
+      </span>
       <b className="leader-name">{name}</b>
       <span className="leader-sub">{sub || '\u00a0'}</span>
       <span className="leader-pts">

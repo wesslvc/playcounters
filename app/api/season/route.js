@@ -188,10 +188,12 @@ export async function GET(req) {
     }
   });
 
-  // Ties settled the way F1's own standings are: most wins first, then most
-  // podiums, before falling back to name so the order is at least stable.
+  // Ties settled the way F1's own standings are — most wins, then most
+  // podiums — and then by races finished (months listened), more ranking
+  // higher, before falling back to name so the order is at least stable.
   const byPoints = (a, b) =>
     b.points - a.points || b.wins - a.wins || b.podiums - a.podiums
+    || (b.finishes ?? 0) - (a.finishes ?? 0)
     || a.artist.localeCompare(b.artist);
 
   return NextResponse.json({

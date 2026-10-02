@@ -386,9 +386,9 @@ function Move({ from, to }) {
 /**
  * The championship as it would stand if the month still under way finished
  * exactly as it is now: today's standings plus this month's provisional
- * points, wins and podiums, re-sorted with the same tie rule the real
- * standings use (points, then wins, then podiums). Each row carries where it
- * sits today, so the move can be shown.
+ * points, wins, podiums and finish, re-sorted with the same tie rule the
+ * real standings use (points, wins, podiums, then finishes). Each row
+ * carries where it sits today, so the move can be shown.
  */
 function projectStandings(current, liveTop, keyOf, fieldsOf) {
   const rows = new Map(current.map((c, i) => [keyOf(c), {
@@ -397,16 +397,20 @@ function projectStandings(current, liveTop, keyOf, fieldsOf) {
   for (const t of liveTop) {
     const k = keyOf(t);
     const r = rows.get(k) ?? {
-      ...fieldsOf(t), key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0,
+      ...fieldsOf(t), key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0, finishes: 0,
     };
     r.points += t.points;
     r.gained += t.points;
     if (t.rank === 1) r.wins += 1;
     if (t.rank <= 3) r.podiums += 1;
+    // Finishing this month counts once, however many of a constructor's
+    // tracks are in it.
+    if (!r.finishedLive) { r.finishes = (r.finishes ?? 0) + 1; r.finishedLive = true; }
     rows.set(k, r);
   }
   const sorted = [...rows.values()].sort((a, b) =>
     b.points - a.points || b.wins - a.wins || b.podiums - a.podiums
+    || (b.finishes ?? 0) - (a.finishes ?? 0)
     || a.artist.localeCompare(b.artist));
   return sorted.map((r, i) => ({ ...r, pos: i + 1 }));
 }

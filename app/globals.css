@@ -569,21 +569,14 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
   font-family:"Titillium Web","IBM Plex Sans KR",sans-serif; font-weight:700;
   font-size:11px; letter-spacing:.06em; color:var(--mute); margin-bottom:10px;
 }
-/* Wins, set big in the top corner the way a broadcast graphic leads with
-   the headline number; its label sits right under it. */
+/* The leader's win count, set oversized and faint in the corner behind the
+   name — the headline number, read at a glance rather than labelled. */
 .leader-wins {
-  position:absolute; right:14px; top:8px; pointer-events:none;
-  display:flex; flex-direction:column; align-items:flex-end; line-height:1;
-}
-.leader-wins b {
-  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:60px; line-height:.95;
+  position:absolute; right:12px; top:4px; pointer-events:none;
+  font-family:"Titillium Web",sans-serif; font-weight:900; font-size:76px; line-height:1;
   color:var(--team); opacity:.3;
 }
-.leader-wins small {
-  font-family:"Titillium Web",sans-serif; font-weight:700; font-size:10.5px;
-  letter-spacing:.14em; color:var(--mute); margin-top:3px;
-}
-.leader-tag, .leader-name, .leader-sub { padding-right:84px }
+.leader-tag, .leader-name, .leader-sub { padding-right:92px }
 .leader-name {
   position:relative; font-family:"Titillium Web","IBM Plex Sans KR",sans-serif;
   font-weight:900; font-size:21px; line-height:1.2; letter-spacing:-.01em;

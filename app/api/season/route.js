@@ -121,23 +121,29 @@ export async function GET(req) {
     if (!Number.isFinite(year)) return NextResponse.json({ error: 'year required' }, { status: 400 });
   }
 
-  let months, complete, races, calibrated;
+  let months, complete, races, calibrated, liveIdx;
   try {
     ({ months, complete } = await racesToRun(userId, year));
-    [races, calibrated] = await Promise.all([
-      months.length ? runGrandPrix(userId, months, mode, src, estimate) : [],
+    // The month still under way is a race in progress: it's shown (as a
+    // live, provisional classification) but scores nothing until it's over —
+    // the same way a Grand Prix pays no points from the middle of the race.
+    // It's queried on its own so the finished months' counts (entries)
+    // don't include it either.
+    const now = new Date(Date.now() + KST);
+    liveIdx = months.findIndex(({ y, m }) =>
+      y === now.getUTCFullYear() && m === now.getUTCMonth() + 1);
+    const done = liveIdx >= 0 ? months.slice(0, liveIdx) : months;
+    const live = liveIdx >= 0 ? [months[liveIdx]] : [];
+    let doneRaces, liveRaces;
+    [doneRaces, liveRaces, calibrated] = await Promise.all([
+      done.length ? runGrandPrix(userId, done, mode, src, estimate) : [],
+      live.length ? runGrandPrix(userId, live, mode, src, estimate) : [],
       db.rpc('has_youtube_estimate', { p_user: userId }),
     ]);
+    races = [...doneRaces, ...liveRaces];
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-
-  // The month still under way is a race in progress: it's shown (as a live,
-  // provisional classification) but scores nothing until it's over — the
-  // same way a Grand Prix pays no points from the middle of the race.
-  const now = new Date(Date.now() + KST);
-  const liveIdx = months.findIndex(({ y, m }) =>
-    y === now.getUTCFullYear() && m === now.getUTCMonth() + 1);
 
   const drivers = new Map();
   const constructors = new Map();
@@ -157,6 +163,7 @@ export async function GET(req) {
         artist: r.artist, track: r.track ?? null,
         artist_key: r.artist_key, track_key: r.track_key ?? null,
         points: 0, wins: 0, podiums: 0, starts: 0,
+        finishes: r.entries ?? null,
       };
       d.points += r.points;
       d.starts += 1;
@@ -169,9 +176,11 @@ export async function GET(req) {
         const c = constructors.get(ckey) ?? {
           artist: r.artist, artist_key: r.artist_key,
           points: 0, wins: 0, podiums: 0, starts: 0,
+          finishes: r.artist_entries ?? null, scoredIn: new Set(),
         };
         c.points += r.points;
         c.starts += 1;
+        c.scoredIn.add(i);
         if (r.rank === 1) c.wins += 1;
         if (r.rank <= 3) c.podiums += 1;
         constructors.set(ckey, c);
@@ -202,7 +211,15 @@ export async function GET(req) {
         rank: r.rank, points: r.points, plays: r.plays, yt: r.yt,
       })),
     })),
-    drivers: [...drivers.values()].sort(byPoints),
-    constructors: mode === 'tracks' ? [...constructors.values()].sort(byPoints) : null,
+    // starts is every scoring finish (= points finishes for a driver);
+    // finishes is every race entered, scoring or not. A constructor's are
+    // counted per race: a month where any of its tracks scored, a month
+    // where any of them played.
+    drivers: [...drivers.values()].sort(byPoints)
+      .map((d) => ({ ...d, pointsFinishes: d.starts })),
+    constructors: mode === 'tracks'
+      ? [...constructors.values()].sort(byPoints)
+        .map(({ scoredIn, ...c }) => ({ ...c, pointsFinishes: scoredIn.size }))
+      : null,
   });
 }

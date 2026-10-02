@@ -694,19 +694,24 @@ input[type=file] { font:inherit; font-size:13px; width:100%; margin-bottom:4px }
 
 /* Standings: a plain results table, the way the F1 site prints one —
    position, a team-color bar, the name, points, then wins and podiums. */
-.season-list {
-  list-style:none; margin-bottom:6px;
-  display:grid; grid-template-columns:28px 1fr 50px 34px 42px 12px; gap:0 8px;
-  border-top:1px solid var(--line);
+.season-list, .season-cols {
+  display:grid; gap:0 8px;
+  grid-template-columns:28px minmax(0,1fr) 50px 34px 42px 44px 34px 12px;
 }
+.season-list { list-style:none; margin-bottom:6px; border-top:1px solid var(--line) }
 .season-cols {
-  display:grid; grid-template-columns:28px 1fr 50px 34px 42px 12px; gap:0 8px;
-  padding:0 6px 7px; font-size:10.5px; color:var(--faint); font-weight:700;
-  letter-spacing:.04em;
+  align-items:end; padding:0 6px 7px; font-size:10.5px; line-height:1.2;
+  color:var(--faint); font-weight:700; letter-spacing:.02em;
 }
-.season-cols span:nth-child(3),
-.season-cols span:nth-child(4),
-.season-cols span:nth-child(5) { text-align:right }
+.season-cols span:nth-child(n+3) { text-align:right }
+@media (max-width:480px) {
+  .season-list, .season-cols {
+    gap:0 6px; grid-template-columns:20px minmax(0,1fr) 34px 26px 32px 36px 26px 8px;
+  }
+  .season-cols { font-size:9.5px; letter-spacing:0 }
+  .season-row .cell-pt { font-size:14px }
+  .season-row .cell-w, .season-row .cell-p { font-size:12px }
+}
 .season-row {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1;
   align-items:center; padding:11px 6px; border-bottom:1px solid var(--hair);

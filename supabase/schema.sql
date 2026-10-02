@@ -630,7 +630,12 @@ returns table (
   last_at  timestamptz,
   yt       boolean,
   artist_key text,
-  track_key  text
+  track_key  text,
+  -- Months in the range this item (and, separately, its artist) had any
+  -- counted play at all — the races it finished, scoring or not. Only the
+  -- top ten come back as rows, so this can't be counted from them.
+  entries        int,
+  artist_entries int
 )
 language sql stable
 set search_path = public, pg_temp
@@ -662,12 +667,19 @@ as $$
   ranked as (
     select g.*,
            rank() over (partition by g.yr, g.mo
-                        order by g.plays desc, g.last_at desc)::int as place
+                        order by g.plays desc, g.last_at desc)::int as place,
+           count(*) over (partition by g.artist_key, g.track_key)::int as entries
     from g
+  ),
+  a as (
+    select artist_key, count(distinct (yr * 100 + mo))::int as artist_entries
+    from g
+    group by artist_key
   )
   select r.yr, r.mo, r.place, r.artist, r.track, r.plays, r.last_at, r.yt,
-         r.artist_key, r.track_key
+         r.artist_key, r.track_key, r.entries, a.artist_entries
   from ranked r
+  join a on a.artist_key = r.artist_key
   where r.place <= 10
   -- Fully ordered, ties included, because the API pages through this with
   -- range requests and needs the same arrangement on every call.

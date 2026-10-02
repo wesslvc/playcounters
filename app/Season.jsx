@@ -85,6 +85,8 @@ function StandingsHead({ label }) {
       <span>포인트</span>
       <span>우승</span>
       <span>포디움</span>
+      <span>포인트<br />피니시</span>
+      <span>완주</span>
       <span />
     </div>
   );
@@ -98,7 +100,7 @@ function StandingsHead({ label }) {
  * artist's own color, the same one the main dashboard uses — a driver and
  * their team are still, visually, that one artist.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allTime, open, onToggle, kind }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, color, log, allTime, open, onToggle, kind }) {
   return (
     <>
       <li
@@ -115,6 +117,8 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, color, log, allT
         <div className="cell-pt">{points.toLocaleString()}</div>
         <div className="cell-w">{wins}</div>
         <div className="cell-p">{podiums}</div>
+        <div className="cell-p">{pointsFinishes ?? '–'}</div>
+        <div className="cell-p">{finishes ?? '–'}</div>
         <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
       </li>
       {open && (
@@ -771,6 +775,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                   key={key} rank={i + 1}
                   name={d.track ?? d.artist} sub={d.track ? d.artist : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
+                  pointsFinishes={d.pointsFinishes} finishes={d.finishes}
                   color={artistColor(d.artist)} kind="driver"
                   open={openDriver === key} log={driverLog} allTime={allTime}
                   onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
@@ -796,6 +801,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                     key={c.artist_key} rank={i + 1}
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
+                    pointsFinishes={c.pointsFinishes} finishes={c.finishes}
                     color={artistColor(c.artist)} kind="constructor"
                     open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
                     onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}

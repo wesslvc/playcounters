@@ -229,10 +229,12 @@ alter table yt_anchor enable row level security;
 -- plays recovers the duration the export withholds. recompute_youtube_ms fills
 -- it in after an import; past a ten-minute gap the session simply ended and a
 -- typical track length stands in.
--- Live rows carry the track's own length. recently-played only surfaces a
--- play once it has run past 30 seconds, so these are never skips, and a real
--- duration keeps per-track variation that an average would flatten. It still
--- assumes the play finished, so it is an upper bound, not a measurement.
+-- Live rows: recently-played reports no listening time, and it does log
+-- skips and scrubs — one 176-second track showed up nine times in four and
+-- a half minutes, entries 7-13 seconds apart. recompute_live_ms bounds each
+-- live play by the gap since the previous live play (played_at is when the
+-- play ended), capped at the track's own length, so the >=30s rule drops
+-- those the same way it drops short plays from an export.
 --
 -- YouTube rows once carried a flat 2.5 minutes here. They no longer need to:
 -- recompute_youtube_ms writes a real gap-derived duration into ms_played after
@@ -273,6 +275,44 @@ begin
    where t.user_id = s.user_id
      and t.played_at = s.played_at
      and t.source = 'youtube';
+
+  get diagnostics touched = row_count;
+  return touched;
+end;
+$$;
+
+-- The track's full length for a live play, kept apart from ms_played so the
+-- listened-time bound below can always be recomputed from the original.
+alter table plays add column if not exists track_ms integer;
+
+-- Bounds each live play's listened time by the gap since the previous live
+-- play — the previous one had to end before this one could — capped at the
+-- track's length. Only rows from p_since on are rewritten; the extra day of
+-- history read before it is just there to supply their previous play.
+create or replace function recompute_live_ms(p_user uuid, p_since timestamptz default '-infinity')
+returns bigint
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  touched bigint;
+begin
+  with seq as (
+    select p.played_at,
+           p.played_at - lag(p.played_at) over (order by p.played_at) as gap
+    from plays p
+    where p.user_id = p_user and p.source = 'live'
+      and p.played_at >= p_since - interval '1 day'
+  )
+  update plays t
+     set ms_played = least(t.track_ms,
+                           coalesce(extract(epoch from s.gap) * 1000, t.track_ms))::integer
+    from seq s
+   where t.user_id = p_user
+     and t.source = 'live'
+     and t.played_at = s.played_at
+     and t.played_at >= p_since
+     and t.track_ms is not null;
 
   get diagnostics touched = row_count;
   return touched;

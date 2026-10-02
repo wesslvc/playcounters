@@ -13,8 +13,12 @@ export const maxDuration = 60;
  * is what decides whether anything is lost — and how fresh the numbers are.
  */
 export async function GET(req) {
+  // Two callers, each with its own token: GitHub Actions (CRON_SECRET) and
+  // Supabase pg_cron (SUPABASE_CRON_SECRET), so either can be rotated alone.
   const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  const allowed = [process.env.CRON_SECRET, process.env.SUPABASE_CRON_SECRET]
+    .filter(Boolean).map((s) => `Bearer ${s}`);
+  if (!allowed.includes(auth)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

@@ -272,16 +272,19 @@ function Chequered() {
 }
 
 /** The championship leader (or champion), as a card in that artist's color. */
-function LeaderCard({ tag, name, sub, points, wins, color }) {
+function LeaderCard({ tag, name, sub, points, wins, podiums, color }) {
   return (
     <div className="leader" style={{ '--team': color }}>
       <span className="leader-tag">{tag}</span>
-      <span className="leader-pos" aria-hidden="true">1</span>
+      <span className="leader-wins">
+        <b>{wins}</b>
+        <small>{wins === 1 ? 'WIN' : 'WINS'}</small>
+      </span>
       <b className="leader-name">{name}</b>
       <span className="leader-sub">{sub || '\u00a0'}</span>
       <span className="leader-pts">
         {points.toLocaleString()}<small>PTS</small>
-        <em>{wins}승</em>
+        <em>{podiums} {podiums === 1 ? 'podium' : 'podiums'}</em>
       </span>
     </div>
   );
@@ -708,14 +711,14 @@ export default function Season({ mode, source, estimate, year, allTime }) {
             <LeaderCard
               tag={driverTag} name={driverChamp.track ?? driverChamp.artist}
               sub={driverChamp.track ? driverChamp.artist : null}
-              points={driverChamp.points} wins={driverChamp.wins}
+              points={driverChamp.points} wins={driverChamp.wins} podiums={driverChamp.podiums}
               color={artistColor(driverChamp.artist)}
             />
           )}
           {constructorChamp && (
             <LeaderCard
               tag={constructorTag} name={constructorChamp.artist} sub={null}
-              points={constructorChamp.points} wins={constructorChamp.wins}
+              points={constructorChamp.points} wins={constructorChamp.wins} podiums={constructorChamp.podiums}
               color={artistColor(constructorChamp.artist)}
             />
           )}

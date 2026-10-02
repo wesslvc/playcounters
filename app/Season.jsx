@@ -79,7 +79,7 @@ function ConstructorLog({ log, allTime }) {
  */
 function StandingsHead({ label }) {
   return (
-    <div className="season-cols" aria-hidden="true">
+    <li className="season-cols" aria-hidden="true">
       <span />
       <span>{label}</span>
       <span>포인트</span>
@@ -88,7 +88,7 @@ function StandingsHead({ label }) {
       <span>포인트<br />피니시</span>
       <span>완주</span>
       <span />
-    </div>
+    </li>
   );
 }
 
@@ -770,8 +770,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           </ol>
 
           <SectionHead title="드라이버 스탠딩" sub={`${label} 기준`} />
-          <StandingsHead label={label} />
           <ol className="season-list">
+            <StandingsHead label={label} />
             {drivers.slice(0, driverShown).map((d, i) => {
               const key = normRowKey(d);
               return (
@@ -798,8 +798,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           {constructors && (
             <>
               <SectionHead title="컨스트럭터 스탠딩" sub="가수별 · 곡들이 딴 포인트 합산" />
-              <StandingsHead label="가수" />
               <ol className="season-list">
+                <StandingsHead label="가수" />
                 {constructors.slice(0, constructorShown).map((c, i) => (
                   <StandingsRow
                     key={c.artist_key} rank={i + 1}
@@ -823,10 +823,10 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           )}
 
           <SectionHead title="레이스 결과" sub="최근 라운드부터 · 눌러서 전체 순위" />
-          <div className="gp-cols" aria-hidden="true">
-            <span>라운드</span><span>그랑프리</span><span>우승</span><span>재생</span><span />
-          </div>
           <ol className="gp-cal">
+            <li className="gp-cols" aria-hidden="true">
+              <span>라운드</span><span>그랑프리</span><span>우승</span><span>재생</span><span />
+            </li>
             {results.map((m) => {
               const winner = m.top.find((t) => t.rank === 1) ?? m.top[0];
               const key = `${m.year}-${m.month}`;

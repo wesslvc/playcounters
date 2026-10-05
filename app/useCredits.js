@@ -35,23 +35,9 @@ export function artistColors(row) {
   return artistNames(row).map((n) => artistColor(n));
 }
 
-/**
- * A hard-edged gradient giving each color an equal share, with a 2px clear
- * gap between them — two artists' colors can land close together, and the
- * gap keeps a split reading as a split.
- */
+/** A smooth blend through every credited artist's color, in credit order. */
 function stripes(colors, dir) {
-  const step = 100 / colors.length;
-  const parts = [];
-  colors.forEach((c, i) => {
-    const a = (i * step).toFixed(2);
-    const b = ((i + 1) * step).toFixed(2);
-    const start = i ? `calc(${a}% + 1px)` : '0%';
-    const end = i < colors.length - 1 ? `calc(${b}% - 1px)` : '100%';
-    parts.push(`${c} ${start} ${end}`);
-    if (i < colors.length - 1) parts.push(`transparent ${end} calc(${b}% + 1px)`);
-  });
-  return `linear-gradient(${dir}, ${parts.join(', ')})`;
+  return `linear-gradient(${dir}, ${colors.join(', ')})`;
 }
 
 /**

@@ -927,6 +927,102 @@ as $$
   limit p_limit;
 $$;
 
+-- Some sources put every artist into the one artist string ("Don Toliver,
+-- Doja Cat"), which then counted as an artist of its own: its own row, its
+-- own color, its own constructor. Wherever such a combined name starts with
+-- an artist that also appears on their own, it's merged into that artist
+-- and the full list is kept as the tracks' credits. Requiring the first name
+-- to exist alone is what keeps "Tyler, The Creator" or "Earth, Wind & Fire"
+-- intact. Safe to run again; the scheduled sync runs it.
+create or replace function split_combined_artists()
+returns table (from_key text, into_key text, moved bigint)
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  r record;
+  items jsonb;
+  sep constant text := '\s*(,|&|\s(x|feat\.?|ft\.?|with)\s)\s*';
+begin
+  for r in
+    select k.artist_key as combo,
+           btrim((regexp_split_to_array(k.artist_key, sep))[1]) as first
+    from (select distinct artist_key from plays) k
+    where k.artist_key ~ sep
+  loop
+    continue when r.first = '' or r.first = r.combo
+      or not exists (select 1 from plays where artist_key = r.first);
+    select jsonb_agg(jsonb_build_object(
+             'artist', x.artist, 'track', x.track,
+             'artists', to_jsonb(array(
+               select btrim(n) from unnest(regexp_split_to_array(x.artist, sep, 'i')) n
+                where btrim(n) <> ''))))
+      into items
+      from (select distinct on (track_key) artist, track from plays where artist_key = r.combo) x;
+    from_key := r.combo;
+    into_key := r.first;
+    moved := merge_artist(r.combo, r.first);
+    if items is not null then perform save_track_credits(items, 'split'); end if;
+    return next;
+  end loop;
+end;
+$$;
+
+-- Duplicates with a recognisable shape, merged automatically:
+--  * an artist written "한글 Latin" (데이먼스 이어 Damons year) where the
+--    Latin part is also an artist on its own;
+--  * a song whose longer title only adds its other-language title, the same
+--    title again, or its credits — "Next Stop (정거장)", "Rescue (RESCUE)",
+--    "Monster (Shawn Mendes & Justin Bieber)", "CRG feat. Dave".
+-- Anything marked as a version — remix, live, acoustic, inst, sped up — is
+-- a different recording and stays apart. Safe to run again; the scheduled
+-- sync runs it.
+create or replace function merge_obvious_duplicates()
+returns table (kind text, artist_key text, from_key text, into_key text, moved bigint)
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  r record;
+  ver constant text := '(remix|ver\.?|version|inst|instrumental|live|acoustic|stripped|sped|slowed|reverb|8d|edit|mix|demo|preview|karaoke|cover|remaster|어쿠스틱|라이브|리믹스|버전|반주)';
+begin
+  for r in
+    select k.artist_key as combo,
+           btrim(substring(k.artist_key from '^[^a-z0-9(]*[가-힣][^a-z0-9(]*\s+([a-z0-9].*)$')) as latin
+    from (select distinct p.artist_key from plays p) k
+    where k.artist_key ~ '^[^a-z0-9(]*[가-힣][^a-z0-9(]*\s+[a-z0-9]'
+  loop
+    continue when r.latin is null or r.latin = '' or r.latin = r.combo
+      or not exists (select 1 from plays p where p.artist_key = r.latin);
+    kind := 'artist'; artist_key := r.latin; from_key := r.combo; into_key := r.latin;
+    moved := merge_artist(r.combo, r.latin);
+    return next;
+  end loop;
+
+  for r in
+    with t as (select distinct p.artist_key, p.track_key from plays p)
+    select a.artist_key as ak, a.track_key as short, b.track_key as long,
+           substr(b.track_key, length(a.track_key) + 1) as tail
+    from t a
+    join t b on b.artist_key = a.artist_key
+            and length(a.track_key) >= 2
+            and b.track_key like a.track_key || ' %'
+    order by length(a.track_key)
+  loop
+    continue when r.tail ~* ver;
+    continue when not (
+         r.tail ~ '^ \(.*[가-힣ぁ-んァ-ン一-龥]'
+      or left(r.tail, length(r.short) + 2) = ' (' || r.short
+      or r.tail ~ '^ \(?(feat\.?|ft\.?|featuring|starring|with)\s'
+      or position(r.ak in r.tail) > 0);
+    continue when not exists (select 1 from plays p where p.artist_key = r.ak and p.track_key = r.long);
+    kind := 'track'; artist_key := r.ak; from_key := r.long; into_key := r.short;
+    moved := merge_track(r.ak, r.long, r.short);
+    return next;
+  end loop;
+end;
+$$;
+
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as
 -- anyone passes the cap. This counts the real thing.

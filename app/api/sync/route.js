@@ -38,8 +38,13 @@ export async function GET(req) {
     }
   }
 
-  // Fill in credits for the most-played tracks still missing them, a small
-  // batch per run. Best effort: a failure here never fails the sync.
+  // Merge any new combined artist names ("A, B") into their main artist and
+  // any obvious duplicate names or titles, then fill in credits for the most-played tracks still missing them, a
+  // small batch per run. Best effort: neither ever fails the sync.
+  const { error: splitErr } = await db.rpc('split_combined_artists');
+  if (splitErr) console.error('split_combined_artists failed', splitErr.message);
+  const { error: dupErr } = await db.rpc('merge_obvious_duplicates');
+  if (dupErr) console.error('merge_obvious_duplicates failed', dupErr.message);
   let credited = 0;
   try {
     credited = await backfillCredits(CREDIT_BATCH);

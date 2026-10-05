@@ -79,7 +79,7 @@ export function fillStyle(row, dir = 'to right') {
  * component re-renders as credits arrive.
  */
 export function useCredits(rows) {
-  const [, setVersion] = useState(0);
+  const [version, setVersion] = useState(0);
   const [tick, setTick] = useState(0);
   const inFlight = useRef(false);
 
@@ -125,4 +125,6 @@ export function useCredits(rows) {
 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [rows, tick]);
+
+  return version;
 }

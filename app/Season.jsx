@@ -1,10 +1,10 @@
 'use client';
 
-import { Fragment, useMemo, useState, useEffect } from 'react';
+import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
-import { useCredits, artistLine, edgeStyle, fillStyle } from './useCredits';
+import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -579,9 +579,14 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   const [chartView, setChartView] = useState('points');
   const [chartN, setChartN] = useState(5);
 
+  // The query string of the season on screen, for the quiet reload below.
+  const query = useRef('');
+  const reloads = useRef(0);
+
   useEffect(() => {
     if (!allTime && year == null) return;
     const ctl = new AbortController();
+    reloads.current = 0;
     setData(null);
     setError(null);
     setOpenDriver(null);
@@ -593,6 +598,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     if (allTime) qs.set('all', '1');
     else qs.set('year', String(year));
     if (estimate) qs.set('estimate', '1');
+    query.current = qs.toString();
     fetch(`/api/season?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
@@ -689,7 +695,26 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     () => (data ? [...data.drivers, ...data.months.flatMap((m) => m.top)] : null),
     [data],
   );
-  useCredits(creditRows);
+  const creditVersion = useCredits(creditRows);
+
+  // Credits for tracks nobody had opened before arrive a moment after the
+  // standings, and are stored as they arrive. When they name more artists
+  // than the standings were computed with, reload once, quietly, so every
+  // credited artist's points are in — at most twice per season shown.
+  useEffect(() => {
+    if (!data || !creditRows || reloads.current >= 2) return;
+    const richer = creditRows.some((r) => r.track && artistNames(r).length > (r.credits?.length ?? 1));
+    if (!richer) return;
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      reloads.current += 1;
+      fetch(`/api/season?${query.current}`, { signal: ctl.signal })
+        .then((r) => r.json())
+        .then((j) => { if (!j.error) setData(j); })
+        .catch(() => {});
+    }, 1500);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [creditVersion, data, creditRows]);
 
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;

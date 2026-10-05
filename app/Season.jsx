@@ -5,7 +5,7 @@ import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
-import { useGenres } from './useGenres';
+import { useGenres, seedGenres } from './useGenres';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -604,7 +604,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     query.current = qs.toString();
     fetch(`/api/season?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
-      .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
+      .then((j) => { if (j.error) throw new Error(j.error); seedGenres(j.genres); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
   }, [mode, source, estimate, year, allTime]);
@@ -730,7 +730,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       reloads.current += 1;
       fetch(`/api/season?${query.current}`, { signal: ctl.signal })
         .then((r) => r.json())
-        .then((j) => { if (!j.error) setData(j); })
+        .then((j) => { if (!j.error) { seedGenres(j.genres); setData(j); } })
         .catch(() => {});
     }, 1500);
     return () => { clearTimeout(t); ctl.abort(); };

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
+import { genresFor } from '@/lib/families';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,10 +85,13 @@ export async function GET(req) {
 
   const rows = items.data || [];
   const days = daily.data || [];
+  const genres = await genresFor(rows.map((r) => r.artist));
 
   return NextResponse.json({
     user: user.data ?? null,
     items: rows,
+    // Cached genres for these artists, so colors are right on first paint.
+    genres,
     daily: days,
     // Ranking depends on the metric the client is sorting by, so send the raw
     // previous window and let it rank both the same way.

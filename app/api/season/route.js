@@ -3,6 +3,7 @@ import { db, currentUserId } from '@/lib/db';
 import { normRowKey } from '@/lib/keys';
 import { pointsForRank, splitPoints } from '@/lib/rank';
 import { rpcAll } from '@/lib/rpcPage';
+import { genresFor } from '@/lib/families';
 
 export const dynamic = 'force-dynamic';
 
@@ -229,9 +230,18 @@ export async function GET(req) {
     || (b.finishes ?? 0) - (a.finishes ?? 0)
     || a.artist.localeCompare(b.artist);
 
+  // Cached genres for every artist whose color is drawn — main and credited
+  // — so the page's colors are right on first paint.
+  const genres = await genresFor([
+    ...[...drivers.values()].map((d) => d.artist),
+    ...[...constructors.values()].map((c) => c.artist),
+    ...races.flat().flatMap((r) => [r.artist, ...(r.credits ?? []).map((c) => c.name)]),
+  ]);
+
   return NextResponse.json({
     year, allTime, mode, source: src,
     complete,
+    genres,
     // Whether a Recap calibration exists, so the page only offers the
     // estimate toggle when there is something real behind it — same rule
     // the main dashboard uses.

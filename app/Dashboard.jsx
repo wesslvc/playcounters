@@ -7,7 +7,7 @@ import { computeRanks } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
 import Detail from './Detail';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
-import { useGenres } from './useGenres';
+import { useGenres, seedGenres } from './useGenres';
 import Trend from './Trend';
 import Picker from './Picker';
 
@@ -496,6 +496,9 @@ export default function Dashboard() {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     if (json.calendar) calSrc.current = src;
+    // Before the data lands in state, so its first render is already in the
+    // right colors.
+    seedGenres(json.genres);
     return json;
   }, [range, mode, src, viz, limit, estimate]);
 

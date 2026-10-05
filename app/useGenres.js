@@ -9,6 +9,18 @@ const BATCH = 24;
 const known = {};
 
 /**
+ * Record genres that arrived with a page's own data, before it renders —
+ * artistColor then draws the right color on the first paint, and these
+ * names are never asked for again.
+ */
+export function seedGenres(map) {
+  for (const [artist, g] of Object.entries(map ?? {})) {
+    known[artist] = g;
+    rememberFamily(artist, g?.family);
+  }
+}
+
+/**
  * Look up genres for the artist names on screen, a batch at a time, the way
  * artwork and credits are fetched: only what the server answers is recorded,
  * and whatever is pending is asked for again shortly. Each answer also
@@ -21,7 +33,10 @@ export function useGenres(names) {
   const inFlight = useRef(false);
 
   useEffect(() => {
-    if (inFlight.current || !names?.length) return;
+    if (!names?.length) return;
+    // Seeded since this view last looked: show them.
+    if (names.some((n) => n in known && !(n in snapshot))) setSnapshot({ ...known });
+    if (inFlight.current) return;
     const missing = [];
     for (const n of names) {
       if (!n || n in known || missing.includes(n)) continue;
@@ -59,7 +74,7 @@ export function useGenres(names) {
       });
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [names, tick]);
+  }, [names, tick, snapshot]);
 
   return snapshot;
 }

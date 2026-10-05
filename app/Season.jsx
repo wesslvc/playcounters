@@ -209,7 +209,7 @@ function RaceLeaders({ stints, days, live }) {
           <i
             key={`${st.key}-${st.from}`}
             title={`${st.from}일–${st.to}일 · ${st.track ?? st.artist}`}
-            style={{ flexGrow: st.to - st.from + 1, ...fillStyle(st, 'to bottom') }}
+            style={{ flexGrow: st.to - st.from + 1, ...fillStyle(st, 'to right') }}
           />
         ))}
         {live && stints[stints.length - 1].to < days && (

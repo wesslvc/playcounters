@@ -6,7 +6,8 @@ import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
 import Detail from './Detail';
-import { useCredits, artistLine, edgeStyle, fillStyle } from './useCredits';
+import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
+import { useGenres } from './useGenres';
 import Trend from './Trend';
 import Picker from './Picker';
 
@@ -31,7 +32,6 @@ const MAX_ROWS = 50000;
 const COVER_BATCH = 60;
 /** Artists per genre lookup. Smaller than the cover batch: each miss costs a
     Spotify search, and that quota is the tighter of the two. */
-const GENRE_BATCH = 24;
 /** Cells in the span strip. Fixed, so the drawing survives a long range. */
 const STRIP_CELLS = 90;
 
@@ -386,7 +386,6 @@ export default function Dashboard() {
   const [limit, setLimit] = useState(PAGE);
   const [expanding, setExpanding] = useState(false);
   const [covers, setCovers] = useState({});
-  const [genres, setGenres] = useState({});
   const [calendar, setCalendar] = useState([]);
   const calSrc = useRef(null);
   const [detail, setDetail] = useState(null);
@@ -606,7 +605,7 @@ export default function Dashboard() {
   // those rows permanently behind a null they would never retry. Unanswered
   // keys are simply left unknown and asked for again on the next tick.
   const shown = rows;
-  useCredits(shown);
+  const creditVersion = useCredits(shown);
   const inFlight = useRef(false);
   const [tick, setTick] = useState(0);
 
@@ -652,56 +651,20 @@ export default function Dashboard() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [shown, covers, mode, tick]);
 
-  // Fetch genres for the artists on screen, on the same terms as artwork: a
-  // batch at a time, only what the server actually answers is recorded, and
-  // whatever is still pending is asked for again on the next tick. Spotify's
-  // quota is the tighter of the two ceilings, so the batch is smaller.
-  const genreFlight = useRef(false);
-  const [genreTick, setGenreTick] = useState(0);
-
-  useEffect(() => {
-    if (genreFlight.current || !shown.length) return;
-
-    const missing = [];
-    for (const r of shown) {
-      if (!r.artist || r.artist in genres || missing.includes(r.artist)) continue;
-      missing.push(r.artist);
-      if (missing.length >= GENRE_BATCH) break;
-    }
-    if (!missing.length) return;
-
-    let cancelled = false;
-    let timer;
-    genreFlight.current = true;
-    fetch('/api/genres', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artists: missing }),
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        if (cancelled) return;
-        const got = json?.genres ?? {};
-        if (Object.keys(got).length) setGenres((g) => ({ ...g, ...got }));
-        if (json?.retryAfter || json?.pending) {
-          const wait = json.retryAfter ? json.retryAfter * 1000 : 800;
-          timer = setTimeout(() => setGenreTick((t) => t + 1), wait);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) timer = setTimeout(() => setGenreTick((t) => t + 1), 3000);
-      })
-      .finally(() => { genreFlight.current = false; });
-
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [shown, genres, genreTick]);
+  // Genres for every artist on screen — credited artists included, since
+  // each of them colors their share of a split bar. Shared with the other
+  // views, and each answer moves that artist's color into their genre's band.
+  const genreNames = useMemo(
+    () => [...new Set(shown.flatMap((r) => artistNames(r)))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shown, creditVersion],
+  );
+  const genres = useGenres(genreNames);
 
   /* ---- artist as the one color key ----
-     Every artist gets one stable color, spread by name across the full
-     wheel — not by genre, which put every track of one genre in the same
-     neighbourhood of hue and left an artist with no color of their own. Genre
-     is still looked up and shown as a label (rowgenre, Recap's 주력 장르),
-     it just no longer decides what anything is painted. */
+     Every artist gets one stable color of their own, drawn from their genre
+     family's slice of the wheel, so a list reads in related color families
+     instead of at random (artistColor). */
   const colorOf = useCallback((row) => artistColor(row.artist), []);
   const familyOf = useCallback((row) => genres[row.artist]?.family ?? null, [genres]);
   const genreOf = useCallback((row) => {

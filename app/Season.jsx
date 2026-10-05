@@ -5,6 +5,7 @@ import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
+import { useGenres } from './useGenres';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -660,7 +661,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
         cum += hit ? hit.points : 0;
         return { rank: hit ? hit.rank : null, cum };
       });
-      return { key, label: d.track ?? d.artist, color: artistColor(d.artist), pts };
+      return { key, label: d.track ?? d.artist, artist: d.artist, pts };
     });
 
     let constructorSeries = null;
@@ -682,7 +683,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           cum += hit ? hit.points : 0;
           return { rank: hit ? hit.rank : null, cum };
         });
-        return { key: c.artist_key, label: c.artist, color: artistColor(c.artist), pts };
+        return { key: c.artist_key, label: c.artist, artist: c.artist, pts };
       });
     }
 
@@ -696,6 +697,17 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     [data],
   );
   const creditVersion = useCredits(creditRows);
+
+  // Genres for every artist whose color is on screen — drivers, constructors
+  // and everyone credited — so colors sit in their genre's band here too.
+  const genreNames = useMemo(() => {
+    if (!data) return null;
+    const names = new Set((data.constructors ?? []).map((c) => c.artist));
+    for (const r of creditRows) for (const n of artistNames(r)) names.add(n);
+    return [...names];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, creditRows, creditVersion]);
+  useGenres(genreNames);
 
   // Credits for tracks nobody had opened before arrive a moment after the
   // standings, and are stored as they arrive. When they name more artists
@@ -742,7 +754,10 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   }
 
   const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
-  const activeSeries = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
+  // Colored here rather than when the series were built, so a line moves
+  // into its genre's band as soon as the genre arrives.
+  const activeSeries = (activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries)
+    .map((sr) => ({ ...sr, color: artistColor(sr.artist) }));
 
   return (
     <div className="season">

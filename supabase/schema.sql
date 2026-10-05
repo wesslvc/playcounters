@@ -756,6 +756,46 @@ as $$
   order by dd.day;
 $$;
 
+-- ---------- track credits ----------
+-- Every credited artist on a track, for display. plays.artist stays the main
+-- artist alone — it's what rows group and color by — so a feature doesn't
+-- split one song into two or shift its points to someone else. Shared across
+-- users: credits are a fact about the recording, not about a listener.
+-- source: 'spotify' (from a live sync, exact), 'deezer' (looked up by name),
+-- or 'none' (looked up, nothing usable found; retried after a while).
+create table if not exists track_credits (
+  artist_key text not null,
+  track_key  text not null,
+  artists    text[] not null,
+  source     text not null,
+  updated_at timestamptz not null default now(),
+  primary key (artist_key, track_key)
+);
+alter table track_credits enable row level security;
+
+-- Keys are computed here with the same functions as plays' generated columns,
+-- so a credit always lands on the key its plays group under. Spotify's own
+-- credits are never overwritten by a name lookup.
+create or replace function save_track_credits(p_items jsonb, p_source text)
+returns void
+language sql
+set search_path = public, pg_temp
+as $$
+  insert into track_credits (artist_key, track_key, artists, source)
+  select distinct on (ak, tk) ak, tk, artists, p_source
+  from (
+    select norm_artist(i->>'artist')               as ak,
+           norm_track(i->>'track', i->>'artist')   as tk,
+           array(select jsonb_array_elements_text(i->'artists')) as artists
+    from jsonb_array_elements(p_items) i
+    where coalesce(i->>'artist', '') <> '' and coalesce(i->>'track', '') <> ''
+  ) x
+  order by ak, tk
+  on conflict (artist_key, track_key) do update
+    set artists = excluded.artists, source = excluded.source, updated_at = now()
+    where track_credits.source <> 'spotify' or excluded.source = 'spotify';
+$$;
+
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as
 -- anyone passes the cap. This counts the real thing.

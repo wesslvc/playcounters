@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState, useEffect } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
+import { useCredits, artistLine } from './useCredits';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -157,6 +158,7 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
     return () => ctl.abort();
   }, [year, month, mode, source, estimate]);
 
+  useCredits(detail?.items);
   if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
   if (!detail) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
   const { items, leaders, days } = detail;
@@ -172,7 +174,7 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
           </span>
           <span className="gph-nm">
             <b>{t.track ?? t.artist}</b>
-            {t.track && <span> · {t.artist}</span>}
+            {t.track && <span> · {artistLine(t)}</span>}
           </span>
           <span className="gph-pt">
             {!live && t.points > 0 ? `${t.points}pt · ` : ''}{t.plays.toLocaleString()}회
@@ -191,6 +193,7 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
  * margin each leader held at the end of their spell.
  */
 function RaceLeaders({ stints, days, live }) {
+  useCredits(stints);
   const changes = stints.length - 1;
   const span = stints[stints.length - 1].to - stints[0].from + 1;
   const most = new Map();
@@ -227,7 +230,7 @@ function RaceLeaders({ stints, days, live }) {
               </span>
               <span className="lead-nm" style={{ borderLeftColor: artistColor(st.artist) }}>
                 <b>{st.track ?? st.artist}</b>
-                {st.track && <span>{st.artist}</span>}
+                {st.track && <span>{artistLine(st)}</span>}
               </span>
               <span className="lead-n">
                 {n}일{st.gap != null && st.gap > 0 ? ` · +${Math.round(st.gap)}회` : ''}
@@ -330,7 +333,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
             <span className="live-pos">{t.rank}</span>
             <span className="live-nm">
               <b>{t.track ?? t.artist}</b>
-              {t.track && <span>{t.artist}</span>}
+              {t.track && <span>{artistLine(t)}</span>}
             </span>
             <span className="live-plays">{Number(t.plays).toLocaleString()}회</span>
           </li>
@@ -364,7 +367,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
               <Move from={r.prevPos} to={r.pos} />
               <span className="proj-nm" style={{ borderLeftColor: artistColor(r.artist) }}>
                 <b>{r.track ?? r.artist}</b>
-                {r.track && <span>{r.artist}</span>}
+                {r.track && <span>{artistLine(r)}</span>}
               </span>
               <span className="proj-pts">
                 {r.points.toLocaleString()}
@@ -676,6 +679,14 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     return { labels, driverSeries, constructorSeries };
   }, [data, chartN]);
 
+  // Rows whose artist line is on screen: the standings, plus every month's
+  // top ten (leader card, live race, race calendar).
+  const creditRows = useMemo(
+    () => (data ? [...data.drivers, ...data.months.flatMap((m) => m.top)] : null),
+    [data],
+  );
+  useCredits(creditRows);
+
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;
 
@@ -718,7 +729,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           {driverChamp && (
             <LeaderCard
               tag={driverTag} name={driverChamp.track ?? driverChamp.artist}
-              sub={driverChamp.track ? driverChamp.artist : null}
+              sub={driverChamp.track ? artistLine(driverChamp) : null}
               points={driverChamp.points} wins={driverChamp.wins} podiums={driverChamp.podiums}
               color={artistColor(driverChamp.artist)}
             />
@@ -777,7 +788,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
               return (
                 <StandingsRow
                   key={key} rank={i + 1}
-                  name={d.track ?? d.artist} sub={d.track ? d.artist : null}
+                  name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
                   color={artistColor(d.artist)} kind="driver"
@@ -843,7 +854,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                     <span className="gp-mo">{moLabel(m, allTime)}</span>
                     <span className="gp-nm" style={{ borderLeftColor: artistColor(winner.artist) }}>
                       <b>{winner.track ?? winner.artist}</b>
-                      {winner.track && <span>{winner.artist}</span>}
+                      {winner.track && <span>{artistLine(winner)}</span>}
                     </span>
                     <span className="gp-pt">{Number(winner.plays).toLocaleString()}회</span>
                     <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>

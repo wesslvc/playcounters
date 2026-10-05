@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { artistLine } from './useCredits';
 
 const DAY = 864e5;
 
@@ -95,7 +96,7 @@ export default function Detail({ target, source, estimate, onClose }) {
         <div className="sheet-head">
           <div className="nm">
             <b>{target.track ?? target.artist}</b>
-            {target.track && <span>{target.artist}</span>}
+            {target.track && <span>{artistLine(target)}</span>}
           </div>
           <button className="pill" onClick={onClose}>닫기</button>
         </div>

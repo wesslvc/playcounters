@@ -6,6 +6,7 @@ import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
 import Detail from './Detail';
+import { useCredits, artistLine } from './useCredits';
 import Trend from './Trend';
 import Picker from './Picker';
 
@@ -250,7 +251,7 @@ function Podium({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, colorO
             className="podium-step"
             data-pos={i + 1}
             style={{ borderBottomColor: colorOf(r) }}
-            onClick={() => onSelect({ artist: r.artist, track: r.track ?? null })}
+            onClick={() => onSelect({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null })}
           >
             <span className="pos" data-tier={rank <= 3 ? rank : undefined}>P{rank}</span>
             <div className="art">
@@ -259,7 +260,7 @@ function Podium({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, colorO
                 : <span className="art-none" aria-hidden="true" />}
             </div>
             <span className="nm2">{r.track ?? r.artist}</span>
-            {r.track && <span className="sub">{r.artist}</span>}
+            {r.track && <span className="sub">{artistLine(r)}</span>}
             <span className="amt">{isEst(r) ? '≈' : ''}{fmt(r[sort], sort)}{unit}</span>
             {genre && <span className="chip" style={{ color: colorOf(r) }}>{genre}</span>}
           </button>
@@ -605,6 +606,7 @@ export default function Dashboard() {
   // those rows permanently behind a null they would never retry. Unanswered
   // keys are simply left unknown and asked for again on the next tick.
   const shown = rows;
+  useCredits(shown);
   const inFlight = useRef(false);
   const [tick, setTick] = useState(0);
 
@@ -970,12 +972,12 @@ export default function Dashboard() {
                   </div>
                   <button
                     className="nm as-link"
-                    onClick={() => setDetail({ artist: r.artist, track: r.track ?? null })}
+                    onClick={() => setDetail({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null })}
                     aria-label={`${r.track ?? r.artist} 통계 보기`}
                   >
                     <b>{r.track ?? r.artist}</b>
                     <span>
-                      {r.track ? r.artist
+                      {r.track ? artistLine(r)
                         : `${isEst(r) ? '≈' : ''}${Number(r.plays).toLocaleString()}회 · ${r.days}일`}
                       {genreOf(r) && <em className="rowgenre">{genreOf(r)}</em>}
                     </span>

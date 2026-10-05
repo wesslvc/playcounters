@@ -90,6 +90,7 @@ function leaderStints(daily, items, endDay) {
     stints.push({
       key, from: day, to: null,
       artist: t?.artist ?? d.artist_key, track: t?.track ?? null,
+      artist_key: d.artist_key, track_key: d.track_key ?? null,
       plays: Number(d.plays),
       gap: d.runner_up == null ? null : Number(d.plays) - Number(d.runner_up),
     });

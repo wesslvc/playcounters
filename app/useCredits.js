@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { artistColor } from '@/lib/genre';
 
 const BATCH = 60;
 
@@ -10,14 +11,65 @@ const known = new Map();
 const creditKey = (r) => `${r.artist_key}\u0000${r.track_key ?? ''}`;
 
 /**
- * The artist line to show under a track: every credited artist when more
- * than one is known ("Don Toliver, Doja Cat"), otherwise the row's own
- * artist. Grouping and color stay on the main artist; this is display only.
+ * Every credited artist on a row, main artist first: the server's own list
+ * when it sent one (the championship does), else whatever has been looked
+ * up, else just the row's artist.
  */
+export function artistNames(row) {
+  if (!row) return [];
+  if (row.credits?.length > 1) return row.credits.map((c) => c.name);
+  if (row.track && row.artist_key) {
+    const a = known.get(creditKey(row));
+    if (a && a.length > 1) return a;
+  }
+  return [row.artist];
+}
+
+/** The artist line to show under a track: "Don Toliver, Doja Cat". */
 export function artistLine(row) {
-  if (!row?.track || !row.artist_key) return row?.artist;
-  const a = known.get(creditKey(row));
-  return a && a.length > 1 ? a.join(', ') : row.artist;
+  return artistNames(row).join(', ');
+}
+
+/** One color per credited artist, each artist's own. */
+export function artistColors(row) {
+  return artistNames(row).map((n) => artistColor(n));
+}
+
+/**
+ * A hard-edged gradient giving each color an equal share, with a 2px clear
+ * gap between them — two artists' colors can land close together, and the
+ * gap keeps a split reading as a split.
+ */
+function stripes(colors, dir) {
+  const step = 100 / colors.length;
+  const parts = [];
+  colors.forEach((c, i) => {
+    const a = (i * step).toFixed(2);
+    const b = ((i + 1) * step).toFixed(2);
+    const start = i ? `calc(${a}% + 1px)` : '0%';
+    const end = i < colors.length - 1 ? `calc(${b}% - 1px)` : '100%';
+    parts.push(`${c} ${start} ${end}`);
+    if (i < colors.length - 1) parts.push(`transparent ${end} calc(${b}% + 1px)`);
+  });
+  return `linear-gradient(${dir}, ${parts.join(', ')})`;
+}
+
+/**
+ * Style for a colored edge (a border on one side), split between every
+ * credited artist's color when there's more than one.
+ */
+export function edgeStyle(row, side = 'left') {
+  const colors = artistColors(row);
+  const prop = `border${side[0].toUpperCase()}${side.slice(1)}Color`;
+  if (colors.length < 2) return { [prop]: colors[0] };
+  const dir = side === 'left' || side === 'right' ? 'to bottom' : 'to right';
+  return { borderImage: `${stripes(colors, dir)} 1` };
+}
+
+/** Background for a colored fill (a bar or a strip segment), split the same way. */
+export function fillStyle(row, dir = 'to right') {
+  const colors = artistColors(row);
+  return colors.length < 2 ? { background: colors[0] } : { background: stripes(colors, dir) };
 }
 
 /**

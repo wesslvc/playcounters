@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState, useEffect } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
-import { useCredits, artistLine } from './useCredits';
+import { useCredits, artistLine, edgeStyle, fillStyle } from './useCredits';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -101,7 +101,7 @@ function StandingsHead({ label }) {
  * artist's own color, the same one the main dashboard uses — a driver and
  * their team are still, visually, that one artist.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, color, log, allTime, open, onToggle, kind }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, log, allTime, open, onToggle, kind }) {
   return (
     <>
       <li
@@ -111,7 +111,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, 
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
       >
         <div className="pos">{rank}</div>
-        <div className="nm3" style={{ borderLeftColor: color }}>
+        <div className="nm3" style={edge}>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
         </div>
@@ -209,7 +209,7 @@ function RaceLeaders({ stints, days, live }) {
           <i
             key={`${st.key}-${st.from}`}
             title={`${st.from}일–${st.to}일 · ${st.track ?? st.artist}`}
-            style={{ flexGrow: st.to - st.from + 1, background: artistColor(st.artist) }}
+            style={{ flexGrow: st.to - st.from + 1, ...fillStyle(st, 'to bottom') }}
           />
         ))}
         {live && stints[stints.length - 1].to < days && (
@@ -228,7 +228,7 @@ function RaceLeaders({ stints, days, live }) {
               <span className="lead-days">
                 {st.from === st.to ? `${st.from}일` : `${st.from}–${st.to}일`}
               </span>
-              <span className="lead-nm" style={{ borderLeftColor: artistColor(st.artist) }}>
+              <span className="lead-nm" style={edgeStyle(st)}>
                 <b>{st.track ?? st.artist}</b>
                 {st.track && <span>{artistLine(st)}</span>}
               </span>
@@ -308,12 +308,14 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
   const top = m.top.slice(0, 3);
   const projected = useMemo(
     () => ({
-      drivers: projectStandings(drivers, m.top, normRowKey, (t) => ({
-        artist: t.artist, track: t.track ?? null, artist_key: t.artist_key, track_key: t.track_key ?? null,
-      })),
-      constructors: constructors && projectStandings(constructors, m.top, (t) => t.artist_key, (t) => ({
-        artist: t.artist, artist_key: t.artist_key,
-      })),
+      drivers: projectStandings(drivers, m.top, normRowKey, (t) => [{
+        key: normRowKey(t),
+        fields: { artist: t.artist, track: t.track ?? null, artist_key: t.artist_key, track_key: t.track_key ?? null, credits: t.credits ?? null },
+      }]),
+      // Every credited artist scores, the same as the real standings.
+      constructors: constructors && projectStandings(constructors, m.top, (c) => c.artist_key, (t) =>
+        (t.credits ?? [{ name: t.artist, key: t.artist_key }])
+          .map((c) => ({ key: c.key, fields: { artist: c.name, artist_key: c.key } }))),
     }),
     [m, drivers, constructors],
   );
@@ -329,9 +331,9 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
       </div>
       <ol className="live-top">
         {top.map((t) => (
-          <li key={normRowKey(t)} style={{ '--team': artistColor(t.artist) }}>
+          <li key={normRowKey(t)}>
             <span className="live-pos">{t.rank}</span>
-            <span className="live-nm">
+            <span className="live-nm" style={edgeStyle(t)}>
               <b>{t.track ?? t.artist}</b>
               {t.track && <span>{artistLine(t)}</span>}
             </span>
@@ -365,7 +367,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
             <li key={r.key}>
               <span className="proj-pos">{r.pos}</span>
               <Move from={r.prevPos} to={r.pos} />
-              <span className="proj-nm" style={{ borderLeftColor: artistColor(r.artist) }}>
+              <span className="proj-nm" style={r.track ? edgeStyle(r) : { borderLeftColor: artistColor(r.artist) }}>
                 <b>{r.track ?? r.artist}</b>
                 {r.track && <span>{artistLine(r)}</span>}
               </span>
@@ -396,14 +398,13 @@ function Move({ from, to }) {
  * real standings use (points, wins, podiums, then finishes). Each row
  * carries where it sits today, so the move can be shown.
  */
-function projectStandings(current, liveTop, keyOf, fieldsOf) {
+function projectStandings(current, liveTop, keyOf, entriesOf) {
   const rows = new Map(current.map((c, i) => [keyOf(c), {
     ...c, key: keyOf(c), prevPos: i + 1, gained: 0,
   }]));
-  for (const t of liveTop) {
-    const k = keyOf(t);
+  for (const t of liveTop) for (const { key: k, fields } of entriesOf(t)) {
     const r = rows.get(k) ?? {
-      ...fieldsOf(t), key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0, finishes: 0,
+      ...fields, key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0, finishes: 0,
     };
     r.points += t.points;
     r.gained += t.points;
@@ -620,7 +621,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     const log = [];
     for (const m of data.months) {
       if (m.live) continue;
-      const hits = m.top.filter((t) => t.artist_key === openConstructor);
+      const hits = m.top.filter((t) =>
+        (t.credits ?? [{ key: t.artist_key }]).some((c) => c.key === openConstructor));
       if (hits.length) {
         log.push({
           year: m.year, month: m.month,
@@ -659,7 +661,9 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     if (data.constructors) {
       const monthly = months.map((m) => {
         const sums = new Map();
-        for (const t of m.top) sums.set(t.artist_key, (sums.get(t.artist_key) ?? 0) + t.points);
+        for (const t of m.top) {
+          for (const c of t.credits ?? [{ key: t.artist_key }]) sums.set(c.key, (sums.get(c.key) ?? 0) + t.points);
+        }
         const rows = [...sums.entries()].map(([artist_key, points]) => ({ artist_key, points }));
         rows.sort((a, b) => b.points - a.points);
         const ranks = computeRanks(rows, 'points');
@@ -791,7 +795,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                   name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
-                  color={artistColor(d.artist)} kind="driver"
+                  edge={edgeStyle(d)} kind="driver"
                   open={openDriver === key} log={driverLog} allTime={allTime}
                   onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
                 />
@@ -817,7 +821,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
                     pointsFinishes={c.pointsFinishes} finishes={c.finishes}
-                    color={artistColor(c.artist)} kind="constructor"
+                    edge={{ borderLeftColor: artistColor(c.artist) }} kind="constructor"
                     open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
                     onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}
                   />
@@ -852,7 +856,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                   >
                     <span className="gp-rd"><Chequered />R{m.round}</span>
                     <span className="gp-mo">{moLabel(m, allTime)}</span>
-                    <span className="gp-nm" style={{ borderLeftColor: artistColor(winner.artist) }}>
+                    <span className="gp-nm" style={edgeStyle(winner)}>
                       <b>{winner.track ?? winner.artist}</b>
                       {winner.track && <span>{artistLine(winner)}</span>}
                     </span>

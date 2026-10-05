@@ -145,8 +145,17 @@ export async function GET(req) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 
+  // Every credited artist on each charting track (track_credits), so a
+  // feature earns its artists constructor points together. Tracks with no
+  // stored credits count for their main artist alone, as before.
+  if (mode === 'tracks') {
+    const credits = await creditsFor(races.flat());
+    for (const r of races.flat()) r.credits = creditList(r, credits);
+  }
+
   const drivers = new Map();
   const constructors = new Map();
+  const featured = new Map(); // constructor key -> Set of featured track keys counted
 
   races.forEach((results, i) => {
     if (i === liveIdx) return;
@@ -162,6 +171,7 @@ export async function GET(req) {
       const d = drivers.get(key) ?? {
         artist: r.artist, track: r.track ?? null,
         artist_key: r.artist_key, track_key: r.track_key ?? null,
+        credits: r.credits ?? null,
         points: 0, wins: 0, podiums: 0, starts: 0,
         finishes: r.entries ?? null,
       };
@@ -172,20 +182,41 @@ export async function GET(req) {
       drivers.set(key, d);
 
       if (mode === 'tracks') {
-        const ckey = r.artist_key;
-        const c = constructors.get(ckey) ?? {
-          artist: r.artist, artist_key: r.artist_key,
-          points: 0, wins: 0, podiums: 0, starts: 0,
-          finishes: r.artist_entries ?? null,
-        };
-        c.points += r.points;
-        c.starts += 1;
-        if (r.rank === 1) c.wins += 1;
-        if (r.rank <= 3) c.podiums += 1;
-        constructors.set(ckey, c);
+        for (const { name, key: ckey } of r.credits) {
+          const main = ckey === r.artist_key;
+          const c = constructors.get(ckey) ?? {
+            artist: name, artist_key: ckey,
+            points: 0, wins: 0, podiums: 0, starts: 0, finishes: null,
+          };
+          // The main artist's own months come from the query; a featured
+          // track adds its months once, the first time it's seen.
+          if (main) {
+            c.artist = r.artist;
+            if (c.mainFinishes == null) c.mainFinishes = r.artist_entries ?? null;
+          } else {
+            const seen = featured.get(ckey) ?? new Set();
+            if (!seen.has(r.track_key)) {
+              seen.add(r.track_key);
+              c.featFinishes = (c.featFinishes ?? 0) + (r.entries ?? 0);
+            }
+            featured.set(ckey, seen);
+          }
+          c.points += r.points;
+          c.starts += 1;
+          if (r.rank === 1) c.wins += 1;
+          if (r.rank <= 3) c.podiums += 1;
+          constructors.set(ckey, c);
+        }
       }
     }
   });
+
+  for (const c of constructors.values()) {
+    c.finishes = c.mainFinishes == null && c.featFinishes == null
+      ? null : (c.mainFinishes ?? 0) + (c.featFinishes ?? 0);
+    delete c.mainFinishes;
+    delete c.featFinishes;
+  }
 
   // Ties settled the way F1's own standings are — most wins, then most
   // podiums — and then by races finished (months listened), more ranking
@@ -210,6 +241,7 @@ export async function GET(req) {
         artist: r.artist, track: r.track ?? null,
         artist_key: r.artist_key, track_key: r.track_key ?? null,
         rank: r.rank, points: r.points, plays: r.plays, yt: r.yt,
+        credits: r.credits ?? null,
       })),
     })),
     // starts is every scoring finish; finishes is every race entered,
@@ -222,4 +254,33 @@ export async function GET(req) {
         .map((c) => ({ ...c, pointsFinishes: c.starts }))
       : null,
   });
+}
+
+/** Stored credits for these rows' tracks, keyed artist_key + track_key. */
+async function creditsFor(rows) {
+  const trackKeys = [...new Set(rows.map((r) => r.track_key).filter(Boolean))];
+  const out = new Map();
+  // Chunked: a long all-time list of keys would overflow one request's URL.
+  for (let i = 0; i < trackKeys.length; i += 100) {
+    const { data, error } = await db
+      .from('track_credits')
+      .select('artist_key, track_key, artists, artist_keys')
+      .in('track_key', trackKeys.slice(i, i + 100));
+    if (error) return out; // credits are a bonus; standings still stand without them
+    for (const c of data ?? []) out.set(`${c.artist_key}\u0000${c.track_key}`, c);
+  }
+  return out;
+}
+
+/** [{ name, key }] for a row, main artist first; just the main artist when nothing richer is stored. */
+function creditList(r, credits) {
+  const main = { name: r.artist, key: r.artist_key };
+  const c = credits.get(`${r.artist_key}\u0000${r.track_key}`);
+  if (!c?.artists?.length || !c.artist_keys?.length) return [main];
+  const list = [main];
+  c.artists.forEach((name, i) => {
+    const key = c.artist_keys[i];
+    if (key && !list.some((x) => x.key === key)) list.push({ name, key });
+  });
+  return list;
 }

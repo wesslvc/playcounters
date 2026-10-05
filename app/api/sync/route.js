@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { syncUser, USER_COLUMNS } from '@/lib/sync';
+import { findCredits } from '@/lib/credits';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -37,5 +38,36 @@ export async function GET(req) {
     }
   }
 
-  return NextResponse.json({ ok: true, at: new Date().toISOString(), report });
+  // Fill in credits for the most-played tracks still missing them, a small
+  // batch per run. Best effort: a failure here never fails the sync.
+  let credited = 0;
+  try {
+    credited = await backfillCredits(CREDIT_BATCH);
+  } catch (e) {
+    console.error('credit backfill failed', e);
+  }
+
+  return NextResponse.json({ ok: true, at: new Date().toISOString(), report, credited });
+}
+
+const CREDIT_BATCH = 20;
+
+async function backfillCredits(limit) {
+  const { data, error } = await db.rpc('tracks_missing_credits', { p_limit: limit });
+  if (error) throw error;
+  const found = [];
+  const none = [];
+  for (let i = 0; i < (data ?? []).length; i += 3) {
+    await Promise.all(data.slice(i, i + 3).map(async ({ artist, track }) => {
+      try {
+        const artists = await findCredits(artist, track);
+        (artists?.length ? found : none).push({ artist, track, artists: artists ?? [] });
+      } catch {
+        // rate limited or unreachable: leave it for the next run
+      }
+    }));
+  }
+  if (found.length) await db.rpc('save_track_credits', { p_items: found, p_source: 'deezer' });
+  if (none.length) await db.rpc('save_track_credits', { p_items: none, p_source: 'none' });
+  return found.length;
 }

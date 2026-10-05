@@ -756,6 +756,113 @@ as $$
   order by dd.day;
 $$;
 
+-- ---------- merging duplicates ----------
+-- The same artist can arrive under two names (빈지노 / Beenzino — YouTube and
+-- Spotify name them differently), and the same song under two titles. An
+-- alias maps a variant's key onto the key it should count as. plays'
+-- artist_key/track_key were generated columns; they're kept by a trigger
+-- now, which applies the aliases, so every query reading the keys sees a
+-- merge without being rewritten.
+create table if not exists artist_aliases (
+  alias_key     text primary key,
+  canonical_key text not null
+);
+create table if not exists track_aliases (
+  artist_key    text not null,   -- the canonical artist's key
+  alias_key     text not null,
+  canonical_key text not null,
+  primary key (artist_key, alias_key)
+);
+alter table artist_aliases enable row level security;
+alter table track_aliases  enable row level security;
+
+create or replace function resolve_artist_key(p_artist text)
+returns text
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select coalesce((select canonical_key from artist_aliases where alias_key = norm_artist(p_artist)),
+                  norm_artist(p_artist));
+$$;
+
+create or replace function resolve_track_key(p_track text, p_artist text)
+returns text
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select coalesce((select canonical_key from track_aliases
+                    where artist_key = resolve_artist_key(p_artist)
+                      and alias_key  = norm_track(p_track, p_artist)),
+                  norm_track(p_track, p_artist));
+$$;
+
+alter table plays alter column artist_key drop expression if exists;
+alter table plays alter column track_key  drop expression if exists;
+
+create or replace function plays_set_keys()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.artist_key := resolve_artist_key(new.artist);
+  new.track_key  := resolve_track_key(new.track, new.artist);
+  return new;
+end;
+$$;
+
+drop trigger if exists plays_set_keys on plays;
+create trigger plays_set_keys
+  before insert or update of artist, track on plays
+  for each row execute function plays_set_keys();
+
+-- Count every play under p_from_key as p_into_key from now on, past plays
+-- included. Returns how many plays moved.
+create or replace function merge_artist(p_from_key text, p_into_key text)
+returns bigint
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  n bigint;
+begin
+  if p_from_key = p_into_key then return 0; end if;
+  insert into artist_aliases values (p_from_key, p_into_key)
+    on conflict (alias_key) do update set canonical_key = excluded.canonical_key;
+  update artist_aliases set canonical_key = p_into_key where canonical_key = p_from_key;
+  insert into track_aliases (artist_key, alias_key, canonical_key)
+    select p_into_key, alias_key, canonical_key from track_aliases where artist_key = p_from_key
+    on conflict do nothing;
+  delete from track_aliases where artist_key = p_from_key;
+  update plays set artist = artist where artist_key = p_from_key;
+  get diagnostics n = row_count;
+  delete from track_credits where artist_key = p_from_key;
+  return n;
+end;
+$$;
+
+-- Same for one song of one artist: plays under p_from_key count as
+-- p_into_key. Returns how many plays moved.
+create or replace function merge_track(p_artist_key text, p_from_key text, p_into_key text)
+returns bigint
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  n bigint;
+begin
+  if p_from_key = p_into_key then return 0; end if;
+  insert into track_aliases values (p_artist_key, p_from_key, p_into_key)
+    on conflict (artist_key, alias_key) do update set canonical_key = excluded.canonical_key;
+  update track_aliases set canonical_key = p_into_key
+   where artist_key = p_artist_key and canonical_key = p_from_key;
+  update plays set track = track where artist_key = p_artist_key and track_key = p_from_key;
+  get diagnostics n = row_count;
+  delete from track_credits where artist_key = p_artist_key and track_key = p_from_key;
+  return n;
+end;
+$$;
+
 -- ---------- track credits ----------
 -- Every credited artist on a track, for display. plays.artist stays the main
 -- artist alone — it's what rows group and color by — so a feature doesn't
@@ -772,28 +879,52 @@ create table if not exists track_credits (
   primary key (artist_key, track_key)
 );
 alter table track_credits enable row level security;
+-- Each credited artist's key, in the same order as artists — what the
+-- championship credits points to.
+alter table track_credits add column if not exists artist_keys text[];
+update track_credits set artist_keys = array(select resolve_artist_key(x) from unnest(artists) x)
+ where artist_keys is null;
 
--- Keys are computed here with the same functions as plays' generated columns,
--- so a credit always lands on the key its plays group under. Spotify's own
+-- Keys are computed with the same functions plays' keys are, aliases
+-- included, so a credit always lands on the key its plays group under. Spotify's own
 -- credits are never overwritten by a name lookup.
 create or replace function save_track_credits(p_items jsonb, p_source text)
 returns void
 language sql
 set search_path = public, pg_temp
 as $$
-  insert into track_credits (artist_key, track_key, artists, source)
-  select distinct on (ak, tk) ak, tk, artists, p_source
+  insert into track_credits (artist_key, track_key, artists, artist_keys, source)
+  select distinct on (ak, tk) ak, tk, artists,
+         array(select resolve_artist_key(x) from unnest(artists) x), p_source
   from (
-    select norm_artist(i->>'artist')               as ak,
-           norm_track(i->>'track', i->>'artist')   as tk,
+    select resolve_artist_key(i->>'artist')                  as ak,
+           resolve_track_key(i->>'track', i->>'artist')      as tk,
            array(select jsonb_array_elements_text(i->'artists')) as artists
     from jsonb_array_elements(p_items) i
     where coalesce(i->>'artist', '') <> '' and coalesce(i->>'track', '') <> ''
   ) x
   order by ak, tk
   on conflict (artist_key, track_key) do update
-    set artists = excluded.artists, source = excluded.source, updated_at = now()
+    set artists = excluded.artists, artist_keys = excluded.artist_keys,
+        source = excluded.source, updated_at = now()
     where track_credits.source <> 'spotify' or excluded.source = 'spotify';
+$$;
+
+-- Most-played tracks with no stored credits yet, for the sync to fill in a
+-- batch at a time — so the championship can credit features on tracks
+-- nobody has opened since credits started being kept.
+create or replace function tracks_missing_credits(p_limit int default 20)
+returns table (artist text, track text)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select mode() within group (order by p.artist), mode() within group (order by p.track)
+  from plays p
+  left join track_credits c on c.artist_key = p.artist_key and c.track_key = p.track_key
+  where c.artist_key is null
+  group by p.artist_key, p.track_key
+  order by count(*) desc
+  limit p_limit;
 $$;
 
 -- ---------- distinct item count ----------

@@ -6,7 +6,7 @@ import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
 import Detail from './Detail';
-import { useCredits, artistLine } from './useCredits';
+import { useCredits, artistLine, edgeStyle, fillStyle } from './useCredits';
 import Trend from './Trend';
 import Picker from './Picker';
 
@@ -250,7 +250,7 @@ function Podium({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, colorO
             key={rowKey(r)}
             className="podium-step"
             data-pos={i + 1}
-            style={{ borderBottomColor: colorOf(r) }}
+            style={r.track ? edgeStyle(r, 'bottom') : { borderBottomColor: colorOf(r) }}
             onClick={() => onSelect({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null })}
           >
             <span className="pos" data-tier={rank <= 3 ? rank : undefined}>P{rank}</span>
@@ -990,7 +990,7 @@ export default function Dashboard() {
                   </div>
                   {showCount && (
                     <div className="meter" aria-hidden="true">
-                      <i style={{ width: pct + '%', background: colorOf(r) }} />
+                      <i style={{ width: pct + '%', ...(r.track ? fillStyle(r) : { background: colorOf(r) }) }} />
                     </div>
                   )}
                   {showSpan && <Strip days={data.daily} item={r} color={colorOf(r)} />}

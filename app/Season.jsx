@@ -604,7 +604,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     query.current = qs.toString();
     fetch(`/api/season?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())
-      .then((j) => { if (j.error) throw new Error(j.error); seedGenres(j.genres); setData(j); })
+      .then((j) => { if (j.error) throw new Error(j.error); seedGenres(j.genres, j.slots); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
   }, [mode, source, estimate, year, allTime]);
@@ -730,7 +730,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       reloads.current += 1;
       fetch(`/api/season?${query.current}`, { signal: ctl.signal })
         .then((r) => r.json())
-        .then((j) => { if (!j.error) { seedGenres(j.genres); setData(j); } })
+        .then((j) => { if (!j.error) { seedGenres(j.genres, j.slots); setData(j); } })
         .catch(() => {});
     }, 1500);
     return () => { clearTimeout(t); ctl.abort(); };

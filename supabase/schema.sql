@@ -1081,6 +1081,30 @@ begin
 end;
 $$;
 
+-- Each artist's place among the listener's artists of the same genre
+-- family, by all-time plays — the top few per genre get hand-picked,
+-- clearly different shades of that genre's color. Only the top 8 per
+-- family; everyone else is colored by name.
+create or replace function artist_color_slots(p_user uuid)
+returns table (artist text, slot int)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select artist, slot from (
+    select a.artist,
+           (row_number() over (partition by g.family order by a.n desc, a.artist_key) - 1)::int as slot
+    from (
+      select p.artist_key, count(*) as n, mode() within group (order by p.artist) as artist
+      from plays p
+      where p.user_id = p_user
+      group by p.artist_key
+    ) a
+    join artist_genres g on g.artist = a.artist
+    where g.family <> 'other'
+  ) ranked
+  where slot < 8;
+$$;
+
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as
 -- anyone passes the cap. This counts the real thing.

@@ -888,20 +888,38 @@ update track_credits set artist_keys = array(select resolve_artist_key(x) from u
 -- Keys are computed with the same functions plays' keys are, aliases
 -- included, so a credit always lands on the key its plays group under. Spotify's own
 -- credits are never overwritten by a name lookup.
+-- Names never to credit on a given artist's tracks, as a case-insensitive
+-- pattern — a band's own members listed as contributors on every song
+-- (AKMU's 이찬혁 and 이수현), say. Applied to every lookup and sync; a hand
+-- edit (edit_track_credits) is not filtered.
+create table if not exists credit_exclusions (
+  artist_key text not null,
+  pattern    text not null,
+  primary key (artist_key, pattern)
+);
+alter table credit_exclusions enable row level security;
+
 create or replace function save_track_credits(p_items jsonb, p_source text)
 returns void
 language sql
 set search_path = public, pg_temp
 as $$
   insert into track_credits (artist_key, track_key, artists, artist_keys, source)
-  select distinct on (ak, tk) ak, tk, artists,
-         array(select resolve_artist_key(x) from unnest(artists) x), p_source
+  select distinct on (ak, tk) ak, tk, kept,
+         array(select resolve_artist_key(x) from unnest(kept) x), p_source
   from (
-    select resolve_artist_key(i->>'artist')                  as ak,
-           resolve_track_key(i->>'track', i->>'artist')      as tk,
-           array(select jsonb_array_elements_text(i->'artists')) as artists
-    from jsonb_array_elements(p_items) i
-    where coalesce(i->>'artist', '') <> '' and coalesce(i->>'track', '') <> ''
+    select ak, tk,
+           array(select n from unnest(artists) with ordinality as u(n, o)
+                  where not exists (select 1 from credit_exclusions e
+                                     where e.artist_key = y.ak and lower(n) ~ e.pattern)
+                  order by o) as kept
+    from (
+      select resolve_artist_key(i->>'artist')                  as ak,
+             resolve_track_key(i->>'track', i->>'artist')      as tk,
+             array(select jsonb_array_elements_text(i->'artists')) as artists
+      from jsonb_array_elements(p_items) i
+      where coalesce(i->>'artist', '') <> '' and coalesce(i->>'track', '') <> ''
+    ) y
   ) x
   order by ak, tk
   on conflict (artist_key, track_key) do update

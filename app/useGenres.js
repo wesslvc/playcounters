@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { rememberFamily, rememberSlot } from '@/lib/genre';
+import { rememberFamily } from '@/lib/genre';
 
 const BATCH = 24;
 
@@ -13,12 +13,11 @@ const known = {};
  * artistColor then draws the right color on the first paint, and these
  * names are never asked for again.
  */
-export function seedGenres(map, slots) {
+export function seedGenres(map) {
   for (const [artist, g] of Object.entries(map ?? {})) {
     known[artist] = g;
-    rememberFamily(artist, g?.family);
+    rememberFamily(artist, g?.family, g?.shade);
   }
-  for (const { artist, slot } of slots ?? []) rememberSlot(artist, slot);
 }
 
 /**
@@ -59,7 +58,7 @@ export function useGenres(names) {
         const got = json?.genres ?? {};
         for (const [artist, g] of Object.entries(got)) {
           known[artist] = g;
-          rememberFamily(artist, g?.family);
+          rememberFamily(artist, g?.family, g?.shade);
         }
         if (Object.keys(got).length) setSnapshot({ ...known });
         if (!cancelled && (json?.retryAfter || json?.pending)) {

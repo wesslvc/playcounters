@@ -498,7 +498,7 @@ export default function Dashboard() {
     if (json.calendar) calSrc.current = src;
     // Before the data lands in state, so its first render is already in the
     // right colors.
-    seedGenres(json.genres, json.slots);
+    seedGenres(json.genres);
     return json;
   }, [range, mode, src, viz, limit, estimate]);
 

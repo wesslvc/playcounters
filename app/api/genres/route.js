@@ -78,14 +78,14 @@ export async function POST(req) {
 
   const { data: cached, error } = await db
     .from('artist_genres')
-    .select('artist, genre, family')
+    .select('artist, genre, family, shade')
     .in('artist', wanted);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const genres = {};
   const known = new Set();
   for (const row of cached || []) {
-    genres[row.artist] = { family: row.family, genre: row.genre };
+    genres[row.artist] = { family: row.family, genre: row.genre, shade: row.shade };
     known.add(row.artist);
   }
   const misses = wanted.filter((a) => !known.has(a));
@@ -126,12 +126,14 @@ export async function POST(req) {
   const resolved = found.filter(Boolean);
   if (resolved.length) {
     const now = new Date().toISOString();
-    const { error: upErr } = await db.from('artist_genres').upsert(
+    const { data: written, error: upErr } = await db.from('artist_genres').upsert(
       resolved.map((r) => ({ ...r, fetched_at: now })),
       { onConflict: 'artist' }
-    );
+    ).select('artist, shade');
     if (upErr) console.error('genre cache write failed', upErr.message);
-    for (const r of resolved) genres[r.artist] = { family: r.family, genre: r.genre };
+    // The shade is handed out by the database as the row is written.
+    const shadeOf = new Map((written ?? []).map((w) => [w.artist, w.shade]));
+    for (const r of resolved) genres[r.artist] = { family: r.family, genre: r.genre, shade: shadeOf.get(r.artist) };
   }
 
   if (searching.length) {

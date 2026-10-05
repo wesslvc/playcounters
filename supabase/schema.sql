@@ -1081,29 +1081,38 @@ begin
 end;
 $$;
 
--- Each artist's place among the listener's artists of the same genre
--- family, by all-time plays — the top few per genre get hand-picked,
--- clearly different shades of that genre's color. Only the top 8 per
--- family; everyone else is colored by name.
-create or replace function artist_color_slots(p_user uuid)
-returns table (artist text, slot int)
-language sql stable
+-- Each artist's shade within their genre's color sector (0-8), handed out
+-- in rotation as artists are first given a genre and never changed after —
+-- artists first seen together get different shades, and colors don't move
+-- with listening. Re-assigned only if an artist's genre family changes.
+alter table artist_genres add column if not exists shade int;
+
+create or replace function artist_genres_shade()
+returns trigger
+language plpgsql
 set search_path = public, pg_temp
 as $$
-  select artist, slot from (
-    select a.artist,
-           (row_number() over (partition by g.family order by a.n desc, a.artist_key) - 1)::int as slot
-    from (
-      select p.artist_key, count(*) as n, mode() within group (order by p.artist) as artist
-      from plays p
-      where p.user_id = p_user
-      group by p.artist_key
-    ) a
-    join artist_genres g on g.artist = a.artist
-    where g.family <> 'other'
-  ) ranked
-  where slot < 8;
+begin
+  if new.shade is null or tg_op = 'INSERT' or new.family is distinct from old.family then
+    new.shade := (select count(*) from artist_genres
+                   where family = new.family and artist <> new.artist) % 9;
+  end if;
+  return new;
+end;
 $$;
+
+drop trigger if exists artist_genres_shade on artist_genres;
+create trigger artist_genres_shade
+  before insert or update of family on artist_genres
+  for each row execute function artist_genres_shade();
+
+update artist_genres g set shade = s.n
+  from (select artist,
+               ((row_number() over (partition by family order by fetched_at, artist)) - 1) % 9 as n
+          from artist_genres) s
+ where g.artist = s.artist and g.shade is null;
+
+drop function if exists artist_color_slots(uuid);
 
 -- ---------- distinct item count ----------
 -- top_items is capped by p_limit, so counting its rows undercounts as soon as

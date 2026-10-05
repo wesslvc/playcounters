@@ -907,7 +907,47 @@ as $$
   on conflict (artist_key, track_key) do update
     set artists = excluded.artists, artist_keys = excluded.artist_keys,
         source = excluded.source, updated_at = now()
-    where track_credits.source <> 'spotify' or excluded.source = 'spotify';
+    where track_credits.source <> 'manual'
+      and (track_credits.source <> 'spotify' or excluded.source = 'spotify');
+$$;
+
+-- Hand-correct one track's credits: drop the names in p_remove (matched
+-- case-insensitively), add the names in p_add. Saved as 'manual', which no
+-- sync or lookup ever overwrites. Starts from the main artist alone when
+-- nothing was stored yet.
+create or replace function edit_track_credits(
+  p_artist_key text, p_track_key text,
+  p_remove text[] default '{}', p_add text[] default '{}'
+)
+returns text[]
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  cur text[];
+  res text[];
+begin
+  select artists into cur from track_credits
+   where artist_key = p_artist_key and track_key = p_track_key;
+  if cur is null or cardinality(cur) = 0 then
+    select array[mode() within group (order by artist)] into cur
+      from plays where artist_key = p_artist_key and track_key = p_track_key;
+  end if;
+  select array_agg(a order by ord) into res
+    from (
+      select a, min(ord) as ord
+      from unnest(coalesce(cur, '{}') || coalesce(p_add, '{}')) with ordinality as u(a, ord)
+      where lower(a) <> all (select lower(x) from unnest(coalesce(p_remove, '{}')) x)
+      group by a
+    ) d;
+  insert into track_credits (artist_key, track_key, artists, artist_keys, source)
+  values (p_artist_key, p_track_key, coalesce(res, '{}'),
+          array(select resolve_artist_key(x) from unnest(coalesce(res, '{}')) x), 'manual')
+  on conflict (artist_key, track_key) do update
+    set artists = excluded.artists, artist_keys = excluded.artist_keys,
+        source = 'manual', updated_at = now();
+  return res;
+end;
 $$;
 
 -- Most-played tracks with no stored credits yet, for the sync to fill in a

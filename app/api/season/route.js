@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { normRowKey } from '@/lib/keys';
-import { pointsForRank } from '@/lib/rank';
+import { pointsForRank, splitPoints } from '@/lib/rank';
 import { rpcAll } from '@/lib/rpcPage';
 
 export const dynamic = 'force-dynamic';
@@ -182,7 +182,10 @@ export async function GET(req) {
       drivers.set(key, d);
 
       if (mode === 'tracks') {
-        for (const { name, key: ckey } of r.credits) {
+        // Points are shared between everyone credited; wins and podiums
+        // count for each of them.
+        const shares = splitPoints(r.points, r.credits.length);
+        for (const [idx, { name, key: ckey }] of r.credits.entries()) {
           const main = ckey === r.artist_key;
           const c = constructors.get(ckey) ?? {
             artist: name, artist_key: ckey,
@@ -201,7 +204,7 @@ export async function GET(req) {
             }
             featured.set(ckey, seen);
           }
-          c.points += r.points;
+          c.points += shares[idx];
           c.starts += 1;
           if (r.rank === 1) c.wins += 1;
           if (r.rank <= 3) c.podiums += 1;

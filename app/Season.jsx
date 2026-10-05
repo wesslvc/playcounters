@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
-import { computeRanks } from '@/lib/rank';
+import { computeRanks, splitPoints } from '@/lib/rank';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
 import { useGenres } from './useGenres';
 
@@ -314,9 +314,11 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
         fields: { artist: t.artist, track: t.track ?? null, artist_key: t.artist_key, track_key: t.track_key ?? null, credits: t.credits ?? null },
       }]),
       // Every credited artist scores, the same as the real standings.
-      constructors: constructors && projectStandings(constructors, m.top, (c) => c.artist_key, (t) =>
-        (t.credits ?? [{ name: t.artist, key: t.artist_key }])
-          .map((c) => ({ key: c.key, fields: { artist: c.name, artist_key: c.key } }))),
+      constructors: constructors && projectStandings(constructors, m.top, (c) => c.artist_key, (t) => {
+        const credits = t.credits ?? [{ name: t.artist, key: t.artist_key }];
+        const shares = splitPoints(t.points, credits.length);
+        return credits.map((c, idx) => ({ key: c.key, points: shares[idx], fields: { artist: c.name, artist_key: c.key } }));
+      }),
     }),
     [m, drivers, constructors],
   );
@@ -403,12 +405,12 @@ function projectStandings(current, liveTop, keyOf, entriesOf) {
   const rows = new Map(current.map((c, i) => [keyOf(c), {
     ...c, key: keyOf(c), prevPos: i + 1, gained: 0,
   }]));
-  for (const t of liveTop) for (const { key: k, fields } of entriesOf(t)) {
+  for (const t of liveTop) for (const { key: k, fields, points: share } of entriesOf(t)) {
     const r = rows.get(k) ?? {
       ...fields, key: k, prevPos: null, gained: 0, points: 0, wins: 0, podiums: 0, finishes: 0,
     };
-    r.points += t.points;
-    r.gained += t.points;
+    r.points += share ?? t.points;
+    r.gained += share ?? t.points;
     if (t.rank === 1) r.wins += 1;
     if (t.rank <= 3) r.podiums += 1;
     // One finish per track in this month's running order — for a
@@ -634,7 +636,11 @@ export default function Season({ mode, source, estimate, year, allTime }) {
         log.push({
           year: m.year, month: m.month,
           tracks: [...hits].sort((a, b) => a.rank - b.rank)
-            .map((h) => ({ track: h.track ?? h.artist, rank: h.rank, points: h.points })),
+            .map((h) => {
+              const credits = h.credits ?? [{ key: h.artist_key }];
+              const share = splitPoints(h.points, credits.length)[credits.findIndex((c) => c.key === openConstructor)];
+              return { track: h.track ?? h.artist, rank: h.rank, points: share ?? h.points };
+            }),
         });
       }
     }
@@ -669,7 +675,9 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       const monthly = months.map((m) => {
         const sums = new Map();
         for (const t of m.top) {
-          for (const c of t.credits ?? [{ key: t.artist_key }]) sums.set(c.key, (sums.get(c.key) ?? 0) + t.points);
+          const credits = t.credits ?? [{ key: t.artist_key }];
+          const shares = splitPoints(t.points, credits.length);
+          credits.forEach((c, idx) => sums.set(c.key, (sums.get(c.key) ?? 0) + shares[idx]));
         }
         const rows = [...sums.entries()].map(([artist_key, points]) => ({ artist_key, points }));
         rows.sort((a, b) => b.points - a.points);

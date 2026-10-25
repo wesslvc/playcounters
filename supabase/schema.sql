@@ -1388,7 +1388,7 @@ set search_path = public, pg_temp
 set jit = off
 as $$
   with p as (
-    select (p.played_at at time zone p_tz)::date as day,
+    select (p.played_at at time zone p_tz)::date as day, p.played_at,
            p.artist, p.track, p.artist_key as ak, p.track_key as tk,
            -- what one logged play is worth: 1, or the YouTube estimate,
            -- the same weighting the ranking uses
@@ -1423,11 +1423,20 @@ as $$
            lag(day) over (partition by ak, tk order by day) as prev_day
     from d window w as (partition by ak, tk order by day)
   ),
-  acum as (
-    select ak, day, n, sum(n) over w as c, sum(n) over w - n as before
-    from ad window w as (partition by ak order by day)
+  -- every play in order, with the running total before and after it —
+  -- what "0–100" is timed on, to the minute
+  pc as (
+    select ak, tk, played_at,
+           sum(w) over t as c, sum(w) over t - w as before,
+           min(played_at) over (partition by ak, tk) as first_at
+    from p window t as (partition by ak, tk order by played_at rows unbounded preceding)
   ),
-  -- consecutive runs of days
+  apc as (
+    select ak, played_at,
+           sum(w) over t as c, sum(w) over t - w as before,
+           min(played_at) over (partition by ak) as first_at
+    from p window t as (partition by ak order by played_at rows unbounded preceding)
+  ),
   runs as (
     select ak, tk, count(*)::int as len, min(day) as d_from, max(day) as d_to
     from (select ak, tk, day,
@@ -1477,12 +1486,18 @@ as $$
   -- one row per holder and category, before keeping the top three
   cand as (
     -- 최단기간 50회 / 100회: days from the first play to the one that got there
-    select 'fastest_50' as cat, c.ak, c.tk, (c.day - l.first_day + 1)::numeric as v,
-           l.first_day as d_from, c.day as d_to, false as hi
-    from cum c join lab l using (ak, tk) where c.before < 50 and c.c >= 50
+    -- Purple Sector (0–50) and Fastest Lap (0–100): hours from the first
+    -- play to the one that reached the mark
+    select 'fastest_50' as cat, ak, tk,
+           round((extract(epoch from played_at - first_at) / 3600)::numeric, 2) as v,
+           (first_at at time zone p_tz)::date as d_from, (played_at at time zone p_tz)::date as d_to,
+           false as hi
+    from pc where before < 50 and c >= 50
     union all
-    select 'fastest_100', c.ak, c.tk, (c.day - l.first_day + 1), l.first_day, c.day, false
-    from cum c join lab l using (ak, tk) where c.before < 100 and c.c >= 100
+    select 'fastest_100', ak, tk,
+           round((extract(epoch from played_at - first_at) / 3600)::numeric, 2),
+           (first_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
+    from pc where before < 100 and c >= 100
     union all
     select * from (
       select distinct on (ak, tk) 'most_in_day', ak, tk, round(n), day, day, true
@@ -1528,9 +1543,11 @@ as $$
     from cum c join lab l using (ak, tk) where c.day = l.first_day
   ),
   acand as (
-    select 'artist_fastest_500' as cat, c.ak, (c.day - l.first_day + 1)::numeric as v,
-           l.first_day as d_from, c.day as d_to, false as hi
-    from acum c join alab l using (ak) where c.before < 500 and c.c >= 500
+    select 'artist_fastest_500' as cat, ak,
+           round((extract(epoch from played_at - first_at) / 3600)::numeric, 2) as v,
+           (first_at at time zone p_tz)::date as d_from, (played_at at time zone p_tz)::date as d_to,
+           false as hi
+    from apc where before < 500 and c >= 500
     union all
     select * from (
       select distinct on (ak) 'artist_most_in_day', ak, round(n), day, day, true

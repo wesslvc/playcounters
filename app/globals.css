@@ -474,7 +474,10 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .jump::-webkit-scrollbar { display:none }
 .awards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px }
 .award { padding:18px 18px 12px; border-radius:22px; background:var(--surface); border:1px solid var(--hair); min-width:0 }
-.award header h3 { font-size:15.5px; font-weight:750; letter-spacing:-.02em }
+.award header h3 { display:flex; align-items:baseline; gap:8px; font-size:15.5px; font-weight:750; letter-spacing:-.02em }
+.award-tag { font-size:12px; font-weight:650; color:var(--ink-3); letter-spacing:0 }
+.award[data-key="fastest_50"] .award-tag, .award[data-key="fastest_50"] .award-v { color:#A855F7 }
+.held em { font-style:normal; font-weight:500; color:var(--ink-3) }
 .award header p { font-size:12.5px; color:var(--ink-3); margin-top:2px; line-height:1.45 }
 .award-holder { display:grid; grid-template-columns:60px minmax(0,1fr) auto; gap:14px; align-items:center; width:100%; margin-top:16px; text-align:left }
 .award-nm { min-width:0 }

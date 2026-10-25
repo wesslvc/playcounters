@@ -31,9 +31,9 @@ function Award({ def, list, covers, onSelect }) {
   const [first, ...rest] = list ?? [];
   const mode = (h) => (h.track ? 'tracks' : 'artists');
   return (
-    <article className="award">
+    <article className="award" data-key={def.key}>
       <header>
-        <h3 title={def.note}>{def.title}</h3>
+        <h3 title={def.note}>{def.title}{def.tag && <span className="award-tag">{def.tag}</span>}</h3>
       </header>
       {first ? (
         <>
@@ -44,7 +44,7 @@ function Award({ def, list, covers, onSelect }) {
               {first.track && <span>{artistLine(first)}</span>}
             </span>
             <span className="award-v">
-              {formatValue(def, first.value).v}<small>{def.unit}</small>
+              {formatValue(def, first.value).v}<small>{formatValue(def, first.value).unit}</small>
             </span>
           </button>
           <p className="award-when">{when(def, first)}</p>
@@ -55,7 +55,7 @@ function Award({ def, list, covers, onSelect }) {
                   <button onClick={() => onSelect(target(h))}>
                     <span className="award-place">{i + 2}</span>
                     <span className="award-rest-nm">{h.track ?? h.artist}{h.track && <em> · {artistLine(h)}</em>}</span>
-                    <span className="award-rest-v">{formatValue(def, h.value).v}{def.unit}</span>
+                    <span className="award-rest-v">{formatValue(def, h.value).v}{formatValue(def, h.value).unit}</span>
                   </button>
                 </li>
               ))}

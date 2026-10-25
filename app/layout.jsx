@@ -3,6 +3,18 @@ import './globals.css';
 export const metadata = {
   title: 'playcounters',
   description: 'Spotify 재생 기록을 실시간으로 모아 순위로 보여줍니다.',
+  // Saved to the home screen it opens full screen, under its own name.
+  appleWebApp: { capable: true, title: 'playcounters', statusBarStyle: 'default' },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F6F6F4' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0B0C' },
+  ],
 };
 
 /**
@@ -18,7 +30,6 @@ export default function RootLayout({ children }) {
     <html lang="ko">
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
         <link
           rel="stylesheet"

@@ -155,8 +155,10 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         <div className="chart-tip" style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${hover / buckets.length < 0.25 ? '0' : hover / buckets.length > 0.75 ? '-100%' : '-50%'})` }}>
           <b>{buckets[hover].replaceAll('-', '.')}</b>
           <ul>
-            {lines.map((s, i) => (
-              <li key={i}>
+            {/* In the order they stood on that day, not the final one. */}
+            {[...lines].sort((a, b) => b.cum[hover] - a.cum[hover]).map((s, i) => (
+              <li key={s.track ?? s.artist} data-zero={!s.cum[hover] || undefined}>
+                <u>{i + 1}</u>
                 <i style={{ background: colorOf(s) }} />
                 <span>{s.track ?? s.artist}</span>
                 <em>{Math.round(s.cum[hover]).toLocaleString()}회</em>

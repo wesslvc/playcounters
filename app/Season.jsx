@@ -470,7 +470,9 @@ function SeasonChart({ labels, series, view }) {
         <div className={`chart-tip tip-${tipSide}`} style={{ left: `${(x(hover) / CHART_W) * 100}%` }}>
           <b>{labels[hover]}</b>
           <ul>
-            {series.map((s) => {
+            {[...series].sort((a, b) => (view === 'points'
+              ? b.pts[hover].cum - a.pts[hover].cum
+              : (a.pts[hover].rank ?? 99) - (b.pts[hover].rank ?? 99))).map((s) => {
               const p = s.pts[hover];
               const v = view === 'points' ? p.cum : p.rank;
               return (

@@ -7,9 +7,6 @@ const TZ = 'Asia/Seoul';
 const KST = 9 * 3600e3;
 const MAX_SERIES = 10;
 
-/** Ranges narrower than this are drawn a day at a time; wider, a month. */
-const DAY_BUCKET_LIMIT = 62;
-
 /** The KST calendar day an instant falls on. Ranges are KST-midnight aligned,
     so comparing days is exact rather than approximate. */
 const kstDay = (iso) => new Date(new Date(iso).getTime() + KST).toISOString().slice(0, 10);
@@ -70,13 +67,20 @@ export async function GET(req) {
   const allDays = kept.flat().map((d) => d.day);
   if (!allDays.length) return NextResponse.json({ mode, granularity: 'month', buckets: [], series: [] });
 
-  const span = Math.round(
-    (Date.parse(allDays.reduce((a, b) => (b > a ? b : a))) -
-     Date.parse(allDays.reduce((a, b) => (b < a ? b : a)))) / 864e5) + 1;
-  // A month of data in monthly buckets is one column — useless. Narrow ranges
-  // get a column a day instead.
-  const granularity = span <= DAY_BUCKET_LIMIT ? 'day' : 'month';
-  const bucketOf = (day) => (granularity === 'day' ? day : day.slice(0, 7));
+  // Always a day at a time, every calendar day in the window — gaps
+  // included — so a year reads as one continuous line shaped by how much was
+  // actually heard each day, not a few monthly points joined by straight
+  // segments. A year starts on its first day; "전체" on the first play.
+  const earliest = allDays.reduce((a, b) => (b < a ? b : a));
+  const start = firstDay > '1971-01-01' ? firstDay : earliest;
+  const today = kstDay(new Date().toISOString());
+  const lastIncl = kstDay(new Date(Date.parse(to) - 864e5).toISOString());
+  const end = lastIncl < today ? lastIncl : today;
+  const buckets = [];
+  for (let t = Date.parse(start); t <= Date.parse(end); t += 864e5) {
+    buckets.push(new Date(t).toISOString().slice(0, 10));
+  }
+  const bucketOf = (day) => day;
 
   const series = top.map((r, i) => {
     const byBucket = new Map();
@@ -100,8 +104,8 @@ export async function GET(req) {
 
   return NextResponse.json({
     mode,
-    granularity,
-    buckets: [...new Set(kept.flat().map((d) => bucketOf(d.day)))].sort(),
+    granularity: 'day',
+    buckets,
     series,
   });
 }

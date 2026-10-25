@@ -29,10 +29,20 @@ export async function GET(req) {
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
   const estimate = q.get('estimate') === '1';
 
-  const { data, error } = await db.rpc('item_daily', {
+  const keys = {
+    p_artist_key: q.get('artist_key') || null,
+    p_track_key: track ? q.get('track_key') || null : null,
+  };
+  let { data, error } = await db.rpc('item_daily', {
     p_user: userId, p_artist: artist, p_track: track, p_tz: TZ, p_source: src,
-    p_estimate: estimate,
+    p_estimate: estimate, ...keys,
   });
+  // The function from before it took keys.
+  if (error?.code === 'PGRST202') {
+    ({ data, error } = await db.rpc('item_daily', {
+      p_user: userId, p_artist: artist, p_track: track, p_tz: TZ, p_source: src, p_estimate: estimate,
+    }));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const days = data ?? [];

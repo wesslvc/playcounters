@@ -53,6 +53,7 @@ export async function GET(req) {
     db.rpc('item_daily', {
       p_user: userId, p_artist: r.artist, p_track: r.track ?? null,
       p_tz: TZ, p_source: src, p_estimate: estimate,
+      p_artist_key: r.artist_key, p_track_key: r.track_key ?? null,
     })
   ));
 

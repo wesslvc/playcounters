@@ -1273,14 +1273,21 @@ $$;
 -- title variant that was merged into that row. Spans the whole history rather
 -- than the selected period -- the sheet is about the item, not the window.
 drop function if exists item_daily(uuid, text, text, text, text, boolean);
+drop function if exists item_daily(uuid, text, text, text, text, boolean, text, text);
 
+-- Matched on the stored keys when the caller has them — a row from the
+-- championship can carry a label (one month's spelling) whose own
+-- normalisation is not the merged key — else on the label run through the
+-- same alias resolution the keys were written with.
 create function item_daily(
   p_user uuid,
   p_artist text,
   p_track text default null,
   p_tz text default 'Asia/Seoul',
   p_source text default 'all',
-  p_estimate boolean default false
+  p_estimate boolean default false,
+  p_artist_key text default null,
+  p_track_key text default null
 )
 returns table (day date, plays numeric, minutes numeric, yt boolean)
 language sql stable
@@ -1294,8 +1301,9 @@ as $$
          bool_or(p.source = 'youtube')
   from plays p
   where p.user_id = p_user
-    and p.artist_key = norm_artist(p_artist)
-    and (p_track is null or p.track_key = norm_track(p_track, p_artist))
+    and p.artist_key = coalesce(p_artist_key, resolve_artist_key(p_artist))
+    and (p_track is null
+         or p.track_key = coalesce(p_track_key, resolve_track_key(p_track, p_artist)))
     and (p.ms_played >= 30000 or p.source = 'youtube')
     and (p_source = 'all'
          or (p_source = 'youtube' and p.source =  'youtube')

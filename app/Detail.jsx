@@ -107,6 +107,8 @@ export default function Detail({ target, source, estimate, onClose }) {
     setError(null);
     const qs = new URLSearchParams({ artist: target.artist, source });
     if (target.track) qs.set('track', target.track);
+    if (target.artist_key) qs.set('artist_key', target.artist_key);
+    if (target.track_key) qs.set('track_key', target.track_key);
     if (estimate) qs.set('estimate', '1');
     fetch(`/api/item?${qs}`, { signal: ctl.signal })
       .then((r) => r.json())

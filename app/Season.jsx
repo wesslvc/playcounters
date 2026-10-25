@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
+import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
@@ -393,7 +394,7 @@ function SeasonChart({ labels, series, view }) {
 
   const lines = series.map((s) => {
     if (view === 'points') {
-      const d = s.pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.cum).toFixed(1)}`).join(' ');
+      const d = smoothPath(s.pts.map((p, i) => [x(i), y(p.cum)]));
       return { ...s, segs: [d], ex: x(n - 1), ey: y(s.pts[n - 1].cum) };
     }
     const segs = [];
@@ -401,13 +402,13 @@ function SeasonChart({ labels, series, view }) {
     let lastIdx = -1, lastRank = null;
     s.pts.forEach((p, i) => {
       if (p.rank == null) {
-        if (cur.length) { segs.push(cur.join(' ')); cur = []; }
+        if (cur.length) { segs.push(smoothPath(cur)); cur = []; }
         return;
       }
-      cur.push(`${cur.length ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`);
+      cur.push([x(i), y(p.rank)]);
       lastIdx = i; lastRank = p.rank;
     });
-    if (cur.length) segs.push(cur.join(' '));
+    if (cur.length) segs.push(smoothPath(cur));
     return { ...s, segs, ex: lastIdx >= 0 ? x(lastIdx) : null, ey: lastRank != null ? y(lastRank) : null };
   });
 

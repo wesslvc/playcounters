@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { artistColor, familyLabel } from '@/lib/genre';
+import { smoothPath, sampleIdx } from '@/lib/curve';
 
 const W = 720;
 const H = 200;
@@ -78,7 +79,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       // rotation.
       let run = 0;
       const cum = buckets.map((b) => (run += byBucket.get(b) ?? 0));
-      const d = cum.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+      const d = smoothPath(sampleIdx(cum.length).map((i) => [x(i), y(cum[i])]));
       // Where the line finishes — marked separately below, since color alone
       // (now per artist) is already enough to tell most lines apart, but a
       // close finish is still easier to read off a marker than a hue.

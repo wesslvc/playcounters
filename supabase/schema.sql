@@ -1557,6 +1557,11 @@ as $$
            false as hi
     from apc where before < 500 and c >= 500
     union all
+    select 'artist_fastest_1000', ak,
+           round((extract(epoch from played_at - first_at) / 3600)::numeric, 2),
+           (first_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
+    from apc where before < 1000 and c >= 1000
+    union all
     select * from (
       select distinct on (ak) 'artist_most_in_day', ak, round(n), day, day, true
       from ad order by ak, n desc, day

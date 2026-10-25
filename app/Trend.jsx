@@ -112,11 +112,8 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   return (
     <div className="trend">
       <div className="legend">
-        <span>상위 {lines.length}개 · 기간 내 누적 재생</span>
-        <span>
-          {buckets[0].replaceAll('-', '.')} – {buckets[buckets.length - 1].replaceAll('-', '.')}
-          {' · '}최대 {peak.toLocaleString()}회
-        </span>
+        <span>누적 재생</span>
+        <span>{buckets[0].replaceAll('-', '.')} – {buckets[buckets.length - 1].replaceAll('-', '.')}</span>
       </div>
 
       <div className="trend-plot">

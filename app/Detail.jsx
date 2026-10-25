@@ -62,8 +62,8 @@ function Career({ target, career }) {
     return { row: idx >= 0 ? list[idx] : null, pos: idx + 1, results: results.reverse() };
   }, [career, target]);
 
-  if (!career) return <p className="note">챔피언십 기록을 불러오는 중…</p>;
-  if (!rec?.row) return <p className="note">아직 그랑프리 TOP 10에 든 적이 없습니다.</p>;
+  if (!career) return <p className="note">불러오는 중…</p>;
+  if (!rec?.row) return <p className="note">그랑프리 TOP 10 기록 없음</p>;
   const { row, pos, results } = rec;
   const best = Math.min(...results.map((r) => r.rank));
   return (
@@ -174,29 +174,36 @@ export default function Detail({ target, source, estimate, onClose }) {
               <Stat value={s.weeks.toLocaleString()} label="들은 주" />
             </div>
             <DailyChart daily={data.daily} />
-            <p className="note">
-              하루 재생 횟수 · 가장 많이 들은 날 {dayLabel(best?.day)}, {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회
-            </p>
+            <p className="note">최다 {dayLabel(best?.day)} · {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회</p>
           </>
         )}
 
-        {awards.length > 0 && (
-          <div className="sheet-sec">
-            <h3>기록</h3>
-            <ul className="badges">
-              {awards.map(({ def, place, holder }) => {
-                const v = formatValue(def, holder.value);
-                return (
-                  <li key={def.key} data-place={place}>
-                    <span className="badge-place">{place === 1 ? '보유' : `${place}위`}</span>
-                    <b>{def.title}</b>
-                    <em>{v.v}{v.unit}</em>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+        {awards.length > 0 && (() => {
+          const held = awards.filter((x) => x.place === 1);
+          const near = awards.filter((x) => x.place > 1);
+          const row = ({ def, place, holder }) => {
+            const v = formatValue(def, holder.value);
+            return (
+              <li key={def.key}>
+                {place > 1 && <i>{place}</i>}
+                <span>{def.title}</span>
+                <b>{v.v}<small>{v.unit}</small></b>
+              </li>
+            );
+          };
+          return (
+            <div className="sheet-sec">
+              <h3>기록{held.length > 0 && <span>{held.length}개 보유</span>}</h3>
+              {held.length > 0 && <ul className="held">{held.map(row)}</ul>}
+              {near.length > 0 && (
+                <>
+                  <p className="held-k">2·3위</p>
+                  <ul className="held near">{near.map(row)}</ul>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="sheet-sec">
           <h3>챔피언십</h3>

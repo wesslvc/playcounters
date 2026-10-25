@@ -415,9 +415,9 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
         {(isMonth || (sel?.y && sel.m == null)) && (
           <button className="gp-link" onClick={() => go('season', { year: sel.y })}>
             <span>{isMonth
-              ? `${sel.m}월 그랑프리 · ${liveMonth ? '진행 중' : '종료'}`
-              : `${sel.y} 시즌 챔피언십`}</span>
-            <b>스탠딩 보기</b>
+              ? `${sel.m}월 그랑프리${liveMonth ? ' · 진행 중' : ''}`
+              : `${sel.y} 시즌`}</span>
+            <b>스탠딩</b>
           </button>
         )}
       </div>
@@ -454,9 +454,8 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
         <>
           {src !== 'spotify' && sort === 'plays' && !estimating && (
             <p className="caveat">
-              유튜브 기록은 하루에 한 번만 남아 재생 횟수가 실제보다 적게 잡힙니다.
-              출처를 섞어 볼 때는{' '}
-              <button className="linkish" onClick={() => setSort('days')}>들은 날</button> 기준이 더 정확합니다.
+              유튜브 재생 횟수는 적게 잡혀요 ·{' '}
+              <button className="linkish" onClick={() => setSort('days')}>들은 날로 보기</button>
             </p>
           )}
           {showCount && (
@@ -467,12 +466,8 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
                       prevComplete={prevComplete} familyOf={familyOf} />
 
           <div className="legend">
-            <span>
-              {SORTS.find((x) => x[0] === sort)[1]} 순
-              {prevRank && ' · 변동은 직전 기간 대비'}
-              {gp && ` · 포인트는 ${liveMonth ? '이대로 끝날 때' : '이 그랑프리'} 기준`}
-            </span>
-            <span>{s ? `${s.items.toLocaleString()}개 중 ${rows.length.toLocaleString()}` : ''}</span>
+            <span>{prevRank ? '직전 기간 대비' : ''}</span>
+            <span>{s ? `${rows.length.toLocaleString()} / ${s.items.toLocaleString()}` : ''}</span>
           </div>
           <ol className={`ranks${showSpan && showCount ? ' dual' : ''}`}>
             {rows.map((r, i) => {

@@ -229,9 +229,7 @@ export default function App({ initialTab = 'chart' }) {
 
       <Detail target={detail} source={src} estimate={estimate && calibrated} onClose={closeDetail} />
 
-      <footer className="foot">
-        30초 이상 재생된 것만 셉니다 · 팟캐스트와 오디오북은 빠집니다 · 날짜는 한국 시간 기준
-      </footer>
+      <footer className="foot" />
     </div>
   );
 }

@@ -79,18 +79,17 @@ function Export({ tracks, year, q }) {
       </div>
       {state?.done && (
         <p className="export-msg">
-          {state.done.added}곡을 비공개 플레이리스트로 저장했습니다.{' '}
+          {state.done.added}곡 저장됨 ·{' '}
           <a href={state.done.url} target="_blank" rel="noreferrer">Spotify에서 열기</a>
-          {state.done.missing?.length > 0 && <span> · 찾지 못한 곡 {state.done.missing.length}개</span>}
+          {state.done.missing?.length > 0 && <span> · {state.done.missing.length}곡 못 찾음</span>}
         </p>
       )}
       {state?.reauth && (
         <p className="export-msg">
-          플레이리스트를 만들 권한이 아직 없습니다. <a href="/api/auth/login">Spotify 다시 연결</a> 후
-          한 번 더 눌러 주세요.
+          권한이 필요해요 · <a href="/api/auth/login">Spotify 다시 연결</a>
         </p>
       )}
-      {state?.copied && <p className="export-msg">{pick.length}곡을 복사했습니다. 다른 앱에 붙여 넣을 수 있어요.</p>}
+      {state?.copied && <p className="export-msg">{pick.length}곡 복사됨</p>}
       {state?.error && <p className="export-msg err">{state.error}</p>}
     </div>
   );
@@ -184,7 +183,6 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
               <h1>{data.year}<span> Q{data.q}</span></h1>
               <p className="replay-big">
                 <b>{Math.round(s.minutes / 60).toLocaleString()}</b>시간
-                <span>{s.minutes.toLocaleString()}분을 들었어요</span>
               </p>
               <div className="stats on-dark">
                 <Stat value={`${estimate ? '≈' : ''}${s.plays.toLocaleString()}`} label="재생" />
@@ -207,7 +205,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
             </button>
           )}
 
-          <Section title="Top Songs" sub={`${tracks.length >= 100 ? '100' : tracks.length}곡 · 재생 횟수 순 · 변동은 지난 분기 대비`} />
+          <Section title="Top Songs" />
           <Export tracks={tracks} year={data.year} q={data.q} />
           <ol className="ranks">
             {tracks.slice(0, shown).map((t, i) => {
@@ -233,7 +231,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
 
           {artists.length > 0 && (
             <>
-              <Section title="Top Artists" sub={topGenre ? `가장 많이 들은 장르 · ${topGenre}` : '재생 횟수 순'} />
+              <Section title="Top Artists" sub={topGenre} />
               <div className="artist-grid">
                 {artists.slice(0, 10).map((a, i) => (
                   <button key={a.artist_key} className={i === 0 ? 'artist-tile first' : 'artist-tile'}
@@ -250,7 +248,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
 
           {data.albums.length > 0 && (
             <>
-              <Section title="Top Albums" sub="상위 곡들이 실린 앨범 기준" />
+              <Section title="Top Albums" />
               <div className="album-row">
                 {data.albums.map((a, i) => (
                   <div key={`${a.artist_key}-${a.album}`} className="album">
@@ -264,7 +262,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
             </>
           )}
 
-          <Section title="Month by Month" sub="그달의 1위" />
+          <Section title="Month by Month" />
           <div className="months3">
             {data.months.map((m) => (
               <button key={m.month} className="month-card" disabled={!m.top} onClick={() => m.top && onSelect(target(m.top))}>
@@ -276,7 +274,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
             ))}
           </div>
 
-          <Section title="Discoveries" sub="이번 분기에 처음 들은 것들" />
+          <Section title="Discoveries" />
           <div className="discover">
             <div className="discover-big">
               <Stat value={data.debuts.total.toLocaleString()} label="새로 들은 곡" />

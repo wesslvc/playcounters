@@ -28,7 +28,7 @@ export default function Championship({ source, mode, estimate, calendar, version
   return (
     <section className="view season-view">
       <div className="hero">
-        <p className="hero-k">매달이 한 라운드 · TOP 10에 25–18–15–12–10–8–6–4–2–1 포인트</p>
+        <p className="hero-k">챔피언십</p>
         <h1 className="hero-t">{allTime ? '역대 통산' : year ? `${year} 시즌` : '시즌'}</h1>
         <div className="picks">
           <button className="chip" aria-pressed={allTime} onClick={() => setAllTime(true)}>역대 통산</button>

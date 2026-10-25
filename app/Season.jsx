@@ -282,7 +282,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
         ))}
       </ol>
       <div className="live-foot">
-        <span>잠정 순위 · 포인트는 이달이 끝나면 확정됩니다</span>
+        <span>잠정</span>
         <button className="linkish" onClick={() => setOpen((v) => !v)}>
           {open ? '접기' : '전체 순위'}
         </button>
@@ -294,7 +294,6 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
       <div className="proj">
         <div className="proj-top">
           <b>이대로 끝나면</b>
-          <span>챔피언십 TOP 10 · 지금 순위 대비</span>
         </div>
         {projected.constructors && (
           <div className="f1-tabs" role="tablist">
@@ -709,7 +708,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
 
       {racesRun > 0 && (
         <>
-          <SectionHead title="시즌 차트" sub={chartView === 'points' ? '누적 포인트' : '레이스별 순위 · P1이 맨 위'}>
+          <SectionHead title="시즌 차트" >
             <div className="chart-controls">
               <Seg size="sm" options={[['points', '포인트'], ['position', '순위']]} value={chartView} onChange={setChartView} />
               <Seg size="sm" options={[[5, 'TOP 5'], [10, 'TOP 10']]} value={chartN} onChange={setChartN} />
@@ -728,7 +727,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             ))}
           </ol>
 
-          <SectionHead title="드라이버 스탠딩" sub={`${label} 기준`} />
+          <SectionHead title="드라이버 스탠딩" />
           <ol className="season-list">
             <StandingsHead label={label} />
             {drivers.slice(0, driverShown).map((d, i) => {
@@ -756,7 +755,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
 
           {constructors && (
             <>
-              <SectionHead title="컨스트럭터 스탠딩" sub="가수별 · 곡들이 딴 포인트 합산" />
+              <SectionHead title="컨스트럭터 스탠딩" />
               <ol className="season-list">
                 <StandingsHead label="가수" />
                 {constructors.slice(0, constructorShown).map((c, i) => (
@@ -781,7 +780,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             </>
           )}
 
-          <SectionHead title="레이스 결과" sub="최근 라운드부터 · 눌러서 전체 순위" />
+          <SectionHead title="레이스 결과" />
           <ol className="gp-cal">
             <li className="gp-cols" aria-hidden="true">
               <span>라운드</span><span>그랑프리</span><span>우승</span><span>재생</span><span />

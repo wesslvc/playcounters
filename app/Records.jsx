@@ -33,8 +33,7 @@ function Award({ def, list, covers, onSelect }) {
   return (
     <article className="award">
       <header>
-        <h3>{def.title}</h3>
-        <p>{def.note}</p>
+        <h3 title={def.note}>{def.title}</h3>
       </header>
       {first ? (
         <>
@@ -107,7 +106,7 @@ export default function Records({ source, estimate, version, onSelect }) {
   return (
     <section className="view records">
       <div className="hero">
-        <p className="hero-k">{me.first_day ? `${dayLabel(me.first_day)}부터 지금까지` : '모든 기록'}</p>
+        <p className="hero-k">{me.first_day ? `${dayLabel(me.first_day)}부터` : ''}</p>
         <h1 className="hero-t">Records</h1>
         <div className="stats">
           <Stat value={Number(me.plays ?? 0).toLocaleString()} label="재생" />
@@ -125,7 +124,7 @@ export default function Records({ source, estimate, version, onSelect }) {
 
       {AWARD_GROUPS.map((g) => (
         <div key={g.key} className="award-group">
-          <Section id={`rec-${g.key}`} title={g.title} sub={g.sub} />
+          <Section id={`rec-${g.key}`} title={g.title} />
           <div className="awards">
             {g.items.map((def) => (
               <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />

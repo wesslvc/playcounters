@@ -17,7 +17,7 @@ export default function Landing({ failed }) {
           <div><dt>차트</dt><dd>전체부터 하루까지, 원하는 기간의 순위</dd></div>
           <div><dt>챔피언십</dt><dd>매달 TOP 10에 F1 포인트, 시즌과 통산 스탠딩</dd></div>
           <div><dt>리플레이</dt><dd>3개월마다 정리되는 순위와 플레이리스트</dd></div>
-          <div><dt>기록</dt><dd>최단기간 100회, 최장 연속 1위 같은 부문별 기록</dd></div>
+          <div><dt>Awards</dt><dd>최단기간 100회, 최장 연속 1위 같은 부문별 기록</dd></div>
         </dl>
         <p className="landing-foot">
           예전 기록은 Spotify의 확장 스트리밍 기록 JSON으로 원래 날짜 그대로 합칠 수 있습니다.

@@ -1373,10 +1373,13 @@ $$;
 -- with the list it came from. Each holder:
 --   {artist, track, artist_key, track_key, value, from, to}
 -- `from`/`to` are the dates the record was set over (or on).
+drop function if exists play_records(uuid, text, text);
+
 create or replace function play_records(
   p_user uuid,
   p_tz text default 'Asia/Seoul',
-  p_source text default 'all'
+  p_source text default 'all',
+  p_estimate boolean default false
 )
 returns jsonb
 language sql stable
@@ -1386,7 +1389,10 @@ set jit = off
 as $$
   with p as (
     select (p.played_at at time zone p_tz)::date as day,
-           p.artist, p.track, p.artist_key as ak, p.track_key as tk
+           p.artist, p.track, p.artist_key as ak, p.track_key as tk,
+           -- what one logged play is worth: 1, or the YouTube estimate,
+           -- the same weighting the ranking uses
+           case when p_estimate then p.est_plays else 1 end as w
     from plays p
     where p.user_id = p_user
       and (p.ms_played >= 30000 or p.source = 'youtube')
@@ -1395,19 +1401,19 @@ as $$
            or (p_source = 'spotify' and p.source <> 'youtube'))
   ),
   -- track-days and artist-days: everything below is built on these
-  d as (select ak, tk, day, count(*)::int as n from p group by 1, 2, 3),
-  ad as (select ak, day, count(*)::int as n from p group by 1, 2),
+  d as (select ak, tk, day, sum(w) as n from p group by 1, 2, 3),
+  ad as (select ak, day, sum(w) as n from p group by 1, 2),
   lab as (
     select ak, tk,
            mode() within group (order by artist) as artist,
            mode() within group (order by track)  as track,
-           count(*)::int as plays, count(distinct day)::int as days,
+           sum(w) as plays, count(distinct day)::int as days,
            min(day) as first_day, max(day) as last_day
     from p group by ak, tk
   ),
   alab as (
     select ak, mode() within group (order by artist) as artist,
-           count(*)::int as plays, count(distinct tk)::int as tracks,
+           sum(w) as plays, count(distinct tk)::int as tracks,
            min(day) as first_day
     from p group by ak
   ),
@@ -1442,7 +1448,7 @@ as $$
     ) s where r = 1
   ),
   wk as (
-    select ak, tk, date_trunc('week', day)::date as wk, sum(n)::int as n
+    select ak, tk, (day - ((extract(isodow from day)::int) - 1)) as wk, sum(n) as n
     from d group by 1, 2, 3
   ),
   wtop as (
@@ -1459,7 +1465,7 @@ as $$
     group by ak, tk, g
   ),
   mo as (
-    select ak, tk, date_trunc('month', day)::date as m, sum(n)::int as n
+    select ak, tk, (day - (extract(day from day)::int - 1)) as m, sum(n) as n
     from d group by 1, 2, 3
   ),
   mshare as (
@@ -1479,7 +1485,7 @@ as $$
     from cum c join lab l using (ak, tk) where c.before < 100 and c.c >= 100
     union all
     select * from (
-      select distinct on (ak, tk) 'most_in_day', ak, tk, n::numeric, day, day, true
+      select distinct on (ak, tk) 'most_in_day', ak, tk, round(n), day, day, true
       from d order by ak, tk, n desc, day
     ) x
     union all
@@ -1518,7 +1524,7 @@ as $$
       order by c.ak, c.tk, c.day - c.prev_day desc
     ) x
     union all
-    select 'debut_day', c.ak, c.tk, c.n, c.day, c.day, true
+    select 'debut_day', c.ak, c.tk, round(c.n), c.day, c.day, true
     from cum c join lab l using (ak, tk) where c.day = l.first_day
   ),
   acand as (
@@ -1527,7 +1533,7 @@ as $$
     from acum c join alab l using (ak) where c.before < 500 and c.c >= 500
     union all
     select * from (
-      select distinct on (ak) 'artist_most_in_day', ak, n::numeric, day, day, true
+      select distinct on (ak) 'artist_most_in_day', ak, round(n), day, day, true
       from ad order by ak, n desc, day
     ) x
     union all
@@ -1564,7 +1570,7 @@ as $$
   -- the listener's own records, one holder each
   me as (
     select jsonb_build_object(
-      'busiest_day', (select jsonb_build_object('value', n, 'from', day, 'to', day)
+      'busiest_day', (select jsonb_build_object('value', round(n), 'from', day, 'to', day)
                       from (select day, sum(n) as n from ad group by day) s
                       order by n desc, day limit 1),
       'listening_streak', (select jsonb_build_object('value', count(*), 'from', min(day), 'to', max(day))
@@ -1573,7 +1579,7 @@ as $$
                            group by g order by count(*) desc, max(day) desc limit 1),
       'tracks', (select count(*) from lab),
       'artists', (select count(*) from alab),
-      'plays', (select coalesce(sum(plays), 0) from lab),
+      'plays', (select round(coalesce(sum(plays), 0)) from lab),
       'first_day', (select min(day) from ad)
     ) as j
   )

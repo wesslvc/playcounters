@@ -85,7 +85,7 @@ export default function Records({ source, estimate, version, onSelect }) {
     let live = true;
     setPlays(null);
     setError(null);
-    loadRecords(source).then((j) => live && setPlays(j.records)).catch((e) => live && setError(e.message));
+    loadRecords(source, estimate).then((j) => live && setPlays(j.records)).catch((e) => live && setError(e.message));
     loadCareer(source, estimate).then((j) => live && setCareer(j)).catch(() => live && setCareer({}));
     return () => { live = false; };
   }, [source, estimate, version]);
@@ -107,7 +107,7 @@ export default function Records({ source, estimate, version, onSelect }) {
     <section className="view records">
       <div className="hero">
         <p className="hero-k">{me.first_day ? `${dayLabel(me.first_day)}부터` : ''}</p>
-        <h1 className="hero-t">Records</h1>
+        <h1 className="hero-t">Awards</h1>
         <div className="stats">
           <Stat value={Number(me.plays ?? 0).toLocaleString()} label="재생" />
           <Stat value={Number(me.tracks ?? 0).toLocaleString()} label="곡" />

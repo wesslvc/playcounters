@@ -120,7 +120,7 @@ export default function Detail({ target, source, estimate, onClose }) {
     if (!target) return;
     let live = true;
     loadCareer(source, estimate).then((j) => live && setCareer(j)).catch(() => live && setCareer({}));
-    loadRecords(source).then((j) => live && setRecords(j.records)).catch(() => {});
+    loadRecords(source, estimate).then((j) => live && setRecords(j.records)).catch(() => {});
     return () => { live = false; };
   }, [target, source, estimate]);
 
@@ -193,7 +193,7 @@ export default function Detail({ target, source, estimate, onClose }) {
           };
           return (
             <div className="sheet-sec">
-              <h3>기록{held.length > 0 && <span>{held.length}개 보유</span>}</h3>
+              <h3>Awards{held.length > 0 && <span>{held.length}개 보유</span>}</h3>
               {held.length > 0 && <ul className="held">{held.map(row)}</ul>}
               {near.length > 0 && (
                 <>

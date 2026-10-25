@@ -18,7 +18,16 @@ export async function GET(req) {
   const q = req.nextUrl.searchParams;
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
 
-  const { data, error } = await db.rpc('play_records', { p_user: userId, p_tz: TZ, p_source: src });
+  // Weighted the same way as the chart, so a record agrees with the counts
+  // shown beside it.
+  const estimate = q.get('estimate') === '1';
+  let { data, error } = await db.rpc('play_records', {
+    p_user: userId, p_tz: TZ, p_source: src, p_estimate: estimate,
+  });
+  // The function from before the estimate argument existed.
+  if (error?.code === 'PGRST202') {
+    ({ data, error } = await db.rpc('play_records', { p_user: userId, p_tz: TZ, p_source: src }));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const records = data ?? {};

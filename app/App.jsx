@@ -14,7 +14,7 @@ const TABS = [
   ['chart', '차트', '/'],
   ['season', '챔피언십', '/championship'],
   ['replay', '리플레이', '/replay'],
-  ['records', '기록', '/records'],
+  ['records', 'Awards', '/records'],
 ];
 const SOURCES = [
   { value: 'all', label: '전체 출처' },

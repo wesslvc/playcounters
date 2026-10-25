@@ -6,6 +6,8 @@ import { artistColor } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
+import { useCovers, coverOf } from './useCovers';
+import { Section, Cover, Seg } from './ui';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -21,56 +23,6 @@ const MAX_POS = 10;
 
 const moLabel = (m, allTime) =>
   allTime ? `${m.year}.${String(m.month).padStart(2, '0')}` : `${m.month}월`;
-
-/**
- * One driver or constructor's own race-by-race record, revealed by clicking
- * their row — every Grand Prix they scored in, in order, with the rank and
- * points that race actually paid. Without this a season total is just a
- * sum with nothing to check it against.
- */
-function RaceLog({ log, allTime }) {
-  if (!log.length) return <p className="note" style={{ padding: '6px 8px' }}>득점 기록이 없습니다.</p>;
-  return (
-    <ol className="gp-history log">
-      {log.map((r) => (
-        <li className="gph-row" key={`${r.year}-${r.month}`}>
-          <span className="gph-mo">{moLabel(r, allTime)}</span>
-          <span className="gph-rk" data-tier={r.rank <= 3 ? r.rank : undefined}>P{r.rank}</span>
-          <span className="gph-pt">{r.points}pt</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/**
- * A constructor's own record is one level deeper than a driver's: a month
- * can hold more than one of its tracks charting at once, and collapsing
- * that to a single "best rank" line hid which songs actually did the work.
- * Every contributing track gets its own line, grouped under the month it
- * scored in.
- */
-function ConstructorLog({ log, allTime }) {
-  if (!log.length) return <p className="note" style={{ padding: '6px 8px' }}>득점 기록이 없습니다.</p>;
-  return (
-    <div className="cxlog">
-      {log.map((m) => (
-        <div className="cxlog-month" key={`${m.year}-${m.month}`}>
-          <p className="cxlog-mo">{moLabel(m, allTime)}</p>
-          <ol className="gp-history result">
-            {m.tracks.map((t, i) => (
-              <li className="gph-row" key={i}>
-                <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>P{t.rank}</span>
-                <span className="gph-nm"><b>{t.track}</b></span>
-                <span className="gph-pt">{t.points}pt</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /**
  * The column headers for a standings table — printed once, so every row
@@ -96,41 +48,34 @@ function StandingsHead({ label }) {
 
 /**
  * One row of a championship — driver (track or artist) or constructor
- * (artist, in track mode). The same shape either way: a name, an optional
- * team line, and the season's tally in three plain numeric columns (points,
- * wins, podiums) rather than icon badges. The left edge carries the
- * artist's own color, the same one the main dashboard uses — a driver and
- * their team are still, visually, that one artist.
+ * (artist, in track mode): position, artwork, the name with its artist's
+ * color bar, and the season's tally in plain numeric columns. Opening it
+ * shows the full sheet — counts, race-by-race record and records — the same
+ * one the chart opens.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, log, allTime, open, onToggle, kind }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, cover, round, onOpen }) {
   return (
-    <>
-      <li
-        className="season-row" data-leader={rank === 1 || undefined}
-        role="button" tabIndex={0} aria-expanded={open}
-        onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
-      >
-        <div className="pos">{rank}</div>
-        <div className="nm3" style={edge}>
+    <li
+      className="season-row" data-leader={rank === 1 || undefined}
+      role="button" tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+    >
+      <div className="pos">{rank}</div>
+      <div className="nm3" style={edge}>
+        <Cover src={cover} size={36} round={round} />
+        <span>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
-        </div>
-        <div className="cell-pt">{points.toLocaleString()}</div>
-        <div className="cell-w">{wins}</div>
-        <div className="cell-p">{podiums}</div>
-        <div className="cell-p">{pointsFinishes ?? '–'}</div>
-        <div className="cell-p">{finishes ?? '–'}</div>
-        <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
-      </li>
-      {open && (
-        <li className="gp-history-wrap">
-          {kind === 'constructor'
-            ? <ConstructorLog log={log} allTime={allTime} />
-            : <RaceLog log={log} allTime={allTime} />}
-        </li>
-      )}
-    </>
+        </span>
+      </div>
+      <div className="cell-pt">{points.toLocaleString()}</div>
+      <div className="cell-w">{wins}</div>
+      <div className="cell-p">{podiums}</div>
+      <div className="cell-p">{pointsFinishes ?? '–'}</div>
+      <div className="cell-p">{finishes ?? '–'}</div>
+      <span className="chev" aria-hidden="true">›</span>
+    </li>
   );
 }
 
@@ -253,18 +198,9 @@ function RaceLeaders({ stints, days, live }) {
   );
 }
 
-/** A section title in the F1 site's own manner: a heavy heading set inside
-    a thin rule that runs along the top and turns down the right side. */
+/** A section heading, the same one every tab uses. */
 function SectionHead({ title, sub, children }) {
-  return (
-    <div className="f1-head">
-      <div>
-        <h2>{title}</h2>
-        {sub && <p>{sub}</p>}
-      </div>
-      {children}
-    </div>
-  );
+  return <Section title={title} sub={sub}>{children}</Section>;
 }
 
 /** The chequered flag a finished round is marked with. */
@@ -280,9 +216,10 @@ function Chequered() {
 }
 
 /** The championship leader (or champion), as a card in that artist's color. */
-function LeaderCard({ tag, name, sub, points, wins, podiums, color }) {
+function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round, onOpen }) {
   return (
-    <div className="leader" style={{ '--team': color }}>
+    <button className="leader" style={{ '--team': color }} onClick={onOpen}>
+      <Cover src={cover} size={56} round={round} className="leader-cover" />
       <span className="leader-tag">{tag}</span>
       <span className="leader-wins" aria-label={`${wins}승`}>
         <b>{wins}</b>
@@ -294,7 +231,7 @@ function LeaderCard({ tag, name, sub, points, wins, podiums, color }) {
         {points.toLocaleString()}<small>PTS</small>
         <em>{podiums} {podiums === 1 ? 'podium' : 'podiums'}</em>
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -570,11 +507,9 @@ function SeasonChart({ labels, series, view }) {
  * career points and one season's are both real numbers but never confused
  * for each other.
  */
-export default function Season({ mode, source, estimate, year, allTime }) {
+export default function Season({ mode, source, estimate, year, allTime, onSelect, version }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [openDriver, setOpenDriver] = useState(null);
-  const [openConstructor, setOpenConstructor] = useState(null);
   const [openGP, setOpenGP] = useState(null);
   const [driverShown, setDriverShown] = useState(STANDINGS_PAGE);
   const [constructorShown, setConstructorShown] = useState(STANDINGS_PAGE);
@@ -592,8 +527,6 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     reloads.current = 0;
     setData(null);
     setError(null);
-    setOpenDriver(null);
-    setOpenConstructor(null);
     setOpenGP(null);
     setDriverShown(STANDINGS_PAGE);
     setConstructorShown(STANDINGS_PAGE);
@@ -607,45 +540,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
       .then((j) => { if (j.error) throw new Error(j.error); seedGenres(j.genres); setData(j); })
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
     return () => ctl.abort();
-  }, [mode, source, estimate, year, allTime]);
-
-  // Every race a given driver or constructor actually scored in, in order —
-  // built from the months already in hand rather than a second round trip.
-  // Matched on the normalised key, not the display label: two months can
-  // legitimately show slightly different wording for the same recording,
-  // and matching on the label would silently drop those months from the log.
-  const driverLog = useMemo(() => {
-    if (!data || openDriver == null) return [];
-    const log = [];
-    for (const m of data.months) {
-      if (m.live) continue;
-      const hit = m.top.find((t) => normRowKey(t) === openDriver);
-      if (hit) log.push({ year: m.year, month: m.month, rank: hit.rank, points: hit.points });
-    }
-    return log;
-  }, [data, openDriver]);
-
-  const constructorLog = useMemo(() => {
-    if (!data || openConstructor == null) return [];
-    const log = [];
-    for (const m of data.months) {
-      if (m.live) continue;
-      const hits = m.top.filter((t) =>
-        (t.credits ?? [{ key: t.artist_key }]).some((c) => c.key === openConstructor));
-      if (hits.length) {
-        log.push({
-          year: m.year, month: m.month,
-          tracks: [...hits].sort((a, b) => a.rank - b.rank)
-            .map((h) => {
-              const credits = h.credits ?? [{ key: h.artist_key }];
-              const share = splitPoints(h.points, credits.length)[credits.findIndex((c) => c.key === openConstructor)];
-              return { track: h.track ?? h.artist, rank: h.rank, points: share ?? h.points };
-            }),
-        });
-      }
-    }
-    return log;
-  }, [data, openConstructor]);
+  }, [mode, source, estimate, year, allTime, version]);
 
   // The chart's own series: each shown driver's race-by-race record, plus —
   // in track mode — the same thing regrouped onto constructors. A
@@ -717,6 +612,10 @@ export default function Season({ mode, source, estimate, year, allTime }) {
   }, [data, creditRows, creditVersion]);
   useGenres(genreNames);
 
+  const driverCovers = useCovers(mode, data ? data.drivers.slice(0, driverShown) : null);
+  const teamCovers = useCovers('artists', data?.constructors ? data.constructors.slice(0, constructorShown) : null);
+  const open = (r) => onSelect?.({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
+
   // Credits for tracks nobody had opened before arrive a moment after the
   // standings, and are stored as they arrive. When they name more artists
   // than the standings were computed with, reload once, quietly, so every
@@ -736,8 +635,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
     return () => { clearTimeout(t); ctl.abort(); };
   }, [creditVersion, data, creditRows]);
 
-  if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
-  if (!data) return <p className="note" style={{ padding: '12px 2px' }}>시즌을 불러오는 중…</p>;
+  if (error) return <p className="err">{error}</p>;
+  if (!data) return <div className="skeleton" aria-label="불러오는 중"><i /><i /><i /><i /></div>;
 
   const { drivers, constructors, complete, racesRun } = data;
   const driverChamp = drivers[0];
@@ -784,6 +683,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
               sub={driverChamp.track ? artistLine(driverChamp) : null}
               points={driverChamp.points} wins={driverChamp.wins} podiums={driverChamp.podiums}
               color={artistColor(driverChamp.artist)}
+              cover={coverOf(driverCovers, mode, driverChamp)} round={mode === 'artists'}
+              onOpen={() => open(driverChamp)}
             />
           )}
           {constructorChamp && (
@@ -791,6 +692,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
               tag={constructorTag} name={constructorChamp.artist} sub={null}
               points={constructorChamp.points} wins={constructorChamp.wins} podiums={constructorChamp.podiums}
               color={artistColor(constructorChamp.artist)}
+              cover={coverOf(teamCovers, 'artists', constructorChamp)} round
+              onOpen={() => open(constructorChamp)}
             />
           )}
         </div>
@@ -808,15 +711,8 @@ export default function Season({ mode, source, estimate, year, allTime }) {
         <>
           <SectionHead title="시즌 차트" sub={chartView === 'points' ? '누적 포인트' : '레이스별 순위 · P1이 맨 위'}>
             <div className="chart-controls">
-              <div className="seg">
-                <button className="pill" aria-pressed={chartView === 'points'} onClick={() => setChartView('points')}>포인트</button>
-                <button className="pill" aria-pressed={chartView === 'position'} onClick={() => setChartView('position')}>순위</button>
-              </div>
-              <div className="seg">
-                {[5, 10].map((n) => (
-                  <button key={n} className="pill" aria-pressed={chartN === n} onClick={() => setChartN(n)}>TOP {n}</button>
-                ))}
-              </div>
+              <Seg size="sm" options={[['points', '포인트'], ['position', '순위']]} value={chartView} onChange={setChartView} />
+              <Seg size="sm" options={[[5, 'TOP 5'], [10, 'TOP 10']]} value={chartN} onChange={setChartN} />
             </div>
           </SectionHead>
           {chartData.constructorSeries && (
@@ -843,9 +739,9 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                   name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
-                  edge={edgeStyle(d)} kind="driver"
-                  open={openDriver === key} log={driverLog} allTime={allTime}
-                  onToggle={() => setOpenDriver((k) => (k === key ? null : key))}
+                  edge={edgeStyle(d)}
+                  cover={coverOf(driverCovers, mode, d)} round={mode === 'artists'}
+                  onOpen={() => open(d)}
                 />
               );
             })}
@@ -853,7 +749,7 @@ export default function Season({ mode, source, estimate, year, allTime }) {
           {drivers.length > driverShown && (
             <div className="more">
               <button className="btn ghost" onClick={() => setDriverShown((n) => n + STANDINGS_PAGE * 2)}>
-                펼치기 · {drivers.length - driverShown}명 더
+                더 보기 · {drivers.length - driverShown}
               </button>
             </div>
           )}
@@ -869,16 +765,16 @@ export default function Season({ mode, source, estimate, year, allTime }) {
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
                     pointsFinishes={c.pointsFinishes} finishes={c.finishes}
-                    edge={{ borderLeftColor: artistColor(c.artist) }} kind="constructor"
-                    open={openConstructor === c.artist_key} log={constructorLog} allTime={allTime}
-                    onToggle={() => setOpenConstructor((a) => (a === c.artist_key ? null : c.artist_key))}
+                    edge={{ borderLeftColor: artistColor(c.artist) }}
+                    cover={coverOf(teamCovers, 'artists', c)} round
+                    onOpen={() => open(c)}
                   />
                 ))}
               </ol>
               {constructors.length > constructorShown && (
                 <div className="more">
                   <button className="btn ghost" onClick={() => setConstructorShown((n) => n + STANDINGS_PAGE * 2)}>
-                    펼치기 · {constructors.length - constructorShown}팀 더
+                    더 보기 · {constructors.length - constructorShown}
                   </button>
                 </div>
               )}

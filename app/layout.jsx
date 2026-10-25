@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: '내 재생 기록',
+  title: 'playcounters',
   description: 'Spotify 재생 기록을 실시간으로 모아 순위로 보여줍니다.',
 };
 
@@ -18,6 +18,12 @@ export default function RootLayout({ children }) {
     <html lang="ko">
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
       </head>
       <body>{children}</body>
     </html>

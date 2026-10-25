@@ -1,26 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { awardsFor, gpRecords, formatValue } from '@/lib/awards';
 import { artistLine } from './useCredits';
+import { useCovers, coverOf } from './useCovers';
+import { loadCareer, loadRecords } from './data';
+import { Cover, Stat, dayLabel } from './ui';
 
 const DAY = 864e5;
 
-const fmtDate = (d) => {
-  if (!d) return '—';
-  const [y, m, day] = d.split('-');
-  return `${y}년 ${Number(m)}월 ${Number(day)}일`;
-};
-
 /**
- * Daily plays as a column chart. Every day between first and last gets a slot
- * so the gaps are visible — a run of silence is part of the shape, and a chart
- * that only plots the days something played would hide it.
- *
- * A long history needs more days than there are pixels, so several days share
- * a column. That column takes the busiest day in its span rather than their
- * sum: the caption underneath names a single day's record, and summing made
- * the tallest bar disagree with it — a quiet stretch of many days could out-
- * rank the actual peak.
+ * Daily plays as a column chart. Every day between first and last gets a
+ * slot so the gaps show; a long history shares columns, each taking its
+ * busiest day so the tallest bar agrees with the caption.
  */
 function DailyChart({ daily }) {
   if (!daily.length) return null;
@@ -28,10 +20,6 @@ function DailyChart({ daily }) {
   const t1 = new Date(daily[daily.length - 1].day + 'T00:00:00Z').getTime();
   const span = Math.max(1, Math.round((t1 - t0) / DAY));
   const cells = Math.min(120, span + 1);
-  // Bars are drawn from the exact figure; only the number written out is
-  // rounded, and only where it is written out.
-  const max = Math.round(Math.max(...daily.map((d) => Number(d.plays))));
-
   const buckets = new Array(cells).fill(0);
   for (const d of daily) {
     const t = new Date(d.day + 'T00:00:00Z').getTime();
@@ -39,24 +27,78 @@ function DailyChart({ daily }) {
     buckets[i] = Math.max(buckets[i], Number(d.plays));
   }
   const peak = Math.max(...buckets, 1);
-
   return (
-    <div className="chart" role="img" aria-label={`하루 최대 ${max}회`}>
+    <div className="daychart" role="img" aria-label="하루 재생 횟수">
       {buckets.map((v, i) => (
-        <i key={i} style={{ height: v ? `${Math.max(6, (v / peak) * 100)}%` : '1px' }}
-           data-on={v > 0} />
+        <i key={i} style={{ height: v ? `${Math.max(6, (v / peak) * 100)}%` : '1px' }} data-on={v > 0} />
       ))}
     </div>
   );
 }
 
 /**
- * Everything known about one row, fetched on demand. Opens over the list
- * rather than navigating, so the ranking stays where it was.
+ * The championship career of what's open: a song's results as a driver, an
+ * artist's as a constructor (their songs' points, shared between everyone
+ * credited). Read from the all-time championship, shared with the records.
+ */
+function Career({ target, career }) {
+  const rec = useMemo(() => {
+    if (!career?.months) return null;
+    const isTrack = Boolean(target.track);
+    const list = isTrack ? career.drivers : career.constructors;
+    const idx = (list ?? []).findIndex((r) => (isTrack
+      ? r.artist_key === target.artist_key && r.track_key === target.track_key
+      : r.artist_key === target.artist_key));
+    const results = [];
+    for (const m of career.months) {
+      if (m.live) continue;
+      for (const t of m.top) {
+        const hit = isTrack
+          ? t.artist_key === target.artist_key && t.track_key === target.track_key
+          : (t.credits ?? [{ key: t.artist_key }]).some((c) => c.key === target.artist_key);
+        if (hit) results.push({ year: m.year, month: m.month, rank: t.rank, points: t.points, track: t.track });
+      }
+    }
+    return { row: idx >= 0 ? list[idx] : null, pos: idx + 1, results: results.reverse() };
+  }, [career, target]);
+
+  if (!career) return <p className="note">챔피언십 기록을 불러오는 중…</p>;
+  if (!rec?.row) return <p className="note">아직 그랑프리 TOP 10에 든 적이 없습니다.</p>;
+  const { row, pos, results } = rec;
+  const best = Math.min(...results.map((r) => r.rank));
+  return (
+    <>
+      <div className="stats compact">
+        <Stat value={`${pos}위`} label={target.track ? '통산 드라이버' : '통산 컨스트럭터'} />
+        <Stat value={row.points.toLocaleString()} label="포인트" />
+        <Stat value={row.wins} label="우승" />
+        <Stat value={row.podiums} label="포디움" />
+        <Stat value={`P${best}`} label="최고 성적" />
+      </div>
+      <ol className="results">
+        {results.slice(0, 24).map((r, i) => (
+          <li key={i}>
+            <span className="res-mo">{r.year}.{String(r.month).padStart(2, '0')}</span>
+            <span className="res-rk" data-tier={r.rank <= 3 ? r.rank : undefined}>P{r.rank}</span>
+            {!target.track && <span className="res-nm">{r.track}</span>}
+            <span className="res-pt">{r.points}pt</span>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+/**
+ * Everything about one song or artist, from any tab: its counts across all
+ * of history, its listening by day, its championship career, and every
+ * record it holds or is chasing.
  */
 export default function Detail({ target, source, estimate, onClose }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [career, setCareer] = useState(null);
+  const [records, setRecords] = useState(null);
 
   useEffect(() => {
     if (!target) return;
@@ -73,65 +115,93 @@ export default function Detail({ target, source, estimate, onClose }) {
     return () => ctl.abort();
   }, [target, source, estimate]);
 
+  // Fetched once per visit and shared with the records tab.
   useEffect(() => {
+    if (!target) return;
+    let live = true;
+    loadCareer(source, estimate).then((j) => live && setCareer(j)).catch(() => live && setCareer({}));
+    loadRecords(source).then((j) => live && setRecords(j.records)).catch(() => {});
+    return () => { live = false; };
+  }, [target, source, estimate]);
+
+  useEffect(() => {
+    if (!target) return;
     const esc = (e) => { if (e.key === 'Escape') onClose(); };
     addEventListener('keydown', esc);
-    return () => removeEventListener('keydown', esc);
-  }, [onClose]);
+    document.body.style.overflow = 'hidden';
+    return () => { removeEventListener('keydown', esc); document.body.style.overflow = ''; };
+  }, [target, onClose]);
+
+  const mode = target?.track ? 'tracks' : 'artists';
+  const coverRows = useMemo(() => (target ? [target] : null), [target]);
+  const covers = useCovers(mode, coverRows);
+  const awards = useMemo(() => (target && records
+    ? awardsFor(target, { ...records, ...gpRecords(career) }) : []), [target, records, career]);
 
   if (!target) return null;
   const s = data?.summary;
   const best = data?.daily?.length
-    ? data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a))
-    : null;
+    ? data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a)) : null;
   const hours = s ? s.minutes / 60 : 0;
-  // Play counts and listening time carry the YouTube estimate; the day and week
-  // counts are read off the timestamps and don't move with it.
   const est = Boolean(data?.estimate && s?.yt) ? '≈' : '';
 
   return (
     <>
       <button className="sheet-scrim" aria-label="닫기" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true">
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}>
+        <div className="sheet-grip" aria-hidden="true" />
         <div className="sheet-head">
-          <div className="nm">
+          <Cover src={coverOf(covers, mode, target)} size={84} round={!target.track} />
+          <div className="sheet-title">
             <b>{target.track ?? target.artist}</b>
             {target.track && <span>{artistLine(target)}</span>}
+            {s && <em>{dayLabel(s.first)} 처음 · {dayLabel(s.last)} 마지막</em>}
           </div>
-          <button className="pill" onClick={onClose}>닫기</button>
+          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          </button>
         </div>
 
         {error && <p className="err">{error}</p>}
-        {!error && !data && <p className="note">불러오는 중…</p>}
+        {!error && !data && <div className="skeleton"><i /><i /></div>}
 
         {s && (
           <>
-            <div className="totals">
-              {[
-                [est + s.plays.toLocaleString(), '재생'],
-                [est + (hours >= 1 ? `${hours.toFixed(1)}h` : `${s.minutes}분`), '시간'],
-                [s.days.toLocaleString(), '들은 날'],
-                [s.weeks.toLocaleString(), '들은 주'],
-              ].map(([v, l]) => (
-                <div className="tot" key={l}><b>{v}</b><span>{l}</span></div>
-              ))}
+            <div className="stats compact">
+              <Stat value={est + s.plays.toLocaleString()} label="재생" />
+              <Stat value={est + (hours >= 1 ? `${hours.toFixed(1)}h` : `${s.minutes}분`)} label="시간" />
+              <Stat value={s.days.toLocaleString()} label="들은 날" />
+              <Stat value={s.weeks.toLocaleString()} label="들은 주" />
             </div>
-
-            {/* This sheet is the item's whole history, not the period selected
-                behind it — say so, or the two disagree for no visible reason. */}
-            <p className="synced" style={{ marginTop: 14 }}>
-              전체 기간 기준 · <b>{fmtDate(s.first)}</b> 처음 ·{' '}
-              <b>{fmtDate(s.last)}</b> 마지막
-            </p>
-
             <DailyChart daily={data.daily} />
             <p className="note">
-              막대는 하루 재생 횟수입니다. 가장 많이 들은 날{' '}
-              <b>{fmtDate(best?.day)}</b> — {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회
-              {est && <><br />≈는 유튜브 기록을 Recap 청취 시간에 맞춰 되살린 추정치입니다.</>}
+              하루 재생 횟수 · 가장 많이 들은 날 {dayLabel(best?.day)}, {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회
             </p>
           </>
         )}
+
+        {awards.length > 0 && (
+          <div className="sheet-sec">
+            <h3>기록</h3>
+            <ul className="badges">
+              {awards.map(({ def, place, holder }) => {
+                const v = formatValue(def, holder.value);
+                return (
+                  <li key={def.key} data-place={place}>
+                    <span className="badge-place">{place === 1 ? '보유' : `${place}위`}</span>
+                    <b>{def.title}</b>
+                    <em>{v.v}{v.unit}</em>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        <div className="sheet-sec">
+          <h3>챔피언십</h3>
+          <Career target={target} career={career} />
+        </div>
       </div>
     </>
   );

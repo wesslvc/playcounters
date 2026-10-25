@@ -1,12 +1,11 @@
 import { redirect } from 'next/navigation';
 import { currentUserId } from '@/lib/db';
-import Championship from '@/app/Championship';
+import App from '@/app/App';
 
 export const dynamic = 'force-dynamic';
 
-/** Same guard as /import: /api/season already rejects anonymous requests,
-    this just skips rendering a page that can only ever fail to load. */
-export default function ChampionshipPage() {
+/** One of the app's tabs, reachable at its own address. */
+export default function Page() {
   if (!currentUserId()) redirect('/');
-  return <Championship />;
+  return <App initialTab="season" />;
 }

@@ -1365,3 +1365,265 @@ as $$
   group by l.artist, l.track, 3
   order by 3;
 $$;
+
+-- ---------- records (Awards) ----------
+-- Every all-time record in one pass, top three holders per category, as one
+-- jsonb object keyed by category. Counted on recorded plays (>=30s, YouTube
+-- exempt), the same plays the ranking counts, so a record never disagrees
+-- with the list it came from. Each holder:
+--   {artist, track, artist_key, track_key, value, from, to}
+-- `from`/`to` are the dates the record was set over (or on).
+create or replace function play_records(
+  p_user uuid,
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all'
+)
+returns jsonb
+language sql stable
+set search_path = public, pg_temp
+-- A single big analytic query: JIT compilation alone cost seconds here.
+set jit = off
+as $$
+  with p as (
+    select (p.played_at at time zone p_tz)::date as day,
+           p.artist, p.track, p.artist_key as ak, p.track_key as tk
+    from plays p
+    where p.user_id = p_user
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+  ),
+  -- track-days and artist-days: everything below is built on these
+  d as (select ak, tk, day, count(*)::int as n from p group by 1, 2, 3),
+  ad as (select ak, day, count(*)::int as n from p group by 1, 2),
+  lab as (
+    select ak, tk,
+           mode() within group (order by artist) as artist,
+           mode() within group (order by track)  as track,
+           count(*)::int as plays, count(distinct day)::int as days,
+           min(day) as first_day, max(day) as last_day
+    from p group by ak, tk
+  ),
+  alab as (
+    select ak, mode() within group (order by artist) as artist,
+           count(*)::int as plays, count(distinct tk)::int as tracks,
+           min(day) as first_day
+    from p group by ak
+  ),
+  cum as (
+    select ak, tk, day, n,
+           sum(n) over w as c, sum(n) over w - n as before,
+           lag(day) over (partition by ak, tk order by day) as prev_day
+    from d window w as (partition by ak, tk order by day)
+  ),
+  acum as (
+    select ak, day, n, sum(n) over w as c, sum(n) over w - n as before
+    from ad window w as (partition by ak order by day)
+  ),
+  -- consecutive runs of days
+  runs as (
+    select ak, tk, count(*)::int as len, min(day) as d_from, max(day) as d_to
+    from (select ak, tk, day,
+                 day - (row_number() over (partition by ak, tk order by day))::int as g
+          from d) s
+    group by ak, tk, g
+  ),
+  aruns as (
+    select ak, count(*)::int as len, min(day) as d_from, max(day) as d_to
+    from (select ak, day, day - (row_number() over (partition by ak order by day))::int as g
+          from ad) s
+    group by ak, g
+  ),
+  -- the day's and the week's number one (ties all count)
+  dtop as (
+    select ak, tk, day from (
+      select ak, tk, day, rank() over (partition by day order by n desc) as r from d
+    ) s where r = 1
+  ),
+  wk as (
+    select ak, tk, date_trunc('week', day)::date as wk, sum(n)::int as n
+    from d group by 1, 2, 3
+  ),
+  wtop as (
+    select ak, tk, wk from (
+      select ak, tk, wk, rank() over (partition by wk order by n desc) as r from wk
+    ) s where r = 1
+  ),
+  wruns as (
+    select ak, tk, count(*)::int as len, min(wk) as d_from, max(wk) + 6 as d_to
+    from (select ak, tk, wk,
+                 (wk - date '2000-01-03') / 7
+                 - row_number() over (partition by ak, tk order by wk) as g
+          from wtop) s
+    group by ak, tk, g
+  ),
+  mo as (
+    select ak, tk, date_trunc('month', day)::date as m, sum(n)::int as n
+    from d group by 1, 2, 3
+  ),
+  mshare as (
+    select mo.ak, mo.tk, mo.m, mo.n, t.total,
+           round(100.0 * mo.n / t.total, 1) as pct
+    from mo join (select m, sum(n) as total from mo group by m) t using (m)
+    where t.total >= 100
+  ),
+  -- one row per holder and category, before keeping the top three
+  cand as (
+    -- 최단기간 50회 / 100회: days from the first play to the one that got there
+    select 'fastest_50' as cat, c.ak, c.tk, (c.day - l.first_day + 1)::numeric as v,
+           l.first_day as d_from, c.day as d_to, false as hi
+    from cum c join lab l using (ak, tk) where c.before < 50 and c.c >= 50
+    union all
+    select 'fastest_100', c.ak, c.tk, (c.day - l.first_day + 1), l.first_day, c.day, false
+    from cum c join lab l using (ak, tk) where c.before < 100 and c.c >= 100
+    union all
+    select * from (
+      select distinct on (ak, tk) 'most_in_day', ak, tk, n::numeric, day, day, true
+      from d order by ak, tk, n desc, day
+    ) x
+    union all
+    select * from (
+      select distinct on (ak, tk) 'longest_streak', ak, tk, len::numeric, d_from, d_to, true
+      from runs order by ak, tk, len desc, d_to desc
+    ) x
+    union all
+    select 'most_days', ak, tk, days, first_day, last_day, true from lab
+    union all
+    select 'daily_no1', ak, tk, count(*), min(day), max(day), true from dtop group by ak, tk
+    union all
+    select 'weekly_no1', ak, tk, count(*), min(wk), max(wk) + 6, true from wtop group by ak, tk
+    union all
+    select * from (
+      select distinct on (ak, tk) 'weekly_no1_run', ak, tk, len::numeric, d_from, d_to, true
+      from wruns order by ak, tk, len desc, d_to desc
+    ) x
+    union all
+    select * from (
+      select distinct on (ak, tk) 'month_share', ak, tk, pct, m,
+             (m + interval '1 month' - interval '1 day')::date, true
+      from mshare order by ak, tk, pct desc
+    ) x
+    union all
+    select 'longevity', ak, tk, (last_day - first_day + 1), first_day, last_day, true
+    from lab where plays >= 20
+    union all
+    -- 최장 공백 후 복귀: the longest silence a track came back from, counted
+    -- only when it came back for real (five more plays at least)
+    select * from (
+      select distinct on (c.ak, c.tk) 'comeback', c.ak, c.tk, (c.day - c.prev_day - 1)::numeric,
+             c.prev_day, c.day, true
+      from cum c join lab l using (ak, tk)
+      where c.prev_day is not null and l.plays - c.before >= 5
+      order by c.ak, c.tk, c.day - c.prev_day desc
+    ) x
+    union all
+    select 'debut_day', c.ak, c.tk, c.n, c.day, c.day, true
+    from cum c join lab l using (ak, tk) where c.day = l.first_day
+  ),
+  acand as (
+    select 'artist_fastest_500' as cat, c.ak, (c.day - l.first_day + 1)::numeric as v,
+           l.first_day as d_from, c.day as d_to, false as hi
+    from acum c join alab l using (ak) where c.before < 500 and c.c >= 500
+    union all
+    select * from (
+      select distinct on (ak) 'artist_most_in_day', ak, n::numeric, day, day, true
+      from ad order by ak, n desc, day
+    ) x
+    union all
+    select * from (
+      select distinct on (ak) 'artist_streak', ak, len::numeric, d_from, d_to, true
+      from aruns order by ak, len desc, d_to desc
+    ) x
+    union all
+    select 'artist_tracks', ak, tracks, first_day, null, true from alab
+  ),
+  top3 as (
+    select cat, ak, tk, v, d_from, d_to,
+           row_number() over (partition by cat
+                              order by case when hi then -v else v end, d_to, ak, tk) as r
+    from cand
+  ),
+  atop3 as (
+    select cat, ak, v, d_from, d_to,
+           row_number() over (partition by cat
+                              order by case when hi then -v else v end, d_to, ak) as r
+    from acand
+  ),
+  holders as (
+    select t.cat, t.r, jsonb_build_object(
+             'artist', l.artist, 'track', l.track, 'artist_key', t.ak, 'track_key', t.tk,
+             'value', t.v, 'from', t.d_from, 'to', t.d_to) as j
+    from top3 t join lab l using (ak, tk) where t.r <= 3
+    union all
+    select t.cat, t.r, jsonb_build_object(
+             'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,
+             'value', t.v, 'from', t.d_from, 'to', t.d_to)
+    from atop3 t join alab l using (ak) where t.r <= 3
+  ),
+  -- the listener's own records, one holder each
+  me as (
+    select jsonb_build_object(
+      'busiest_day', (select jsonb_build_object('value', n, 'from', day, 'to', day)
+                      from (select day, sum(n) as n from ad group by day) s
+                      order by n desc, day limit 1),
+      'listening_streak', (select jsonb_build_object('value', count(*), 'from', min(day), 'to', max(day))
+                           from (select day, day - (row_number() over (order by day))::int as g
+                                 from (select distinct day from ad) u) s
+                           group by g order by count(*) desc, max(day) desc limit 1),
+      'tracks', (select count(*) from lab),
+      'artists', (select count(*) from alab),
+      'plays', (select coalesce(sum(plays), 0) from lab),
+      'first_day', (select min(day) from ad)
+    ) as j
+  )
+  select coalesce(
+           (select jsonb_object_agg(cat, list)
+            from (select cat, jsonb_agg(j order by r) as list from holders group by cat) g),
+           '{}'::jsonb)
+         || jsonb_build_object('me', (select j from me));
+$$;
+
+-- ---------- debuts in a window ----------
+-- Tracks (or artists) heard for the very first time inside [p_from, p_to),
+-- with how much they played there — a Replay's "new this quarter". `total`
+-- is how many debuted altogether, repeated on every row.
+create or replace function window_debuts(
+  p_user uuid,
+  p_from timestamptz,
+  p_to   timestamptz,
+  p_mode text default 'tracks',
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_limit int default 10
+)
+returns table (
+  artist text, track text, artist_key text, track_key text,
+  plays bigint, first_at timestamptz, total bigint
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with g as (
+    select p.artist_key as ak,
+           case when p_mode = 'artists' then null else p.track_key end as tk,
+           min(p.played_at) as first_at,
+           count(*) filter (where p.played_at >= p_from and p.played_at < p_to) as plays,
+           mode() within group (order by p.artist) as artist,
+           case when p_mode = 'artists' then null
+                else mode() within group (order by p.track) end as track
+    from plays p
+    where p.user_id = p_user
+      and p.played_at < p_to
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2
+  )
+  select artist, track, ak, tk, plays, first_at, count(*) over ()
+  from g
+  where first_at >= p_from
+  order by plays desc, first_at, ak, tk
+  limit p_limit;
+$$;

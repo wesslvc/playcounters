@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { rowKey } from '@/lib/keys';
 import { artistColor, familyLabel } from '@/lib/genre';
-import { computeRanks, pointsForRank } from '@/lib/rank';
+import { computeRanks, computeRanksBy } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
 import { useCredits, artistLine, artistNames, fillStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
@@ -142,7 +142,7 @@ function Strip({ days, item, color }) {
  * set big — and second and third sit under it, the way a chart's number one
  * is announced rather than listed.
  */
-function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, points }) {
+function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst }) {
   if (rows.length < 3) return null;
   const [first, ...rest] = rows.slice(0, 3);
   const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
@@ -155,7 +155,6 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, poin
         <span className="no1-text">
           <span className="no1-k">
             {ranks[0] === 1 ? '1위' : `${ranks[0]}위`}
-            {points && <em>+{pointsForRank(ranks[0])}pt</em>}
           </span>
           <b>{first.track ?? first.artist}</b>
           {first.track && <span className="no1-a">{artistLine(first)}</span>}
@@ -246,9 +245,9 @@ function Highlights({ rows, ranks, daily, prevRank, prevComplete, familyOf }) {
 
 /**
  * The ranked list for any window — all of history down to a single day —
- * sorted by plays, days, weeks or minutes. A whole month sorted by plays is
- * exactly that month's Grand Prix, so it says so: the top ten carry the
- * points they are on course for, and the championship is one tap away.
+ * sorted by plays, days, weeks or minutes. By plays it ranks the way a Grand
+ * Prix finishes, and every row shows how it moved against the window before
+ * (or that it is new); the championship, with its points, is one tap away.
  */
 export default function Chart({ source: src, mode, estimate, calendar, version, onSelect, go }) {
   const [sel, setSel] = useState(null);
@@ -343,18 +342,23 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
     return () => ctl.abort();
   }, [fetchStats, limit]);
 
+  // By plays the list finishes the way a Grand Prix does: the same total
+  // reached later places ahead, so only an identical last play shares a rank.
   const cmp = useCallback(
-    (a, b) => Number(b[sort]) - Number(a[sort]) || Number(b.plays) - Number(a.plays), [sort]);
+    (a, b) => Number(b[sort]) - Number(a[sort]) || Number(b.plays) - Number(a.plays)
+      || (sort === 'plays' ? new Date(b.last_at) - new Date(a.last_at) : 0), [sort]);
+  const rankOf = useCallback(
+    (list) => (sort === 'plays' ? computeRanksBy(list, ['plays', 'last_at']) : computeRanks(list, sort)), [sort]);
   const rows = useMemo(() => (data ? [...data.items].sort(cmp) : []), [data, cmp]);
-  const ranks = useMemo(() => computeRanks(rows, sort), [rows, sort]);
+  const ranks = useMemo(() => rankOf(rows), [rows, rankOf]);
   const prevRank = useMemo(() => {
     if (!data?.prev?.length) return null;
     const prevRows = [...data.prev].sort(cmp);
-    const prevRanks = computeRanks(prevRows, sort);
+    const prevRanks = rankOf(prevRows);
     const m = new Map();
     prevRows.forEach((r, i) => m.set(rowKey(r), prevRanks[i]));
     return m;
-  }, [data, cmp, sort]);
+  }, [data, cmp, rankOf]);
   const prevComplete = (data?.prev?.length ?? 0) < limit;
   const priorSet = useMemo(() => new Set((data?.prior ?? []).map(rowKey)), [data]);
 
@@ -382,7 +386,6 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
 
   // A whole month on plays is that month's Grand Prix; a whole year, a season.
   const isMonth = sel?.y && sel.m != null && sel.w == null && sel.d == null;
-  const gp = isMonth && sort === 'plays';
   const now = new Date(Date.now() + KST);
   const liveMonth = isMonth && sel.y === now.getUTCFullYear() && sel.m === now.getUTCMonth() + 1;
   const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
@@ -460,7 +463,7 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
           )}
           {showCount && (
             <TopThree rows={rows} ranks={ranks} mode={mode} covers={covers} sort={sort} unit={unit}
-                      onSelect={onSelect} isEst={isEst} points={gp} />
+                      onSelect={onSelect} isEst={isEst} />
           )}
           <Highlights rows={rows} ranks={ranks} daily={data.daily} prevRank={prevRank}
                       prevComplete={prevComplete} familyOf={familyOf} />
@@ -479,7 +482,6 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
               const delta = !prevRank ? null
                 : before !== undefined ? before - rank
                   : prevComplete ? (priorSet.has(key) ? null : undefined) : null;
-              const pts = gp ? pointsForRank(rank) : 0;
               return (
                 <li key={key}>
                   <button className="row" onClick={() => onSelect(target(r))}>
@@ -500,7 +502,7 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
                       {estIsh && isEst(r) && <em>≈</em>}
                       {fmt(r[sort], sort)}
                       <small>{sort === 'minutes' ? '' : unit}</small>
-                      {pts > 0 ? <i className="pts">+{pts}</i> : <Delta value={delta} />}
+                      <Delta value={delta} />
                     </span>
                     {showCount && (
                       <span className="meter" aria-hidden="true">

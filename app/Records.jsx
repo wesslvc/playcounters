@@ -89,6 +89,48 @@ function Award({ def, list, covers, onSelect, club }) {
 }
 
 /**
+ * The 1000 Club's headline record as a banner, the way a Replay quarter
+ * opens: the fastest to a thousand set large over their own picture, and
+ * every member under it with the minute they got in.
+ */
+function ClubBanner({ def, list, covers, onSelect }) {
+  if (!list?.length) return null;
+  const [first] = list;
+  const img = coverOf(covers.artists, 'artists', first);
+  const f = formatValue(def, first.value);
+  return (
+    <div className="club-hero">
+      <span className="replay-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
+      <p className="club-hero-k">1000 Club · {def.title} 최단 기록</p>
+      <button className="club-hero-lead" onClick={() => onSelect(target(first))}>
+        <Cover src={img} size={112} round />
+        <span>
+          <b>{first.artist}</b>
+          <span className="club-hero-v"><strong>{f.v}</strong>{f.unit}</span>
+          <i>{when(def, first)}{first.reached_at && ` · 입성 ${reachedLabel(first.reached_at)}`}</i>
+        </span>
+      </button>
+      <ol className="club-members">
+        {list.map((h, i) => {
+          const v = formatValue(def, h.value);
+          return (
+            <li key={h.artist_key}>
+              <button onClick={() => onSelect(target(h))}>
+                <span className="club-m-rk">{i + 1}</span>
+                <Cover src={coverOf(covers.artists, 'artists', h)} size={56} round />
+                <b>{h.artist}</b>
+                <span className="club-m-v">{v.v}{v.unit}</span>
+                {h.reached_at && <small>{reachedShort(h.reached_at)}</small>}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
  * The record book: every category's holder and the two behind them —
  * dominance (who owned the days, weeks and months), velocity (how fast a
  * song got to fifty or a hundred), endurance, the Grand Prix, and artists.
@@ -144,8 +186,11 @@ export default function Records({ source, estimate, version, onSelect }) {
       {AWARD_GROUPS.map((g) => (
         <div key={g.key} className="award-group">
           <Section id={`rec-${g.key}`} title={g.title} />
+          {g.items.filter((def) => def.banner).map((def) => (
+            <ClubBanner key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
+          ))}
           <div className="awards">
-            {g.items.map((def) => (
+            {g.items.filter((def) => !def.banner).map((def) => (
               <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect}
                      club={g.key === 'club'} />
             ))}

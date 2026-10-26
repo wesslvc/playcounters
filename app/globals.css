@@ -496,25 +496,6 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .award-rest button:hover .award-rest-nm { text-decoration:underline; text-underline-offset:3px }
 .award-none { font-size:13px; color:var(--ink-3); margin:16px 0 6px }
 .award-group .sec { margin-top:44px }
-/* 1000 Club: the thousand-play artists, all of them, set apart in gold */
-.club { --gold:#C9971C }
-.club .sec { margin-top:56px }
-.club .sec h2 { color:var(--gold) }
-.club-list { padding:6px 8px; border-radius:24px; border:1px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  background:linear-gradient(135deg, color-mix(in srgb, var(--gold) 20%, transparent), color-mix(in srgb, var(--gold) 3%, transparent) 65%), var(--surface) }
-.club-list li + li { border-top:1px solid color-mix(in srgb, var(--gold) 22%, transparent) }
-.club-row { display:grid; grid-template-columns:24px auto minmax(0,1fr) auto; gap:14px; align-items:center; width:100%; padding:14px 10px; text-align:left }
-.club-rank { font-size:20px; font-weight:800; color:var(--gold); text-align:center }
-.club-row .cover { box-shadow:0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent) }
-.club-nm { min-width:0 }
-.club-nm b { display:block; font-size:16px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.club-nm span { display:block; font-size:12px; color:var(--ink-3); margin-top:2px }
-.club-v { text-align:right; font-size:24px; font-weight:800; letter-spacing:-.04em; line-height:1.1; white-space:nowrap }
-.club-v small { font-size:12px; font-weight:600; color:var(--ink-2); margin-left:2px; letter-spacing:0 }
-.club-v em { display:block; font-style:normal; font-size:12px; font-weight:650; color:var(--gold); letter-spacing:0; margin-top:3px }
-.club li:first-child .club-nm b { font-size:19px }
-.club li:first-child .club-v { font-size:30px }
-.club-row:hover .club-nm b { text-decoration:underline; text-underline-offset:3px }
 
 /* ---------- championship ---------- */
 .season { padding-top:22px }
@@ -714,9 +695,6 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .artist-grid { grid-template-columns:repeat(5,minmax(0,1fr)) }
 }
 @media (max-width:560px) {
-  .club-row { gap:10px; padding:12px 6px; grid-template-columns:20px auto minmax(0,1fr) auto }
-  .club-v { font-size:20px }
-  .club li:first-child .club-v { font-size:24px }
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:16px }
   .stats .stat:nth-child(3) { padding-left:0; border-left:none }
   .stats.compact { grid-template-columns:repeat(2,minmax(0,1fr)) }

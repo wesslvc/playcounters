@@ -602,6 +602,46 @@ as $$
   limit p_limit;
 $$;
 
+-- ---------- where the shown rows stood in the window before ----------
+-- Every item of the previous window ranked on each metric the list sorts by,
+-- returned only for the artists on screen. Ranked over the whole window, so a
+-- song that was 3,000th last year and 3rd this year shows ▲2997 without the
+-- list ever being unfolded that far. Ranks follow the list's own rules: by
+-- plays the same total reached later places ahead (a Grand Prix finish);
+-- the other metrics tie on their value alone.
+create or replace function prev_ranks(
+  p_user uuid,
+  p_from timestamptz,
+  p_to   timestamptz,
+  p_mode text default 'tracks',
+  p_tz   text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_estimate boolean default false,
+  p_artists text[] default '{}'
+)
+returns table (
+  artist_key text,
+  track_key  text,
+  r_plays    int,
+  r_days     int,
+  r_weeks    int,
+  r_minutes  int
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select s.artist_key, s.track_key, s.r_plays, s.r_days, s.r_weeks, s.r_minutes
+  from (
+    select t.artist_key, t.track_key,
+           rank() over (order by t.plays desc, t.last_at desc)::int as r_plays,
+           rank() over (order by t.days desc)::int                  as r_days,
+           rank() over (order by t.weeks desc)::int                 as r_weeks,
+           rank() over (order by t.minutes desc)::int               as r_minutes
+    from top_items(p_user, p_from, p_to, p_mode, p_tz, 2147483647, p_source, false, p_estimate) t
+  ) s
+  where s.artist_key = any(p_artists);
+$$;
+
 -- ---------- season races, all months in one pass ----------
 -- The championship used to call top_items once per month — an all-time
 -- standings is easily a hundred round trips, each shipping up to 200 rows

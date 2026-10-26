@@ -351,15 +351,15 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
     (list) => (sort === 'plays' ? computeRanksBy(list, ['plays', 'last_at']) : computeRanks(list, sort)), [sort]);
   const rows = useMemo(() => (data ? [...data.items].sort(cmp) : []), [data, cmp]);
   const ranks = useMemo(() => rankOf(rows), [rows, rankOf]);
+  // Last window's rank on the metric being sorted by, worked out server-side
+  // over that whole window, so it is there however far down it was.
   const prevRank = useMemo(() => {
-    if (!data?.prev?.length) return null;
-    const prevRows = [...data.prev].sort(cmp);
-    const prevRanks = rankOf(prevRows);
+    if (!data?.prevReady) return null;
     const m = new Map();
-    prevRows.forEach((r, i) => m.set(rowKey(r), prevRanks[i]));
+    for (const r of data.items) if (r.prev?.[sort] != null) m.set(rowKey(r), r.prev[sort]);
     return m;
-  }, [data, cmp, rankOf]);
-  const prevComplete = (data?.prev?.length ?? 0) < limit;
+  }, [data, sort]);
+  const prevComplete = Boolean(data?.prevReady);
   const priorSet = useMemo(() => new Set((data?.prior ?? []).map(rowKey)), [data]);
 
   const covers = useCovers(mode, rows);

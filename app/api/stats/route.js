@@ -45,7 +45,7 @@ export async function GET(req) {
   // changes or after a sync) instead of on every period switch.
   const wantCal = q.get('cal') === '1';
 
-  const [items, daily, total, prev, prior, calendar, calibrated, user] = await Promise.all([
+  const [items, daily, total, prior, calendar, calibrated, user] = await Promise.all([
     rpcAll('top_items', {
       p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ,
       p_limit: limit, p_source: src, p_days: withDays, p_estimate: estimate,
@@ -55,13 +55,6 @@ export async function GET(req) {
     // same paging or the plays/minutes/days figures silently undercount.
     rpcAll('daily_totals', { p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src, p_estimate: estimate }, MAX_LIMIT),
     db.rpc('item_count', { p_user: userId, p_from: from, p_to: to, p_mode: mode, p_tz: TZ, p_source: src }),
-    wantPrev
-      ? rpcAll('top_items', {
-          p_user: userId, p_from: prevFrom, p_to: prevTo,
-          p_mode: mode, p_tz: TZ, p_limit: limit, p_source: src,
-          p_estimate: estimate,
-        }, limit)
-      : Promise.resolve({ data: null, error: null }),
     // Only worth asking when there's a previous window to compare against —
     // it's what tells "missing from last window" apart from "never played
     // before," and the first is meaningless without the second. Unbounded in
@@ -84,6 +77,28 @@ export async function GET(req) {
   if (daily.error)  return NextResponse.json({ error: daily.error.message }, { status: 500 });
 
   const rows = items.data || [];
+
+  // Where each shown row stood in the window before, on every metric the list
+  // sorts by — ranked over that whole window, so a jump from 3,000th to 3rd
+  // reads as ▲2997 without the list being unfolded anywhere near that deep.
+  // Matched on the normalised keys, since a display label can differ between
+  // windows. A row that wasn't heard then gets nothing.
+  let prevReady = false;
+  if (wantPrev && rows.length) {
+    const prev = await rpcAll('prev_ranks', {
+      p_user: userId, p_from: prevFrom, p_to: prevTo, p_mode: mode, p_tz: TZ,
+      p_source: src, p_estimate: estimate,
+      p_artists: [...new Set(rows.map((r) => r.artist_key))],
+    }, MAX_LIMIT);
+    if (!prev.error) {
+      const k = (r) => `${r.artist_key}\u0000${r.track_key ?? ''}`;
+      const at = new Map((prev.data ?? []).map((p) => [k(p), {
+        plays: p.r_plays, days: p.r_days, weeks: p.r_weeks, minutes: p.r_minutes,
+      }]));
+      for (const r of rows) r.prev = at.get(k(r)) ?? null;
+      prevReady = true;
+    }
+  }
   const days = daily.data || [];
   const genres = await genresFor(rows.map((r) => r.artist));
 
@@ -94,9 +109,9 @@ export async function GET(req) {
     // first paint.
     genres,
     daily: days,
-    // Ranking depends on the metric the client is sorting by, so send the raw
-    // previous window and let it rank both the same way.
-    prev: prev.error ? null : prev.data,
+    // Whether each row's `prev` (its rank last window, per metric) was worked
+    // out — false for "전체", which has no before.
+    prevReady,
     // Every item with any play before this window started, regardless of how
     // long ago — what the client checks before calling something NEW rather
     // than just absent from the immediately preceding window.

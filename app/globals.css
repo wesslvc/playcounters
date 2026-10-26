@@ -524,13 +524,16 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-hero-v { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 12px; margin-top:10px; font-size:clamp(17px,3.6vw,22px); font-weight:650; letter-spacing:-.02em }
 .club-hero-v strong { font-size:clamp(17px,3.6vw,22px); font-weight:650; color:var(--champ); font-variant-numeric:tabular-nums }
 .club-hero-lead i { display:block; font-style:normal; font-size:12.5px; color:rgba(255,255,255,.6); margin-top:10px }
-.club-members { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); margin-top:26px; border-top:1px solid rgba(255,255,255,.1) }
-.club-members li + li { border-left:1px solid rgba(255,255,255,.08) }
-.club-members button { position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; padding:20px 8px 6px; color:inherit; text-align:center; transition:opacity .15s }
+.club-members { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; margin-top:26px; padding-top:20px; border-top:1px solid rgba(255,255,255,.1) }
+.club-members::-webkit-scrollbar { display:none }
+.club-members li { flex:1 0 168px; min-width:0; scroll-snap-align:start }
+.club-members button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; color:inherit; text-align:left; transition:opacity .15s }
 .club-members button:hover { opacity:.8 }
-.club-members .cover { margin-bottom:8px }
-.club-m-rk { position:absolute; top:12px; left:12px; font-size:10.5px; font-weight:700; letter-spacing:.08em; color:var(--champ); font-variant-numeric:tabular-nums }
-.club-members b { max-width:100%; font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.club-m-img { position:relative; display:block; width:100%; aspect-ratio:16/10; margin-bottom:10px; border-radius:14px;
+  background:#1c1c1f center 30%/cover no-repeat; box-shadow:inset 0 0 0 1px rgba(255,255,255,.06) }
+.club-m-img::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(180deg, rgba(0,0,0,.35), transparent 45%) }
+.club-m-rk { position:absolute; z-index:1; top:9px; left:11px; font-size:10.5px; font-weight:700; letter-spacing:.1em; color:var(--champ); font-variant-numeric:tabular-nums }
+.club-members b { max-width:100%; font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .club-m-v { font-size:12px; font-weight:600; color:rgba(255,255,255,.85); font-variant-numeric:tabular-nums }
 .club-members small { max-width:100%; font-size:11px; color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 /* 1000 Club: the same card, lit gold the way a championship leader is lit
@@ -543,6 +546,31 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-in { font-size:12px; font-weight:500; color:var(--ink-2); margin-top:4px; font-variant-numeric:tabular-nums }
 .award.club .award-rest button { grid-template-columns:16px 34px minmax(0,1fr) auto; align-items:center }
 .award.club .award-place { color:var(--champ) }
+/* a split record: the figure opens a song-by-song breakdown */
+.award-split { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; margin-top:16px }
+.award-split .award-holder { grid-template-columns:60px minmax(0,1fr); margin-top:0 }
+.rest-split { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; column-gap:8px }
+.award.club .rest-split > button:first-child { grid-template-columns:16px 34px minmax(0,1fr) }
+.rest-split > .share { grid-column:1 / -1 }
+.split-v { display:inline-flex; align-items:baseline; gap:2px; padding:4px 0 4px 6px; text-decoration:underline dotted; text-decoration-color:var(--line); text-underline-offset:5px }
+.split-v:hover { text-decoration-color:currentColor }
+.award.club .award-rest .split-v { display:inline-flex; width:auto; gap:1px; padding:9px 0 9px 6px }
+.split-caret { align-self:center; width:6px; height:6px; margin-left:6px; border-right:1.5px solid var(--ink-3); border-bottom:1.5px solid var(--ink-3); transform:translateY(-2px) rotate(45deg); transition:transform .15s }
+.split-v[aria-expanded="true"] .split-caret { transform:translateY(1px) rotate(-135deg) }
+.share { margin:10px 0 12px; padding:14px; border-radius:16px; background:var(--sunk) }
+.share-bar { display:flex; height:10px; border-radius:5px; overflow:hidden; gap:2px }
+.share-bar i, .share-dot { background:var(--ink) }
+.share [data-i="1"] { --o:.72 } .share [data-i="2"] { --o:.52 } .share [data-i="3"] { --o:.36 } .share [data-i="4"] { --o:.24 } .share [data-i="rest"] { --o:.1 }
+.share-bar i, .share-dot { opacity:var(--o, 1) }
+.share-list { margin-top:12px }
+.share-list li { display:grid; grid-template-columns:8px minmax(0,1fr) minmax(20px,56px) 44px 38px; gap:8px; align-items:center; padding:6px 0; font-size:13px }
+.share-dot { width:8px; height:8px; border-radius:50% }
+.share-nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.share-meter { height:4px; border-radius:2px; background:var(--sunk-2); overflow:hidden }
+.share-meter i { display:block; height:100%; background:color-mix(in oklab, var(--gold) 70%, var(--ink-2)) }
+.share-list b { text-align:right; font-weight:700; font-variant-numeric:tabular-nums }
+.share-list small { text-align:right; color:var(--ink-3); font-size:11.5px; font-variant-numeric:tabular-nums }
+.share-more { margin-top:8px; font-size:12.5px }
 .award-rest-nm small { display:block; font-size:11.5px; font-weight:500; color:var(--ink-3); margin-top:1px }
 
 /* ---------- championship ---------- */
@@ -746,8 +774,8 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .club-hero { padding:22px 18px; border-radius:26px }
   .club-hero-lead { grid-template-columns:84px minmax(0,1fr); gap:16px }
   .club-hero-lead > .cover { width:84px !important; height:84px !important }
-  .club-members { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; margin-right:-18px; padding-right:18px }
-  .club-members li { flex:0 0 124px; scroll-snap-align:start }
+  .club-members { margin-right:-18px; padding-right:18px }
+  .club-members li { flex:0 0 150px }
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:16px }
   .stats .stat:nth-child(3) { padding-left:0; border-left:none }
   .stats.compact { grid-template-columns:repeat(2,minmax(0,1fr)) }

@@ -715,6 +715,40 @@ as $$
   order by kind, period;
 $$;
 
+-- ---------- what an artist's first thousand plays were ----------
+-- Song by song, the share each took of the plays up to the one that crossed
+-- p_mark — the breakdown behind the 1000 Club's 한 곡 집중도. One artist's
+-- plays only, read when asked for rather than inside play_records.
+create or replace function club_songs(
+  p_user uuid,
+  p_artist_key text,
+  p_source text default 'all',
+  p_estimate boolean default false,
+  p_mark int default 1000
+)
+returns table (track text, plays numeric, pct numeric)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with p as (
+    select p.track, p.track_key as tk, p.played_at,
+           case when p_estimate then p.est_plays else 1 end as w
+    from plays p
+    where p.user_id = p_user and p.artist_key = p_artist_key
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+  ),
+  c as (select *, sum(w) over (order by played_at rows unbounded preceding) as c from p),
+  x as (select played_at as at, c from c where c - w < p_mark and c >= p_mark limit 1)
+  select mode() within group (order by c.track), round(sum(c.w)), round(100.0 * sum(c.w) / max(x.c), 1)
+  from c, x
+  where c.played_at <= x.at
+  group by c.tk
+  order by sum(c.w) desc;
+$$;
+
 -- ---------- season races, all months in one pass ----------
 -- The championship used to call top_items once per month — an all-time
 -- standings is easily a hundred round trips, each shipping up to 200 rows

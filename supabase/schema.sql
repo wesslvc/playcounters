@@ -1613,7 +1613,8 @@ as $$
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,
              'value', t.v, 'from', t.d_from, 'to', t.d_to)
-    from atop3 t join alab l using (ak) where t.r <= 3
+    -- 0–1000 lists every artist that got there, not just the top three
+    from atop3 t join alab l using (ak) where t.r <= 3 or t.cat = 'artist_fastest_1000'
   ),
   -- the listener's own records, one holder each
   me as (

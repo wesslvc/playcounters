@@ -45,9 +45,9 @@ function Award({ def, list, covers, onSelect, club }) {
   const mode = (h) => (h.track ? 'tracks' : 'artists');
   return (
     <article className={`award${club ? ' club' : ''}`} data-key={def.key}>
-      {club && <span className="club-mark" aria-hidden="true">1000</span>}
       <header>
         <h3 title={def.note}>{def.title}{def.tag && <span className="award-tag">{def.tag}</span>}</h3>
+        {club && <span className="club-mark">1000 CLUB</span>}
       </header>
       {first ? (
         <>

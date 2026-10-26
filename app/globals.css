@@ -500,8 +500,10 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
    in its team color, with every artist pictured */
 .award.club { position:relative; overflow:hidden; border-color:color-mix(in oklab, var(--gold) 45%, var(--hair));
   background:radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--gold) 24%, transparent), transparent 62%), var(--surface) }
-.award.club > * { position:relative }
-.club-mark { position:absolute !important; right:16px; top:8px; font-size:64px; font-weight:800; letter-spacing:-.06em; line-height:1; color:var(--gold); opacity:.22; pointer-events:none }
+.award.club header { display:flex; justify-content:space-between; align-items:center; gap:10px }
+.award.club header h3 { min-width:0 }
+.club-mark { flex:none; padding:3px 8px; border-radius:999px; font-size:10.5px; font-weight:800; letter-spacing:.1em; color:var(--gold);
+  border:1px solid color-mix(in oklab, var(--gold) 55%, transparent); background:color-mix(in oklab, var(--gold) 10%, transparent) }
 .award.club .award-tag, .award.club .award-v { color:var(--gold) }
 .award.club .award-holder .cover { box-shadow:0 0 0 2px var(--gold) }
 .club-in { font-size:12px; font-weight:650; color:var(--gold); margin-top:4px }

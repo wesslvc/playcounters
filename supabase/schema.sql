@@ -1591,6 +1591,30 @@ as $$
     ) x
     union all
     select 'artist_tracks', ak, tracks, first_day, null, true from alab
+    union all
+    -- the 1000 Club's other records, over each member's first thousand plays
+    -- (x: the play that crossed 1000)
+    select 'club_days', x.ak, count(distinct p.day)::numeric, min(p.day), (x.at at time zone p_tz)::date, false
+    from (select ak, played_at as at from apc where before < 1000 and c >= 1000) x
+    join p on p.ak = x.ak and p.played_at <= x.at
+    group by x.ak, x.at
+    union all
+    select 'club_tracks', x.ak, count(distinct p.tk)::numeric, min(p.day), (x.at at time zone p_tz)::date, true
+    from (select ak, played_at as at from apc where before < 1000 and c >= 1000) x
+    join p on p.ak = x.ak and p.played_at <= x.at
+    group by x.ak, x.at
+    union all
+    select 'club_top_share', s.ak, round(100.0 * max(s.n) / max(s.c), 1), min(s.d_from), max(s.d_to), true
+    from (select x.ak, x.c, p.tk, sum(p.w) as n, min(p.day) as d_from, (x.at at time zone p_tz)::date as d_to
+          from (select ak, played_at as at, c from apc where before < 1000 and c >= 1000) x
+          join p on p.ak = x.ak and p.played_at <= x.at
+          group by x.ak, x.c, x.at, p.tk) s
+    group by s.ak
+    union all
+    select 'club_since', x.ak, round(a.plays - x.c), (x.at at time zone p_tz)::date,
+           (select max(day) from ad where ad.ak = x.ak), true
+    from (select ak, played_at as at, c from apc where before < 1000 and c >= 1000) x
+    join alab a using (ak)
   ),
   top3 as (
     select cat, ak, tk, v, d_from, d_to,
@@ -1614,12 +1638,12 @@ as $$
              'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,
              'value', t.v, 'from', t.d_from, 'to', t.d_to, 'plays', round(l.plays),
              -- the 1000 Club's entry: the minute the thousandth play landed
-             'reached_at', case when t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000') then
+             'reached_at', case when (t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000') or t.cat like 'club\_%') then
                (select to_char(a.played_at at time zone p_tz, 'YYYY-MM-DD"T"HH24:MI')
                 from apc a where a.ak = t.ak and a.before < 1000 and a.c >= 1000 limit 1) end)
     -- the 1000 Club lists every artist that got there, not just the top three
     from atop3 t join alab l using (ak)
-    where t.r <= 3 or t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000')
+    where t.r <= 3 or (t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000') or t.cat like 'club\_%')
   ),
   -- the listener's own records, one holder each
   me as (

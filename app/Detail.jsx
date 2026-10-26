@@ -48,23 +48,77 @@ const periodLabel = (scope, d) => {
 };
 
 /**
- * Rank on a log scale, best at the top: the line has to read 3,000th and 3rd
- * on one chart without the climb flattening into the floor.
+ * Rank over time, best at the top. Log scale, so 3,000th and 3rd read on one
+ * chart without the climb flattening into the floor; ticks at 1, 10, 100…
+ * name the scale, a band marks the top ten, periods sit where they fall in
+ * time, and the best and latest points carry their rank. Hover (or tap) a period for its figures.
  */
-function RankLine({ list }) {
+function RankChart({ list, scope }) {
+  const [hover, setHover] = useState(null);
   if (list.length < 2) return null;
-  const W = 320, H = 96, pad = 8;
-  const lo = Math.log(Math.max(...list.map((r) => r.rank)) + 1);
-  const y = (rank) => pad + (lo ? (Math.log(rank) / lo) : 0) * (H - pad * 2);
-  const x = (i) => pad + (i / (list.length - 1)) * (W - pad * 2);
+  const W = 340, H = 170, L = 34, R = 30, T = 14, B = 24;
+  const worst = Math.max(...list.map((r) => r.rank));
+  const top = 10 ** Math.max(1, Math.ceil(Math.log10(worst + 1)));
+  const y = (rank) => T + (Math.log(rank) / Math.log(top)) * (H - T - B);
+  // placed by date, so a gap of months reads as a gap
+  const mon = (d) => { const [yy, mm] = String(d).split('-'); return Number(yy) * 12 + Number(mm) - 1; };
+  const m0 = mon(list[0].period);
+  const span = Math.max(1, mon(list[list.length - 1].period) - m0);
+  const xm = (m) => L + ((m - m0) / span) * (W - L - R);
+  const x = (i) => xm(mon(list[i].period));
+  const ticks = [1, 10, 100, 1000, 10000].filter((t) => t <= top);
   const pts = list.map((r, i) => `${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`).join(' ');
-  const best = list.reduce((a, b) => (b.rank < a.rank ? b : a));
-  const bi = list.indexOf(best);
+  const bi = list.reduce((m, r, i) => (r.rank < list[m].rank ? i : m), 0);
+  const li = list.length - 1;
+  const iso = (m) => `${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}-01`;
+  const labels = scope === 'year'
+    ? list.map((r) => mon(r.period))
+    : [m0, m0 + Math.round(span / 2), m0 + span];
+  // each period's hover target reaches halfway to its neighbours
+  const edge = (i) => (i <= 0 ? L - 6 : i > li ? W - R + 6 : (x(i - 1) + x(i)) / 2);
+  const h = hover != null ? list[hover] : null;
+
   return (
-    <svg className="rankline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="순위 추이">
-      <polyline points={pts} fill="none" vectorEffect="non-scaling-stroke" />
-      <circle cx={x(bi)} cy={y(best.rank)} r="3.5" />
-    </svg>
+    <div className="rankchart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="순위 추이" onMouseLeave={() => setHover(null)}>
+        <rect className="rc-band" x={L} y={y(1) - 4} width={W - L - R} height={y(10) - y(1) + 4} rx="4" />
+        {ticks.map((t) => (
+          <g key={t}>
+            <line className="rc-grid" x1={L} x2={W - R} y1={y(t)} y2={y(t)} />
+            <text className="rc-tick" x={L - 8} y={y(t) + 3.5} textAnchor="end">{t.toLocaleString()}</text>
+          </g>
+        ))}
+        {labels.map((m, k) => (
+          <text key={m} className="rc-tick" x={xm(m)} y={H - 6}
+                textAnchor={k === 0 ? 'start' : k === labels.length - 1 ? 'end' : 'middle'}>
+            {periodLabel(scope, iso(m)).replace(' 말', '')}
+          </text>
+        ))}
+        {h && <line className="rc-cross" x1={x(hover)} x2={x(hover)} y1={T - 6} y2={H - B} />}
+        <polyline className="rc-line" points={pts} />
+        {list.map((r, i) => (
+          <circle key={i} className={i === bi ? 'rc-dot best' : 'rc-dot'} cx={x(i)} cy={y(r.rank)}
+                  r={i === bi || i === hover ? 4.5 : list.length > 24 ? 0 : 2.5} />
+        ))}
+        <text className="rc-lbl best" x={x(bi)} y={y(list[bi].rank) - 9}
+              textAnchor={bi === 0 ? 'start' : bi === li ? 'end' : 'middle'}>
+          최고 {list[bi].rank.toLocaleString()}위
+        </text>
+        {li !== bi && (
+          <text className="rc-lbl" x={x(li) + 7} y={y(list[li].rank) + 3.5}>{list[li].rank.toLocaleString()}</text>
+        )}
+        {list.map((_, i) => (
+          <rect key={i} className="rc-hit" x={edge(i)} y={0} width={edge(i + 1) - edge(i)} height={H}
+                onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
+        ))}
+      </svg>
+      {h && (
+        <div className="rc-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
+          <b>{periodLabel(scope, h.period)}</b>
+          <span>{h.rank.toLocaleString()}위 · {h.plays.toLocaleString()}회</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -108,7 +162,7 @@ function RankHistory({ target, source, estimate }) {
       {data?.error && <p className="err">{data.error}</p>}
       {data && !data.error && (
         <>
-          <RankLine list={list} />
+          <RankChart list={list} scope={scope} />
           <ol className="results rankhist">
             {shown.map((r) => (
               <li key={r.period}>

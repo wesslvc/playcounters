@@ -506,39 +506,39 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .award-rest button:hover .award-rest-nm { text-decoration:underline; text-underline-offset:3px }
 .award-none { font-size:13px; color:var(--ink-3); margin:16px 0 6px }
 .award-group .sec { margin-top:44px }
-/* the 1000 Club banner: a Replay hero lit gold */
-.club-hero { --gold-hi:#D9B66A; position:relative; isolation:isolate; overflow:hidden; margin-bottom:12px; padding:26px; border-radius:30px;
-  background:#121214; color:#fff; border:1px solid color-mix(in oklab, var(--gold-hi) 45%, transparent) }
-.club-hero::after { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(170deg, rgba(0,0,0,.15), rgba(0,0,0,.62)) }
-.club-hero-k { font-size:13px; font-weight:700; letter-spacing:.04em; color:var(--gold-hi) }
-.club-hero-lead { display:grid; grid-template-columns:112px minmax(0,1fr); gap:22px; align-items:center; width:100%; margin-top:18px; color:inherit; text-align:left }
-.club-hero-lead .cover { box-shadow:0 0 0 3px var(--gold-hi) }
-.club-hero-lead b { display:block; font-size:clamp(26px,6vw,40px); font-weight:800; letter-spacing:-.045em; line-height:1.1; overflow-wrap:anywhere }
-.club-hero-v { display:block; margin-top:8px; font-size:17px; font-weight:700; color:var(--gold-hi) }
-.club-hero-v strong { font-size:clamp(42px,9vw,60px); font-weight:800; letter-spacing:-.055em; line-height:1; margin-right:4px }
-.club-hero-lead i { display:block; font-style:normal; font-size:13px; opacity:.75; margin-top:10px }
-.club-members { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:10px; margin-top:24px; padding-top:18px; border-top:1px solid rgba(255,255,255,.2) }
-.club-members button { position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; padding:14px 8px 12px; border-radius:18px; background:rgba(255,255,255,.08); color:inherit; text-align:center }
-.club-members button:hover { background:rgba(255,255,255,.15) }
-.club-members .cover { margin-bottom:6px }
-.club-m-rk { position:absolute; top:8px; left:11px; font-size:13px; font-weight:800; color:var(--gold-hi) }
+/* the 1000 Club banner: a Replay hero, dark and quiet, champagne only in
+   the small print */
+.club-hero { --champ:#CDB88E; position:relative; isolation:isolate; overflow:hidden; margin-bottom:12px; padding:28px 28px 22px; border-radius:30px;
+  background:#0D0D0F; color:#fff; border:1px solid rgba(255,255,255,.07) }
+.club-hero .replay-bg { opacity:.5 }
+.club-hero::after { content:''; position:absolute; inset:0; z-index:-1;
+  background:radial-gradient(140% 120% at 0% 0%, rgba(0,0,0,.05), rgba(0,0,0,.72) 70%) }
+.club-hero-k { font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--champ) }
+.club-hero-lead { display:grid; grid-template-columns:112px minmax(0,1fr); gap:24px; align-items:center; width:100%; margin-top:20px; color:inherit; text-align:left }
+.club-hero-lead .cover { box-shadow:0 12px 32px rgba(0,0,0,.45) }
+.club-hero-lead b { display:block; font-size:clamp(28px,6vw,42px); font-weight:800; letter-spacing:-.045em; line-height:1.08; overflow-wrap:anywhere }
+.club-hero-v { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 12px; margin-top:10px; font-size:clamp(17px,3.6vw,22px); font-weight:650; letter-spacing:-.02em }
+.club-hero-v strong { font-size:clamp(17px,3.6vw,22px); font-weight:650; color:var(--champ); font-variant-numeric:tabular-nums }
+.club-hero-lead i { display:block; font-style:normal; font-size:12.5px; color:rgba(255,255,255,.6); margin-top:10px }
+.club-members { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); margin-top:26px; border-top:1px solid rgba(255,255,255,.1) }
+.club-members li + li { border-left:1px solid rgba(255,255,255,.08) }
+.club-members button { position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; padding:20px 8px 6px; color:inherit; text-align:center; transition:opacity .15s }
+.club-members button:hover { opacity:.8 }
+.club-members .cover { margin-bottom:8px }
+.club-m-rk { position:absolute; top:12px; left:12px; font-size:10.5px; font-weight:700; letter-spacing:.08em; color:var(--champ); font-variant-numeric:tabular-nums }
 .club-members b { max-width:100%; font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.club-m-v { font-size:13px; font-weight:700; color:var(--gold-hi) }
-.club-members small { font-size:11px; opacity:.65 }
+.club-m-v { font-size:12px; font-weight:600; color:rgba(255,255,255,.85); font-variant-numeric:tabular-nums }
+.club-members small { max-width:100%; font-size:11px; color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 /* 1000 Club: the same card, lit gold the way a championship leader is lit
    in its team color, with every artist pictured */
-.award.club { position:relative; overflow:hidden; border-color:color-mix(in oklab, var(--gold) 45%, var(--hair));
-  background:radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--gold) 24%, transparent), transparent 62%), var(--surface) }
-.award.club header { display:flex; justify-content:space-between; align-items:center; gap:10px }
+.award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
+  background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
+.award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }
 .award.club header h3 { min-width:0 }
-.club-mark { flex:none; padding:3px 8px; border-radius:999px; font-size:10.5px; font-weight:800; letter-spacing:.1em; color:var(--gold);
-  border:1px solid color-mix(in oklab, var(--gold) 55%, transparent); background:color-mix(in oklab, var(--gold) 10%, transparent) }
-.award.club .award-tag, .award.club .award-v { color:var(--gold) }
-.award.club .award-holder .cover { box-shadow:0 0 0 2px var(--gold) }
-.club-in { font-size:12px; font-weight:650; color:var(--gold); margin-top:4px }
-.award.club .award-rest li { border-top-color:color-mix(in oklab, var(--gold) 25%, var(--hair)) }
+.club-mark { flex:none; font-size:9.5px; font-weight:700; letter-spacing:.2em; color:var(--champ) }
+.club-in { font-size:12px; font-weight:500; color:var(--ink-2); margin-top:4px; font-variant-numeric:tabular-nums }
 .award.club .award-rest button { grid-template-columns:16px 34px minmax(0,1fr) auto; align-items:center }
-.award.club .award-place { color:var(--gold) }
+.award.club .award-place { color:var(--champ) }
 .award-rest-nm small { display:block; font-size:11.5px; font-weight:500; color:var(--ink-3); margin-top:1px }
 
 /* ---------- championship ---------- */
@@ -743,7 +743,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .club-hero-lead { grid-template-columns:84px minmax(0,1fr); gap:16px }
   .club-hero-lead > .cover { width:84px !important; height:84px !important }
   .club-members { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; margin-right:-18px; padding-right:18px }
-  .club-members li { flex:0 0 116px; scroll-snap-align:start }
+  .club-members li { flex:0 0 124px; scroll-snap-align:start }
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:16px }
   .stats .stat:nth-child(3) { padding-left:0; border-left:none }
   .stats.compact { grid-template-columns:repeat(2,minmax(0,1fr)) }

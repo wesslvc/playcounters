@@ -3,7 +3,7 @@ import { db, currentUserId } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-/** An artist's first thousand plays, song by song (club_songs). */
+/** An artist's plays, song by song (club_songs). */
 export async function GET(req) {
   const userId = currentUserId();
   if (!userId) return NextResponse.json({ error: 'not signed in' }, { status: 401 });

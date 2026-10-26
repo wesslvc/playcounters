@@ -715,10 +715,11 @@ as $$
   order by kind, period;
 $$;
 
--- ---------- what an artist's first thousand plays were ----------
--- Song by song, the share each took of the plays up to the one that crossed
--- p_mark — the breakdown behind the 1000 Club's 한 곡 집중도. One artist's
--- plays only, read when asked for rather than inside play_records.
+-- ---------- what an artist's plays were, song by song ----------
+-- Each song's share of everything heard by that artist — the breakdown
+-- behind the 1000 Club's 최애곡 비중. One artist's plays only, read when
+-- asked for rather than inside play_records. p_mark is unused, kept so
+-- existing callers still resolve.
 create or replace function club_songs(
   p_user uuid,
   p_artist_key text,
@@ -731,7 +732,7 @@ language sql stable
 set search_path = public, pg_temp
 as $$
   with p as (
-    select p.track, p.track_key as tk, p.played_at,
+    select p.track, p.track_key as tk,
            case when p_estimate then p.est_plays else 1 end as w
     from plays p
     where p.user_id = p_user and p.artist_key = p_artist_key
@@ -739,14 +740,12 @@ as $$
       and (p_source = 'all'
            or (p_source = 'youtube' and p.source =  'youtube')
            or (p_source = 'spotify' and p.source <> 'youtube'))
-  ),
-  c as (select *, sum(w) over (order by played_at rows unbounded preceding) as c from p),
-  x as (select played_at as at, c from c where c - w < p_mark and c >= p_mark limit 1)
-  select mode() within group (order by c.track), round(sum(c.w)), round(100.0 * sum(c.w) / max(x.c), 1)
-  from c, x
-  where c.played_at <= x.at
-  group by c.tk
-  order by sum(c.w) desc;
+  )
+  select mode() within group (order by p.track), round(sum(p.w)),
+         round(100.0 * sum(p.w) / (select sum(w) from p), 1)
+  from p
+  group by p.tk
+  order by sum(p.w) desc;
 $$;
 
 -- ---------- season races, all months in one pass ----------
@@ -1751,11 +1750,14 @@ as $$
     join p on p.ak = x.ak and p.played_at <= x.at
     group by x.ak, x.at
     union all
-    select 'club_top_share', s.ak, round(100.0 * max(s.n) / max(s.c), 1), min(s.d_from), max(s.d_to), true
-    from (select x.ak, x.c, p.tk, sum(p.w) as n, min(p.day) as d_from, (x.at at time zone p_tz)::date as d_to
-          from (select ak, played_at as at, c from apc where before < 1000 and c >= 1000) x
-          join p on p.ak = x.ak and p.played_at <= x.at
-          group by x.ak, x.c, x.at, p.tk) s
+    -- the top song's share of everything heard by that artist, not just the
+    -- first thousand
+    select 'club_top_share', s.ak, round(100.0 * max(s.n) / max(s.total), 1), min(s.d_from), max(s.d_to), true
+    from (select p.ak, p.tk, sum(p.w) as n, min(p.day) as d_from, max(p.day) as d_to, max(a.plays) as total
+          from (select distinct ak from apc where before < 1000 and c >= 1000) x
+          join p on p.ak = x.ak
+          join alab a on a.ak = x.ak
+          group by p.ak, p.tk) s
     group by s.ak
     union all
     select 'club_since', x.ak, round(a.plays - x.c), (x.at at time zone p_tz)::date,

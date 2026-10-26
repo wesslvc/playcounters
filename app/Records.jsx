@@ -36,7 +36,7 @@ const target = (h) => ({ artist: h.artist, track: h.track ?? null, artist_key: h
 const SHARE_SHOWN = 8;
 
 /**
- * What an artist's first thousand plays were, song by song: one bar split by
+ * What an artist's plays were, song by song: one bar split by
  * the biggest songs, then each song with its share. Fetched when opened.
  */
 function SongShare({ artistKey, source, estimate }) {

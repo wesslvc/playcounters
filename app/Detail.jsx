@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { awardsFor, gpRecords, formatValue } from '@/lib/awards';
 import { smoothPath } from '@/lib/curve';
 import { artistLine } from './useCredits';
@@ -59,8 +59,19 @@ const periodLabel = (scope, d) => {
 function RankChart({ list, scope }) {
   const [hover, setHover] = useState(null);
   const gid = useId();
+  // Drawn at the width it's shown at, so the axis text stays its real size
+  // rather than scaling up with a wide sheet.
+  const box = useRef(null);
+  const [W, setW] = useState(340);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(240, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   if (list.length < 2) return null;
-  const W = 340, H = 160, L = 34, R = 10, T = 10, B = 22;
+  const H = 150, L = 30, R = 8, T = 8, B = 20;
   const base = H - B;
   const worst = Math.max(...list.map((r) => r.rank));
   const top = 10 ** Math.max(1, Math.ceil(Math.log10(worst + 1)));
@@ -92,8 +103,8 @@ function RankChart({ list, scope }) {
   const f = (v) => v.toFixed(1);
 
   return (
-    <div className="rankchart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="순위 추이" onMouseLeave={() => setHover(null)}>
+    <div className="rankchart" ref={box}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="순위 추이" onMouseLeave={() => setHover(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" className="rc-fill-a" />

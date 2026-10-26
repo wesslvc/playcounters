@@ -24,14 +24,28 @@ function when(def, h) {
   return `${dayLabel(h.from)} – ${dayLabel(h.to)}`;
 }
 
+/** "2026년 8월 25일 21:34" — when an artist entered the 1000 Club. */
+const reachedLabel = (at) => (at ? `${dayLabel(at)} ${String(at).slice(11, 16)}` : null);
+/** "2026.1.3 20:21" — the same, short enough for a list row. */
+const reachedShort = (at) => {
+  if (!at) return null;
+  const [y, m, d] = String(at).slice(0, 10).split('-');
+  return `${y}.${Number(m)}.${Number(d)} ${String(at).slice(11, 16)}`;
+};
+
 const target = (h) => ({ artist: h.artist, track: h.track ?? null, artist_key: h.artist_key, track_key: h.track_key ?? null });
 
-/** One category: the holder up front, the next two under it. */
-function Award({ def, list, covers, onSelect }) {
+/**
+ * One category: the holder up front, the next two under it. A 1000 Club card
+ * lists everyone who got there, each with their picture and the minute they
+ * entered.
+ */
+function Award({ def, list, covers, onSelect, club }) {
   const [first, ...rest] = list ?? [];
   const mode = (h) => (h.track ? 'tracks' : 'artists');
   return (
-    <article className="award" data-key={def.key}>
+    <article className={`award${club ? ' club' : ''}`} data-key={def.key}>
+      {club && <span className="club-mark" aria-hidden="true">1000</span>}
       <header>
         <h3 title={def.note}>{def.title}{def.tag && <span className="award-tag">{def.tag}</span>}</h3>
       </header>
@@ -48,13 +62,18 @@ function Award({ def, list, covers, onSelect }) {
             </span>
           </button>
           <p className="award-when">{when(def, first)}</p>
+          {club && first.reached_at && <p className="club-in">1000 Club 입성 · {reachedLabel(first.reached_at)}</p>}
           {rest.length > 0 && (
             <ol className="award-rest">
               {rest.map((h, i) => (
                 <li key={i}>
                   <button onClick={() => onSelect(target(h))}>
                     <span className="award-place">{i + 2}</span>
-                    <span className="award-rest-nm">{h.track ?? h.artist}{h.track && <em> · {artistLine(h)}</em>}</span>
+                    {club && <Cover src={coverOf(covers.artists, 'artists', h)} size={34} round />}
+                    <span className="award-rest-nm">
+                      {h.track ?? h.artist}{h.track && <em> · {artistLine(h)}</em>}
+                      {club && h.reached_at && <small>입성 {reachedShort(h.reached_at)}</small>}
+                    </span>
                     <span className="award-rest-v">{formatValue(def, h.value).v}{formatValue(def, h.value).unit}</span>
                   </button>
                 </li>
@@ -127,7 +146,8 @@ export default function Records({ source, estimate, version, onSelect }) {
           <Section id={`rec-${g.key}`} title={g.title} />
           <div className="awards">
             {g.items.map((def) => (
-              <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
+              <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect}
+                     club={g.key === 'club'} />
             ))}
           </div>
         </div>

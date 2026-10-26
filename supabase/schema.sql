@@ -1612,7 +1612,11 @@ as $$
     union all
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,
-             'value', t.v, 'from', t.d_from, 'to', t.d_to, 'plays', round(l.plays))
+             'value', t.v, 'from', t.d_from, 'to', t.d_to, 'plays', round(l.plays),
+             -- the 1000 Club's entry: the minute the thousandth play landed
+             'reached_at', case when t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000') then
+               (select to_char(a.played_at at time zone p_tz, 'YYYY-MM-DD"T"HH24:MI')
+                from apc a where a.ak = t.ak and a.before < 1000 and a.c >= 1000 limit 1) end)
     -- the 1000 Club lists every artist that got there, not just the top three
     from atop3 t join alab l using (ak)
     where t.r <= 3 or t.cat in ('artist_fastest_1000', 'artist_100_1000', 'artist_500_1000')

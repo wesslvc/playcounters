@@ -170,7 +170,7 @@ function ClubBanner({ def, list, covers, onSelect }) {
   return (
     <div className="club-hero">
       <span className="replay-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
-      <p className="club-hero-k">최근 입성</p>
+      <p className="club-hero-k">최근 1000회 달성</p>
       <button className="club-hero-lead" onClick={() => onSelect(target(latest))}>
         <Cover src={img} size={112} round />
         <span>
@@ -179,7 +179,7 @@ function ClubBanner({ def, list, covers, onSelect }) {
             {dayLabel(latest.reached_at)}<strong>{String(latest.reached_at).slice(11, 16)}</strong>
           </span>
           <i>
-            {members.length}번째 · {fast(latest).v}{fast(latest).unit} 만에
+            {members.length}번째 달성 · {fast(latest).v}{fast(latest).unit} 만에
             {latest.plays != null && ` · 총 ${Number(latest.plays).toLocaleString()}회`}
           </i>
         </span>

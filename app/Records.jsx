@@ -70,6 +70,40 @@ function Award({ def, list, covers, onSelect }) {
 }
 
 /**
+ * The artists who have passed a thousand plays — every one of them, not just
+ * a podium — ranked by how fast they got there.
+ */
+function Club({ def, list, covers, onSelect }) {
+  if (!list?.length) return null;
+  return (
+    <div className="club">
+      <Section id="rec-club" title="1000 Club" sub={`1000번을 넘긴 가수 ${list.length}팀 · ${def.note}`} />
+      <ol className="club-list">
+        {list.map((h, i) => {
+          const f = formatValue(def, h.value);
+          return (
+            <li key={h.artist_key}>
+              <button className="club-row" onClick={() => onSelect(target(h))}>
+                <span className="club-rank">{i + 1}</span>
+                <Cover src={coverOf(covers.artists, 'artists', h)} size={i === 0 ? 76 : 56} round />
+                <span className="club-nm">
+                  <b>{h.artist}</b>
+                  <span>{dayLabel(h.from)} → {dayLabel(h.to)}</span>
+                </span>
+                <span className="club-v">
+                  {f.v}<small>{f.unit}</small>
+                  {h.plays != null && <em>총 {Number(h.plays).toLocaleString()}회</em>}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
  * The record book: every category's holder and the two behind them —
  * dominance (who owned the days, weeks and months), velocity (how fast a
  * song got to fifty or a hundred), endurance, the Grand Prix, and artists.
@@ -102,6 +136,7 @@ export default function Records({ source, estimate, version, onSelect }) {
   if (error) return <p className="err">{error}</p>;
   if (!records) return <div className="skeleton tall"><i /><i /><i /><i /></div>;
   const me = records.me ?? {};
+  const club = AWARD_GROUPS.flatMap((g) => g.items).find((def) => def.club);
 
   return (
     <section className="view records">
@@ -120,18 +155,21 @@ export default function Records({ source, estimate, version, onSelect }) {
 
       <nav className="jump" aria-label="부문">
         {AWARD_GROUPS.map((g) => <a key={g.key} href={`#rec-${g.key}`}>{g.title}</a>)}
+        {club && records[club.key]?.length > 0 && <a href="#rec-club">1000 Club</a>}
       </nav>
 
       {AWARD_GROUPS.map((g) => (
         <div key={g.key} className="award-group">
           <Section id={`rec-${g.key}`} title={g.title} />
           <div className="awards">
-            {g.items.map((def) => (
+            {g.items.filter((def) => !def.club).map((def) => (
               <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
             ))}
           </div>
         </div>
       ))}
+
+      {club && <Club def={club} list={records[club.key]} covers={covers} onSelect={onSelect} />}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
-import { findArtwork } from '@/lib/artwork';
+import { findArtwork, isPlaceholder } from '@/lib/artwork';
 import { coverKey, coverTargetFor } from '@/lib/keys';
 
 export const dynamic = 'force-dynamic';
@@ -81,7 +81,7 @@ export async function POST(req) {
 
   for (const w of wanted) {
     const key = coverKey(w);
-    if (known.has(key)) covers[key] = known.get(key);
+    if (known.has(key) && !isPlaceholder(known.get(key))) covers[key] = known.get(key);
     else misses.push(w);
   }
 

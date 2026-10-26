@@ -524,18 +524,18 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-hero-v { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 12px; margin-top:10px; font-size:clamp(17px,3.6vw,22px); font-weight:650; letter-spacing:-.02em }
 .club-hero-v strong { font-size:clamp(17px,3.6vw,22px); font-weight:650; color:var(--champ); font-variant-numeric:tabular-nums }
 .club-hero-lead i { display:block; font-style:normal; font-size:12.5px; color:rgba(255,255,255,.6); margin-top:10px }
-.club-members { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; margin-top:26px; padding-top:20px; border-top:1px solid rgba(255,255,255,.1) }
-.club-members::-webkit-scrollbar { display:none }
-.club-members li { flex:1 0 168px; min-width:0; scroll-snap-align:start }
-.club-members button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; color:inherit; text-align:left; transition:opacity .15s }
+.club-members { margin-top:24px; border-top:1px solid rgba(255,255,255,.1) }
+.club-members li + li { border-top:1px solid rgba(255,255,255,.07) }
+.club-members button { display:grid; grid-template-columns:120px minmax(0,1fr) auto; grid-template-rows:auto auto; column-gap:16px; align-items:center;
+  width:100%; padding:12px 0; color:inherit; text-align:left; transition:opacity .15s }
 .club-members button:hover { opacity:.8 }
-.club-m-img { position:relative; display:block; width:100%; aspect-ratio:16/10; margin-bottom:10px; border-radius:14px;
+.club-m-img { position:relative; grid-row:1 / 3; display:block; width:120px; aspect-ratio:16/10; border-radius:12px;
   background:#1c1c1f center 30%/cover no-repeat; box-shadow:inset 0 0 0 1px rgba(255,255,255,.06) }
 .club-m-img::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(180deg, rgba(0,0,0,.35), transparent 45%) }
-.club-m-rk { position:absolute; z-index:1; top:9px; left:11px; font-size:10.5px; font-weight:700; letter-spacing:.1em; color:var(--champ); font-variant-numeric:tabular-nums }
-.club-members b { max-width:100%; font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.club-m-v { font-size:12px; font-weight:600; color:rgba(255,255,255,.85); font-variant-numeric:tabular-nums }
-.club-members small { max-width:100%; font-size:11px; color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.club-m-rk { position:absolute; z-index:1; top:7px; left:9px; font-size:10.5px; font-weight:700; letter-spacing:.1em; color:var(--champ); font-variant-numeric:tabular-nums }
+.club-members b { grid-column:2; grid-row:1; align-self:end; min-width:0; font-size:16px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.club-m-v { grid-column:3; grid-row:1 / 3; font-size:13px; font-weight:600; color:rgba(255,255,255,.85); font-variant-numeric:tabular-nums; text-align:right }
+.club-members small { grid-column:2; grid-row:2; align-self:start; margin-top:2px; font-size:12px; color:rgba(255,255,255,.55); white-space:nowrap }
 /* 1000 Club: the same card, lit gold the way a championship leader is lit
    in its team color, with every artist pictured */
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
@@ -772,8 +772,10 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .club-hero { padding:22px 18px; border-radius:26px }
   .club-hero-lead { grid-template-columns:84px minmax(0,1fr); gap:16px }
   .club-hero-lead > .cover { width:84px !important; height:84px !important }
-  .club-members { margin-right:-18px; padding-right:18px }
-  .club-members li { flex:0 0 150px }
+  .club-members button { grid-template-columns:88px minmax(0,1fr) auto; column-gap:12px }
+  .club-m-img { width:88px }
+  .club-members b { font-size:14.5px }
+  .club-m-v { font-size:12px }
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:16px }
   .stats .stat:nth-child(3) { padding-left:0; border-left:none }
   .stats.compact { grid-template-columns:repeat(2,minmax(0,1fr)) }

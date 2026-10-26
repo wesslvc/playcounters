@@ -1562,6 +1562,24 @@ as $$
            (first_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
     from apc where before < 1000 and c >= 1000
     union all
+    select 'artist_fastest_100', ak,
+           round((extract(epoch from played_at - first_at) / 3600)::numeric, 2),
+           (first_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
+    from apc where before < 100 and c >= 100
+    union all
+    -- between two milestones: from the play that crossed the first to the one that crossed the second
+    select 'artist_100_1000', b.ak,
+           round((extract(epoch from b.played_at - a.played_at) / 3600)::numeric, 2),
+           (a.played_at at time zone p_tz)::date, (b.played_at at time zone p_tz)::date, false
+    from apc a join apc b using (ak)
+    where a.before < 100 and a.c >= 100 and b.before < 1000 and b.c >= 1000
+    union all
+    select 'artist_500_1000', b.ak,
+           round((extract(epoch from b.played_at - a.played_at) / 3600)::numeric, 2),
+           (a.played_at at time zone p_tz)::date, (b.played_at at time zone p_tz)::date, false
+    from apc a join apc b using (ak)
+    where a.before < 500 and a.c >= 500 and b.before < 1000 and b.c >= 1000
+    union all
     select * from (
       select distinct on (ak) 'artist_most_in_day', ak, round(n), day, day, true
       from ad order by ak, n desc, day

@@ -38,6 +38,9 @@ function DailyChart({ daily }) {
 
 const SCOPES = [['year', '연'], ['month', '월'], ['all', '통산']];
 
+/** The sheet's sections, one at a time rather than one long scroll. */
+const TABS = [['overview', '개요'], ['ranks', '순위'], ['awards', '기록'], ['career', '챔피언십']];
+
 const periodLabel = (scope, d) => {
   const [y, m] = String(d).split('-');
   if (scope === 'year') return `${y}년`;
@@ -189,6 +192,9 @@ export default function Detail({ target, source, estimate, onClose }) {
   const [error, setError] = useState(null);
   const [career, setCareer] = useState(null);
   const [records, setRecords] = useState(null);
+  const [tab, setTab] = useState('overview');
+
+  useEffect(() => { setTab('overview'); }, [target]);
 
   useEffect(() => {
     if (!target) return;
@@ -257,6 +263,11 @@ export default function Detail({ target, source, estimate, onClose }) {
         {error && <p className="err">{error}</p>}
         {!error && !data && <div className="skeleton"><i /><i /></div>}
 
+        <div className="sheet-tabs">
+          <Seg options={TABS} value={tab} onChange={setTab} label="상세 항목" />
+        </div>
+
+        <div className="sheet-panel" hidden={tab !== 'overview'}>
         {s && (
           <>
             <div className="stats compact">
@@ -269,7 +280,10 @@ export default function Detail({ target, source, estimate, onClose }) {
             <p className="note">최다 {dayLabel(best?.day)} · {est}{Math.round(Number(best?.plays ?? 0)).toLocaleString()}회</p>
           </>
         )}
+        </div>
 
+        <div className="sheet-panel" hidden={tab !== 'awards'}>
+        {awards.length === 0 && <p className="note">{records ? '보유하거나 뒤쫓는 기록이 없어요' : '불러오는 중…'}</p>}
         {awards.length > 0 && (() => {
           const held = awards.filter((x) => x.place === 1);
           const near = awards.filter((x) => x.place > 1);
@@ -296,11 +310,14 @@ export default function Detail({ target, source, estimate, onClose }) {
             </div>
           );
         })()}
+        </div>
 
-        <RankHistory target={target} source={source} estimate={estimate} />
+        {/* mounted from the start so the ranking is ready by the time it's asked for */}
+        <div className="sheet-panel" hidden={tab !== 'ranks'}>
+          <RankHistory target={target} source={source} estimate={estimate} />
+        </div>
 
-        <div className="sheet-sec">
-          <h3>챔피언십</h3>
+        <div className="sheet-panel" hidden={tab !== 'career'}>
           <Career target={target} career={career} />
         </div>
       </div>

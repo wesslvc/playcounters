@@ -366,6 +366,10 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .daychart i { flex:1 1 0; min-height:1px; background:var(--sunk); border-radius:2px 2px 0 0 }
 .daychart i[data-on=true] { background:var(--ink); opacity:.82 }
 .sheet-sec { margin-top:30px }
+.sheet-tabs { margin:0 0 18px }
+.sheet-tabs .seg { width:100% }
+.sheet-tabs .seg button { flex:1 }
+.sheet-panel > .sheet-sec:first-child { margin-top:0 }
 .sheet-sec h3 { font-size:16px; font-weight:750; letter-spacing:-.02em; margin-bottom:12px }
 .sheet-sec .stats.compact { margin-bottom:12px }
 .sheet-sec h3 span { font-size:13px; font-weight:500; color:var(--ink-3); margin-left:8px }

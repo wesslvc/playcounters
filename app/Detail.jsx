@@ -292,7 +292,7 @@ export default function Detail({ target, source, estimate, onClose }) {
             return (
               <li key={def.key}>
                 {place > 1 && <i>{place}</i>}
-                <span>{def.title}{def.tag && <em> {def.tag}</em>}</span>
+                <span>{def.full ?? def.title}{def.tag && <em> {def.tag}</em>}</span>
                 <b>{v.v}<small>{v.unit}</small></b>
               </li>
             );

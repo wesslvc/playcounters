@@ -542,8 +542,6 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }
 .award.club header h3 { min-width:0 }
-.club-mark { flex:none; font-size:9.5px; font-weight:700; letter-spacing:.2em; color:var(--champ) }
-.club-in { font-size:12px; font-weight:500; color:var(--ink-2); margin-top:4px; font-variant-numeric:tabular-nums }
 .award.club .award-rest button { grid-template-columns:16px 34px minmax(0,1fr) auto; align-items:center }
 .award.club .award-place { color:var(--champ) }
 /* a split record: the figure opens a song-by-song breakdown */

@@ -24,8 +24,6 @@ function when(def, h) {
   return `${dayLabel(h.from)} – ${dayLabel(h.to)}`;
 }
 
-/** "2026년 8월 25일 21:34" — when an artist entered the 1000 Club. */
-const reachedLabel = (at) => (at ? `${dayLabel(at)} ${String(at).slice(11, 16)}` : null);
 /** "2026.1.3 20:21" — the same, short enough for a list row. */
 const reachedShort = (at) => {
   if (!at) return null;
@@ -110,7 +108,6 @@ function Award({ def, list, covers, onSelect, club, source, estimate }) {
     <article className={`award${club ? ' club' : ''}`} data-key={def.key}>
       <header>
         <h3 title={def.note}>{def.title}{def.tag && <span className="award-tag">{def.tag}</span>}</h3>
-        {club && <span className="club-mark">1000 CLUB</span>}
       </header>
       {first ? (
         <>
@@ -130,8 +127,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate }) {
             {def.split && splitV(first, 'award-v')}
           </div>
           {share(first)}
-          <p className="award-when">{when(def, first)}</p>
-          {club && first.reached_at && <p className="club-in">1000 Club 입성 · {reachedLabel(first.reached_at)}</p>}
+          {!club && <p className="award-when">{when(def, first)}</p>}
           {rest.length > 0 && (
             <ol className="award-rest">
               {rest.map((h, i) => (
@@ -141,7 +137,6 @@ function Award({ def, list, covers, onSelect, club, source, estimate }) {
                     {club && <Cover src={coverOf(covers.artists, 'artists', h)} size={34} round />}
                     <span className="award-rest-nm">
                       {h.track ?? h.artist}{h.track && <em> · {artistLine(h)}</em>}
-                      {club && h.reached_at && <small>입성 {reachedShort(h.reached_at)}</small>}
                     </span>
                     {!def.split && (
                       <span className="award-rest-v">{formatValue(def, h.value).v}{formatValue(def, h.value).unit}</span>
@@ -175,7 +170,7 @@ function ClubBanner({ def, list, covers, onSelect }) {
   return (
     <div className="club-hero">
       <span className="replay-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
-      <p className="club-hero-k">1000 Club · 최근 입성</p>
+      <p className="club-hero-k">최근 입성</p>
       <button className="club-hero-lead" onClick={() => onSelect(target(latest))}>
         <Cover src={img} size={112} round />
         <span>
@@ -184,7 +179,7 @@ function ClubBanner({ def, list, covers, onSelect }) {
             {dayLabel(latest.reached_at)}<strong>{String(latest.reached_at).slice(11, 16)}</strong>
           </span>
           <i>
-            {members.length}번째 멤버 · {def.title} {fast(latest).v}{fast(latest).unit}
+            {members.length}번째 · {fast(latest).v}{fast(latest).unit} 만에
             {latest.plays != null && ` · 총 ${Number(latest.plays).toLocaleString()}회`}
           </i>
         </span>
@@ -199,7 +194,7 @@ function ClubBanner({ def, list, covers, onSelect }) {
               </span>
               <b>{h.artist}</b>
               <span className="club-m-v">{reachedShort(h.reached_at)}</span>
-              <small>{def.title} {fast(h).v}{fast(h).unit}</small>
+              <small>{fast(h).v}{fast(h).unit} 만에</small>
             </button>
           </li>
         ))}

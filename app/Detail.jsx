@@ -71,7 +71,8 @@ function RankChart({ list, scope }) {
     return () => ro.disconnect();
   }, []);
   if (list.length < 2) return null;
-  const H = 150, L = 30, R = 8, T = 8, B = 20;
+  // tall in proportion to its width; only the text keeps a fixed size
+  const H = Math.round(Math.min(320, Math.max(190, W * 0.5))), L = 30, R = 8, T = 10, B = 20;
   const base = H - B;
   const worst = Math.max(...list.map((r) => r.rank));
   const top = 10 ** Math.max(1, Math.ceil(Math.log10(worst + 1)));

@@ -67,7 +67,16 @@ function RankChart({ list, scope }) {
   const xm = (m) => L + ((m - m0) / span) * (W - L - R);
   const x = (i) => xm(mon(list[i].period));
   const ticks = [1, 10, 100, 1000, 10000].filter((t) => t <= top);
-  const pts = list.map((r, i) => `${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`).join(' ');
+  // A stretch with no listening stays joined but reads as one: the line goes
+  // dashed across it over a faint band, rather than gliding through.
+  const gapOf = (i) => mon(list[i].period) - mon(list[i - 1].period) > (scope === 'year' ? 12 : 1);
+  const runs = [];
+  list.forEach((r, i) => {
+    const pt = `${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`;
+    if (i === 0 || gapOf(i)) runs.push([pt]);
+    else runs[runs.length - 1].push(pt);
+  });
+  const gaps = list.map((_, i) => i).filter((i) => i > 0 && gapOf(i));
   const bi = list.reduce((m, r, i) => (r.rank < list[m].rank ? i : m), 0);
   const li = list.length - 1;
   const iso = (m) => `${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}-01`;
@@ -95,7 +104,13 @@ function RankChart({ list, scope }) {
           </text>
         ))}
         {h && <line className="rc-cross" x1={x(hover)} x2={x(hover)} y1={T - 6} y2={H - B} />}
-        <polyline className="rc-line" points={pts} />
+        {gaps.map((i) => (
+          <g key={`g${i}`}>
+            <rect className="rc-gap" x={x(i - 1)} y={T - 6} width={x(i) - x(i - 1)} height={H - B - T + 6} />
+            <line className="rc-line gap" x1={x(i - 1)} y1={y(list[i - 1].rank)} x2={x(i)} y2={y(list[i].rank)} />
+          </g>
+        ))}
+        {runs.map((r, k) => (r.length > 1 ? <polyline key={k} className="rc-line" points={r.join(' ')} /> : null))}
         {list.map((r, i) => (
           <circle key={i} className={i === bi ? 'rc-dot best' : 'rc-dot'} cx={x(i)} cy={y(r.rank)}
                   r={i === bi || i === hover ? 4.5 : list.length > 24 ? 0 : 2.5} />
@@ -112,6 +127,7 @@ function RankChart({ list, scope }) {
                 onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
         ))}
       </svg>
+      {gaps.length > 0 && <p className="rc-note"><i aria-hidden="true" />안 들은 기간</p>}
       {h && (
         <div className="rc-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
           <b>{periodLabel(scope, h.period)}</b>

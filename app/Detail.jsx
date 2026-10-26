@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { awardsFor, gpRecords, formatValue } from '@/lib/awards';
+import { smoothPath } from '@/lib/curve';
 import { artistLine } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
@@ -48,18 +49,22 @@ const periodLabel = (scope, d) => {
 };
 
 /**
- * Rank over time, best at the top. Log scale, so 3,000th and 3rd read on one
- * chart without the climb flattening into the floor; ticks at 1, 10, 100…
- * name the scale, a band marks the top ten, periods sit where they fall in
- * time, and the best and latest points carry their rank. Hover (or tap) a period for its figures.
+ * Rank over time, best at the top, drawn quietly: a smooth line with a soft
+ * fill beneath it, the axis on a log scale so 3,000th and 3rd share one chart
+ * (ticks at 1, 10, 100… name it), periods placed by date. Stretches with no
+ * listening stay joined but go dashed. The best period is the one gold dot;
+ * hover or tap a period for its figures. The heading above already names the
+ * best rank, so nothing on the plot repeats it.
  */
 function RankChart({ list, scope }) {
   const [hover, setHover] = useState(null);
+  const gid = useId();
   if (list.length < 2) return null;
-  const W = 340, H = 170, L = 34, R = 30, T = 14, B = 24;
+  const W = 340, H = 160, L = 34, R = 10, T = 10, B = 22;
+  const base = H - B;
   const worst = Math.max(...list.map((r) => r.rank));
   const top = 10 ** Math.max(1, Math.ceil(Math.log10(worst + 1)));
-  const y = (rank) => T + (Math.log(rank) / Math.log(top)) * (H - T - B);
+  const y = (rank) => T + (Math.log(rank) / Math.log(top)) * (base - T);
   // placed by date, so a gap of months reads as a gap
   const mon = (d) => { const [yy, mm] = String(d).split('-'); return Number(yy) * 12 + Number(mm) - 1; };
   const m0 = mon(list[0].period);
@@ -67,12 +72,10 @@ function RankChart({ list, scope }) {
   const xm = (m) => L + ((m - m0) / span) * (W - L - R);
   const x = (i) => xm(mon(list[i].period));
   const ticks = [1, 10, 100, 1000, 10000].filter((t) => t <= top);
-  // A stretch with no listening stays joined but reads as one: the line goes
-  // dashed across it over a faint band, rather than gliding through.
   const gapOf = (i) => mon(list[i].period) - mon(list[i - 1].period) > (scope === 'year' ? 12 : 1);
   const runs = [];
   list.forEach((r, i) => {
-    const pt = `${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`;
+    const pt = [x(i), y(r.rank)];
     if (i === 0 || gapOf(i)) runs.push([pt]);
     else runs[runs.length - 1].push(pt);
   });
@@ -86,11 +89,17 @@ function RankChart({ list, scope }) {
   // each period's hover target reaches halfway to its neighbours
   const edge = (i) => (i <= 0 ? L - 6 : i > li ? W - R + 6 : (x(i - 1) + x(i)) / 2);
   const h = hover != null ? list[hover] : null;
+  const f = (v) => v.toFixed(1);
 
   return (
     <div className="rankchart">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="순위 추이" onMouseLeave={() => setHover(null)}>
-        <rect className="rc-band" x={L} y={y(1) - 4} width={W - L - R} height={y(10) - y(1) + 4} rx="4" />
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" className="rc-fill-a" />
+            <stop offset="1" className="rc-fill-b" />
+          </linearGradient>
+        </defs>
         {ticks.map((t) => (
           <g key={t}>
             <line className="rc-grid" x1={L} x2={W - R} y1={y(t)} y2={y(t)} />
@@ -98,30 +107,23 @@ function RankChart({ list, scope }) {
           </g>
         ))}
         {labels.map((m, k) => (
-          <text key={m} className="rc-tick" x={xm(m)} y={H - 6}
+          <text key={m} className="rc-tick" x={xm(m)} y={H - 5}
                 textAnchor={k === 0 ? 'start' : k === labels.length - 1 ? 'end' : 'middle'}>
             {periodLabel(scope, iso(m)).replace(' 말', '')}
           </text>
         ))}
-        {h && <line className="rc-cross" x1={x(hover)} x2={x(hover)} y1={T - 6} y2={H - B} />}
+        {runs.map((r, k) => (r.length > 1 ? (
+          <path key={`a${k}`} fill={`url(#${gid})`}
+                d={`${smoothPath(r)} L${f(r[r.length - 1][0])},${base} L${f(r[0][0])},${base} Z`} />
+        ) : null))}
         {gaps.map((i) => (
-          <g key={`g${i}`}>
-            <rect className="rc-gap" x={x(i - 1)} y={T - 6} width={x(i) - x(i - 1)} height={H - B - T + 6} />
-            <line className="rc-line gap" x1={x(i - 1)} y1={y(list[i - 1].rank)} x2={x(i)} y2={y(list[i].rank)} />
-          </g>
+          <line key={`g${i}`} className="rc-line gap" x1={x(i - 1)} y1={y(list[i - 1].rank)} x2={x(i)} y2={y(list[i].rank)} />
         ))}
-        {runs.map((r, k) => (r.length > 1 ? <polyline key={k} className="rc-line" points={r.join(' ')} /> : null))}
-        {list.map((r, i) => (
-          <circle key={i} className={i === bi ? 'rc-dot best' : 'rc-dot'} cx={x(i)} cy={y(r.rank)}
-                  r={i === bi || i === hover ? 4.5 : list.length > 24 ? 0 : 2.5} />
-        ))}
-        <text className="rc-lbl best" x={x(bi)} y={y(list[bi].rank) - 9}
-              textAnchor={bi === 0 ? 'start' : bi === li ? 'end' : 'middle'}>
-          최고 {list[bi].rank.toLocaleString()}위
-        </text>
-        {li !== bi && (
-          <text className="rc-lbl" x={x(li) + 7} y={y(list[li].rank) + 3.5}>{list[li].rank.toLocaleString()}</text>
-        )}
+        {runs.map((r, k) => (r.length > 1 ? <path key={k} className="rc-line" d={smoothPath(r)} /> : null))}
+        {h && <line className="rc-cross" x1={x(hover)} x2={x(hover)} y1={T} y2={base} />}
+        {list.map((r, i) => ((i === bi || i === li || i === hover || runs.some((run) => run.length === 1 && run[0][0] === x(i))) && (
+          <circle key={i} className={i === bi ? 'rc-dot best' : 'rc-dot'} cx={x(i)} cy={y(r.rank)} r={i === hover ? 4.5 : 3.5} />
+        )))}
         {list.map((_, i) => (
           <rect key={i} className="rc-hit" x={edge(i)} y={0} width={edge(i + 1) - edge(i)} height={H}
                 onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />

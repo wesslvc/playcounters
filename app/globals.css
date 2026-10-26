@@ -395,19 +395,17 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .sheet-sec .seg { margin-bottom:10px }
 .rankchart { position:relative; margin:8px 0 6px }
 .rankchart svg { display:block; width:100%; height:auto; overflow:visible; font-family:inherit }
-.rc-band { fill:color-mix(in oklab, var(--gold) 10%, transparent) }
 .rc-grid { stroke:var(--hair); stroke-width:1 }
 .rc-tick { font-size:9.5px; fill:var(--ink-3); font-variant-numeric:tabular-nums }
 .rc-cross { stroke:var(--ink-3); stroke-width:1; stroke-dasharray:2 3 }
+.rc-fill-a { stop-color:var(--ink); stop-opacity:.12 }
+.rc-fill-b { stop-color:var(--ink); stop-opacity:0 }
 .rc-line { fill:none; stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round }
 .rc-line.gap { stroke:var(--ink-3); stroke-width:1.5; stroke-dasharray:3 4 }
-.rc-gap { fill:var(--sunk); opacity:.7 }
 .rc-note { display:flex; align-items:center; gap:6px; margin-top:4px; font-size:11px; color:var(--ink-3) }
 .rc-note i { width:16px; border-top:1.5px dashed var(--ink-3) }
 .rc-dot { fill:var(--ink); stroke:var(--surface); stroke-width:2 }
 .rc-dot.best { fill:var(--gold) }
-.rc-lbl { font-size:10px; font-weight:700; fill:var(--ink-2); font-variant-numeric:tabular-nums }
-.rc-lbl.best { fill:var(--ink) }
 .rc-hit { fill:transparent; cursor:pointer }
 .rc-tip { position:absolute; top:-6px; transform:translate(-50%, -100%); padding:6px 9px; border-radius:9px; background:var(--ink); color:var(--surface);
   font-size:11.5px; line-height:1.35; white-space:nowrap; pointer-events:none; box-shadow:var(--shadow) }

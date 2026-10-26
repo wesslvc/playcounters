@@ -642,6 +642,79 @@ as $$
   where s.artist_key = any(p_artists);
 $$;
 
+-- ---------- one item's rank, period by period ----------
+-- Where a song (or an artist, with p_track_key null) stood in every year and
+-- every month it was heard, and where it stood all-time at the end of each
+-- month since it first played. Ranked the way the list ranks by plays: the
+-- same total reached later places ahead. `items` is how many were ranked.
+create or replace function item_ranks(
+  p_user uuid,
+  p_artist_key text,
+  p_track_key text default null,
+  p_tz text default 'Asia/Seoul',
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (kind text, period date, rank int, plays numeric, items int)
+language sql stable
+set search_path = public, pg_temp
+set jit = off
+as $$
+  with p as (
+    select p.artist_key as ak,
+           case when p_track_key is null then null else p.track_key end as tk,
+           date_trunc('month', p.played_at at time zone p_tz)::date as m,
+           case when p_estimate then p.est_plays else 1 end as w,
+           p.played_at
+    from plays p
+    where p.user_id = p_user
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source =  'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+  ),
+  mi as (select ak, tk, m, sum(w) as n, max(played_at) as last_at from p group by 1, 2, 3),
+  -- a period's ranking over rounded totals, as the list shows them
+  monthly as (
+    select 'month'::text as kind, m as period, ak, tk, round(n) as plays,
+           rank() over (partition by m order by round(n) desc, last_at desc)::int as rank,
+           count(*) over (partition by m)::int as items
+    from mi
+  ),
+  yi as (select ak, tk, date_trunc('year', m)::date as y, sum(n) as n, max(last_at) as last_at
+         from mi group by 1, 2, 3),
+  yearly as (
+    select 'year'::text, y, ak, tk, round(n),
+           rank() over (partition by y order by round(n) desc, last_at desc)::int,
+           count(*) over (partition by y)::int
+    from yi
+  ),
+  -- all-time standing at each month's end: every item carried forward from
+  -- its first month, so one that went quiet still holds its place
+  months as (select distinct m from mi),
+  firsts as (select ak, tk, min(m) as m0 from mi group by 1, 2),
+  dense as (
+    select f.ak, f.tk, mo.m,
+           sum(coalesce(mi.n, 0)) over w as cum,
+           max(mi.last_at) over w as last_at
+    from firsts f
+    join months mo on mo.m >= f.m0
+    left join mi on mi.ak = f.ak and mi.tk is not distinct from f.tk and mi.m = mo.m
+    window w as (partition by f.ak, f.tk order by mo.m)
+  ),
+  alltime as (
+    select 'all'::text, m, ak, tk, round(cum),
+           rank() over (partition by m order by round(cum) desc, last_at desc)::int,
+           count(*) over (partition by m)::int
+    from dense
+  )
+  select kind, period, rank, plays, items from (
+    select * from monthly union all select * from yearly union all select * from alltime
+  ) r
+  where r.ak = p_artist_key and r.tk is not distinct from p_track_key
+  order by kind, period;
+$$;
+
 -- ---------- season races, all months in one pass ----------
 -- The championship used to call top_items once per month — an all-time
 -- standings is easily a hundred round trips, each shipping up to 200 rows

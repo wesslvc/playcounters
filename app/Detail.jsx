@@ -5,7 +5,7 @@ import { awardsFor, gpRecords, formatValue } from '@/lib/awards';
 import { artistLine } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
-import { Cover, Stat, dayLabel } from './ui';
+import { Cover, Delta, Seg, Stat, dayLabel } from './ui';
 
 const DAY = 864e5;
 
@@ -32,6 +32,96 @@ function DailyChart({ daily }) {
       {buckets.map((v, i) => (
         <i key={i} style={{ height: v ? `${Math.max(6, (v / peak) * 100)}%` : '1px' }} data-on={v > 0} />
       ))}
+    </div>
+  );
+}
+
+const SCOPES = [['year', '연'], ['month', '월'], ['all', '통산']];
+
+const periodLabel = (scope, d) => {
+  const [y, m] = String(d).split('-');
+  if (scope === 'year') return `${y}년`;
+  return `${y}.${m}${scope === 'all' ? ' 말' : ''}`;
+};
+
+/**
+ * Rank on a log scale, best at the top: the line has to read 3,000th and 3rd
+ * on one chart without the climb flattening into the floor.
+ */
+function RankLine({ list }) {
+  if (list.length < 2) return null;
+  const W = 320, H = 96, pad = 8;
+  const lo = Math.log(Math.max(...list.map((r) => r.rank)) + 1);
+  const y = (rank) => pad + (lo ? (Math.log(rank) / lo) : 0) * (H - pad * 2);
+  const x = (i) => pad + (i / (list.length - 1)) * (W - pad * 2);
+  const pts = list.map((r, i) => `${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`).join(' ');
+  const best = list.reduce((a, b) => (b.rank < a.rank ? b : a));
+  const bi = list.indexOf(best);
+  return (
+    <svg className="rankline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="순위 추이">
+      <polyline points={pts} fill="none" vectorEffect="non-scaling-stroke" />
+      <circle cx={x(bi)} cy={y(best.rank)} r="3.5" />
+    </svg>
+  );
+}
+
+/**
+ * Where what's open stood, period by period — by year, by month, or all-time
+ * at each month's end — ranked the way the list ranks by plays, with the
+ * move from the period before.
+ */
+function RankHistory({ target, source, estimate }) {
+  const [scope, setScope] = useState('year');
+  const [data, setData] = useState(null);
+  const [all, setAll] = useState(false);
+
+  useEffect(() => {
+    if (!target?.artist_key) return;
+    const ctl = new AbortController();
+    setData(null);
+    const qs = new URLSearchParams({ artist_key: target.artist_key, source });
+    if (target.track_key) qs.set('track_key', target.track_key);
+    if (estimate) qs.set('estimate', '1');
+    fetch(`/api/item/ranks?${qs}`, { signal: ctl.signal })
+      .then((r) => r.json())
+      .then((j) => { if (j.error) throw new Error(j.error); setData(j); })
+      .catch((e) => { if (e.name !== 'AbortError') setData({ error: e.message }); });
+    return () => ctl.abort();
+  }, [target, source, estimate]);
+
+  useEffect(() => { setAll(false); }, [scope, target]);
+
+  if (!target?.artist_key) return null;
+  const list = data?.[scope] ?? [];
+  const best = list.length ? list.reduce((a, b) => (b.rank < a.rank ? b : a)) : null;
+  const rows = list.map((r, i) => ({ ...r, delta: i ? list[i - 1].rank - r.rank : undefined })).reverse();
+  const shown = all ? rows : rows.slice(0, 12);
+
+  return (
+    <div className="sheet-sec">
+      <h3>순위 변화{best && <span>최고 {best.rank.toLocaleString()}위 · {periodLabel(scope, best.period)}</span>}</h3>
+      <Seg options={SCOPES} value={scope} onChange={setScope} size="sm" label="기간" />
+      {!data && <div className="skeleton"><i /></div>}
+      {data?.error && <p className="err">{data.error}</p>}
+      {data && !data.error && (
+        <>
+          <RankLine list={list} />
+          <ol className="results rankhist">
+            {shown.map((r) => (
+              <li key={r.period}>
+                <span className="res-mo">{periodLabel(scope, r.period)}</span>
+                <span className="res-rk" data-tier={r.rank <= 3 ? r.rank : undefined}>{r.rank.toLocaleString()}위</span>
+                <span className="res-of">/ {r.items.toLocaleString()}</span>
+                <span className="res-pt">{r.plays.toLocaleString()}회</span>
+                <Delta value={r.delta} />
+              </li>
+            ))}
+          </ol>
+          {rows.length > shown.length && (
+            <button className="linkish" onClick={() => setAll(true)}>{rows.length - shown.length}개 더 보기</button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -206,6 +296,8 @@ export default function Detail({ target, source, estimate, onClose }) {
             </div>
           );
         })()}
+
+        <RankHistory target={target} source={source} estimate={estimate} />
 
         <div className="sheet-sec">
           <h3>챔피언십</h3>

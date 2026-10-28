@@ -150,7 +150,7 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, elit
   const img = coverOf(covers, mode, first);
   return (
     <div className="top3">
-      <button className={`no1${elite(first) ? ' ring' : ''}`} onClick={() => onSelect(target(first))}>
+      <button className={`no1${elite(first) ? ` ring ${elite(first)}` : ''}`} onClick={() => onSelect(target(first))}>
         <span className="no1-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
         <Cover src={img} size={132} round={mode === 'artists'} />
         <span className="no1-text">
@@ -164,7 +164,7 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, elit
       </button>
       <div className="runners">
         {rest.map((r, i) => (
-          <button key={rowKey(r)} className={`runner${elite(r) ? ' ring' : ''}`} onClick={() => onSelect(target(r))}>
+          <button key={rowKey(r)} className={`runner${elite(r) ? ` ring ${elite(r)}` : ''}`} onClick={() => onSelect(target(r))}>
             <span className="runner-rk">{ranks[i + 1]}</span>
             <Cover src={coverOf(covers, mode, r)} size={52} round={mode === 'artists'} />
             <span className="runner-text">
@@ -486,7 +486,7 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
                   : prevComplete ? (priorSet.has(key) ? null : undefined) : null;
               return (
                 <li key={key}>
-                  <button className={`row${elite(r) ? ' ring' : ''}`} onClick={() => onSelect(target(r))}>
+                  <button className={`row${elite(r) ? ` ring ${elite(r)}` : ''}`} onClick={() => onSelect(target(r))}>
                     <span className="rk" data-top={rank <= 3 || undefined}>
                       {rank}
                       {tied && <em>공동</em>}

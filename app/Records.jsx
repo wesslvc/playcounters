@@ -117,7 +117,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
       {first ? (
         <>
           <div className={def.split ? 'award-split' : undefined}>
-            <button className={`award-holder${elite(first) ? ' ring' : ''}`} onClick={() => onSelect(target(first))}>
+            <button className={`award-holder${elite(first) ? ` ring ${elite(first)}` : ''}`} onClick={() => onSelect(target(first))}>
               <Cover src={coverOf(covers[mode(first)], mode(first), first)} size={60} round={!first.track} />
               <span className="award-nm">
                 <b>{first.track ?? first.artist}</b>
@@ -137,7 +137,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
             <ol className="award-rest">
               {shownRest.map((h, i) => (
                 <li key={i} className={def.split ? 'rest-split' : undefined}>
-                  <button className={elite(h) ? 'ring' : undefined} onClick={() => onSelect(target(h))}>
+                  <button className={elite(h) ? `ring ${elite(h)}` : undefined} onClick={() => onSelect(target(h))}>
                     <span className="award-place">{i + 2}</span>
                     {club && <Cover src={coverOf(covers.artists, 'artists', h)} size={34} round />}
                     <span className="award-rest-nm">
@@ -179,7 +179,7 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
   const round = mode === 'artists';
   return (
     <div className="club">
-      <button className={`replay-no1 club-lead${ring(latest) ? ' ring' : ''}`} onClick={() => onSelect(target(latest))}>
+      <button className={`replay-no1 club-lead${ring(latest) ? ` ring ${ring(latest)}` : ''}`} onClick={() => onSelect(target(latest))}>
         <Cover src={pic(latest)} size={168} round={round} />
         <span>
           <em>{kicker}</em>
@@ -192,7 +192,7 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
       <ol className="ranks club-ranks">
         {members.map((h, i) => (
           <li key={`${h.artist_key}\u0000${h.track_key ?? ''}`}>
-            <button className={`row${ring(h) ? ' ring' : ''}`} onClick={() => onSelect(target(h))}>
+            <button className={`row${ring(h) ? ` ring ${ring(h)}` : ''}`} onClick={() => onSelect(target(h))}>
               <span className="rk">{i + 1}</span>
               <Cover src={pic(h)} size={44} round={round} />
               <span className="nm">

@@ -531,15 +531,23 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar — an artist past 2,000 plays all time, a song past
-   300: a diamond ring round their picture wherever it appears, nothing said.
-   `.ring` marks the row or card; `.gem` a picture on its own. */
+/* gone far past the bar, all time: a thin metal ring round the picture,
+   set off by a hairline gap, wherever it appears and with nothing said.
+   Platinum ice ('sky') for an artist past 1,500 plays or a song past 300;
+   garnet ('ruby') past 2,000 or 500. `.ring` marks a row or card, `.gem` a
+   picture on its own. */
 .ring .cover, .cover.gem {
-  box-sizing:border-box; border:3px solid transparent;
-  background:linear-gradient(var(--sunk), var(--sunk)) padding-box,
-    conic-gradient(from 210deg, #F4FBFF, #9FDCF7, #E9F3FF, #A9B8F0, #F7FDFF, #7FD0EF, #DFF1FF, #F4FBFF) border-box;
-  box-shadow:0 0 0 1px rgba(60,118,170,.6), 0 0 14px rgba(110,200,240,.7);
+  --gem:linear-gradient(135deg, #D6EAF8 0%, #6FA6D3 30%, #EAF4FC 50%, #4E8BC0 72%, #C9E1F4 100%);
+  box-sizing:border-box; border:2px solid transparent; padding:2px;
+  background:linear-gradient(var(--gem-gap, var(--bg)), var(--gem-gap, var(--bg))) padding-box, var(--gem) border-box;
 }
+.ring.ruby .cover, .cover.gem.ruby {
+  --gem:linear-gradient(135deg, #F3C9CF 0%, #A3142F 32%, #E07489 52%, #6E0B1E 74%, #C9405A 100%);
+}
+.ring .cover img, .cover.gem img { border-radius:5px }
+.ring .cover.round img, .cover.gem.round img { border-radius:50% }
+.ring .cover::after, .cover.gem::after { display:none }
+.award, .replay-no1, .leader, .sheet, .runner, .month-card { --gem-gap:var(--surface) }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }

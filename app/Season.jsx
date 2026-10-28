@@ -65,7 +65,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, 
     >
       <div className="pos">{rank}</div>
       <div className="nm3" style={edge}>
-        <Cover src={cover} size={36} round={round} className={gem ? 'gem' : ''} />
+        <Cover src={cover} size={36} round={round} className={gem ? `gem ${gem}` : ''} />
         <span>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
@@ -221,7 +221,7 @@ function Chequered() {
 function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round, gem, onOpen }) {
   return (
     <button className="leader" style={{ '--team': color }} onClick={onOpen}>
-      <Cover src={cover} size={56} round={round} className={`leader-cover${gem ? ' gem' : ''}`} />
+      <Cover src={cover} size={56} round={round} className={`leader-cover${gem ? ` gem ${gem}` : ''}`} />
       <span className="leader-tag">{tag}</span>
       <span className="leader-wins" aria-label={`${wins}승`}>
         <b>{wins}</b>

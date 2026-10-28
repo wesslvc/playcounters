@@ -334,7 +334,7 @@ export default function Detail({ target, source, estimate, onClose }) {
       <button className="sheet-scrim" aria-label="닫기" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}>
         <div className="sheet-grip" aria-hidden="true" />
-        <div className={`sheet-head${elite(target) ? ' ring' : ''}`}>
+        <div className={`sheet-head${elite(target) ? ` ring ${elite(target)}` : ''}`}>
           <Cover src={coverOf(covers, mode, target)} size={84} round={!target.track} />
           <div className="sheet-title">
             <b>{target.track ?? target.artist}</b>

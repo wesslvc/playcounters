@@ -530,8 +530,12 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar: a quiet slate ring, nothing said */
-.cover.ring { box-shadow:0 0 0 2px var(--bg), 0 0 0 3.5px #7C8EA3 }
+/* gone far past the bar: the whole row framed in slate blue, nothing said */
+.club { --slate:#5F84B4 }
+.club .ring { box-shadow:inset 0 0 0 1.5px var(--slate); background:color-mix(in oklab, var(--slate) 9%, transparent) }
+.club .replay-no1.ring { border-color:var(--slate); box-shadow:inset 0 0 0 .5px var(--slate) }
+.club-ranks li:has(.ring), .club-ranks li:has(.ring) + li { border-top-color:transparent }
+.club-ranks .row.ring { margin-block:3px }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }

@@ -160,7 +160,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate }) {
  * A club in the app's own plain vocabulary: its newest member in the card a
  * Replay quarter uses for its song, then every member in the order they got
  * in, as rows of the ranking list. `ring` marks the members who've gone far
- * past the bar with a quiet slate ring on their picture, and nothing else.
+ * past the bar by framing their row in slate blue, and nothing else.
  */
 function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead, ring, fresh }) {
   const latest = members[members.length - 1];
@@ -169,8 +169,8 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
   const round = mode === 'artists';
   return (
     <div className="club">
-      <button className="replay-no1 club-lead" onClick={() => onSelect(target(latest))}>
-        <Cover src={pic(latest)} size={168} round={round} className={ring(latest) ? 'ring' : ''} />
+      <button className={`replay-no1 club-lead${ring(latest) ? ' ring' : ''}`} onClick={() => onSelect(target(latest))}>
+        <Cover src={pic(latest)} size={168} round={round} />
         <span>
           <em>{kicker}</em>
           <b>{name(latest)}</b>
@@ -182,9 +182,9 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
       <ol className="ranks club-ranks">
         {members.map((h, i) => (
           <li key={`${h.artist_key}\u0000${h.track_key ?? ''}`}>
-            <button className="row" onClick={() => onSelect(target(h))}>
+            <button className={`row${ring(h) ? ' ring' : ''}`} onClick={() => onSelect(target(h))}>
               <span className="rk">{i + 1}</span>
-              <Cover src={pic(h)} size={44} round={round} className={ring(h) ? 'ring' : ''} />
+              <Cover src={pic(h)} size={44} round={round} />
               <span className="nm">
                 <b>{name(h)}</b>
                 <span>{sub(h)}</span>

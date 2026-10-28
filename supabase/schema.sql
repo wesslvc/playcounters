@@ -1701,6 +1701,17 @@ as $$
     select 'club100', ak, tk, round((extract(epoch from played_at - first_at) / 3600)::numeric, 2),
            (first_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
     from pc where before < 100 and c >= 100
+    union all
+    -- over each 100 Club song's first hundred plays: the days it took, and
+    -- how much it has been heard since
+    select 'club100_days', x.ak, x.tk, count(distinct p.day)::numeric, min(p.day), (x.at at time zone p_tz)::date, false
+    from (select ak, tk, played_at as at from pc where before < 100 and c >= 100) x
+    join p on p.ak = x.ak and p.tk = x.tk and p.played_at <= x.at
+    group by x.ak, x.tk, x.at
+    union all
+    select 'club100_since', x.ak, x.tk, round(l.plays - x.c), (x.at at time zone p_tz)::date, l.last_day, true
+    from (select ak, tk, played_at as at, c from pc where before < 100 and c >= 100) x
+    join lab l using (ak, tk)
   ),
   acand as (
     select 'artist_fastest_500' as cat, ak,

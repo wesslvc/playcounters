@@ -214,9 +214,12 @@ function ClubRoster({ def, list, covers, onSelect }) {
     const [y, m, d] = String(at).slice(0, 10).split('-');
     return `${y}.${Number(m)}.${Number(d)}`;
   };
+  // in the order they got there; the same day goes by who got there faster
+  list = [...list].sort((a, b) => String(a.to).localeCompare(String(b.to)) || a.value - b.value);
   const latest = list[list.length - 1];
   const lead = coverOf(covers.tracks, 'tracks', latest);
-  const at = (h) => h.reached_at ?? h.to;
+  const at = (h) => h.to;
+  const took = (h) => { const v = formatValue(def, h.value); return `${v.v}${v.unit} 만에`; };
   // the last thirty days' arrivals carry a mark in the list
   const recent = (h) => Date.now() - new Date(String(at(h)).slice(0, 10)).getTime() < 30 * 864e5;
   return (
@@ -229,7 +232,7 @@ function ClubRoster({ def, list, covers, onSelect }) {
           <b>{latest.track}</b>
           <span className="club-hero-a">{artistLine(latest)}</span>
           <span className="club-hero-v">{dayLabel(at(latest))}</span>
-          <i>{list.length}번째 달성</i>
+          <i>{list.length}번째 달성 · {took(latest)}</i>
         </span>
       </button>
       <ol className="club-members">
@@ -243,7 +246,7 @@ function ClubRoster({ def, list, covers, onSelect }) {
                 </span>
                 <b>{h.track}</b>
                 <span className="club-m-v">{recent(h) && <em className="club-new">NEW</em>}{day(at(h))}</span>
-                <small>{artistLine(h)}</small>
+                <small>{artistLine(h)} · {took(h)}</small>
               </button>
             </li>
           );

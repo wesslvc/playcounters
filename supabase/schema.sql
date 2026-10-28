@@ -1786,7 +1786,8 @@ as $$
   holders as (
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', l.track, 'artist_key', t.ak, 'track_key', t.tk,
-             'value', t.v, 'from', t.d_from, 'to', t.d_to) as j
+             'value', t.v, 'from', t.d_from, 'to', t.d_to,
+             'plays', case when t.cat = 'club100' then round(l.plays) end) as j
     from top3 t join lab l using (ak, tk) where t.r <= 3 or t.cat = 'club100'
     union all
     select t.cat, t.r, jsonb_build_object(

@@ -157,44 +157,42 @@ function Award({ def, list, covers, onSelect, club, source, estimate }) {
 }
 
 /**
- * The 1000 Club's banner, the way a Replay quarter opens: its newest member
- * set large over their own picture with the minute they got in, and every
- * member after it in the order they entered.
+ * A club in the app's own plain vocabulary: its newest member in the card a
+ * Replay quarter uses for its song, then every member in the order they got
+ * in, as rows of the ranking list. `ring` marks the members who've gone far
+ * past the bar with a quiet slate ring on their picture, and nothing else.
  */
-function ClubBanner({ def, list, covers, onSelect }) {
-  if (!list?.length) return null;
-  const members = [...list].sort((a, b) => String(a.reached_at).localeCompare(String(b.reached_at)));
+function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead, ring, fresh }) {
   const latest = members[members.length - 1];
-  const img = coverOf(covers.artists, 'artists', latest);
-  const fast = (h) => formatValue(def, h.value);
+  const name = (h) => (mode === 'tracks' ? h.track : h.artist);
+  const pic = (h) => coverOf(covers[mode], mode, h);
+  const round = mode === 'artists';
   return (
-    <div className="club-hero">
-      <span className="replay-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
-      <p className="club-hero-k">최근 1000회 달성</p>
-      <button className="club-hero-lead" onClick={() => onSelect(target(latest))}>
-        <Cover src={img} size={112} round />
+    <div className="club">
+      <button className="replay-no1 club-lead" onClick={() => onSelect(target(latest))}>
+        <Cover src={pic(latest)} size={168} round={round} className={ring(latest) ? 'ring' : ''} />
         <span>
-          <b>{latest.artist}</b>
-          <span className="club-hero-v">
-            {dayLabel(latest.reached_at)}<strong>{String(latest.reached_at).slice(11, 16)}</strong>
-          </span>
-          <i>
-            {members.length}번째 달성 · {fast(latest).v}{fast(latest).unit} 만에
-            {latest.plays != null && ` · 총 ${Number(latest.plays).toLocaleString()}회`}
-          </i>
+          <em>{kicker}</em>
+          <b>{name(latest)}</b>
+          {mode === 'tracks' && <span>{artistLine(latest)}</span>}
+          <span className="club-when">{when(latest)}</span>
+          <i>{members.length}번째 · {lead(latest)}</i>
         </span>
       </button>
-      <ol className="club-members">
+      <ol className="ranks club-ranks">
         {members.map((h, i) => (
-          <li key={h.artist_key}>
-            <button onClick={() => onSelect(target(h))}>
-              <span className="club-m-img"
-                    style={coverOf(covers.artists, 'artists', h) ? { backgroundImage: `url(${coverOf(covers.artists, 'artists', h)})` } : undefined}>
-                <span className="club-m-rk">{String(i + 1).padStart(2, '0')}</span>
+          <li key={`${h.artist_key}\u0000${h.track_key ?? ''}`}>
+            <button className="row" onClick={() => onSelect(target(h))}>
+              <span className="rk">{i + 1}</span>
+              <Cover src={pic(h)} size={44} round={round} className={ring(h) ? 'ring' : ''} />
+              <span className="nm">
+                <b>{name(h)}</b>
+                <span>{sub(h)}</span>
               </span>
-              <b>{h.artist}</b>
-              <span className="club-m-v">{reachedShort(h.reached_at)}</span>
-              <small>{fast(h).v}{fast(h).unit} 만에</small>
+              <span className="val">
+                {short(h)}
+                {fresh?.(h) && <span className="delta new">NEW</span>}
+              </span>
             </button>
           </li>
         ))}
@@ -203,56 +201,42 @@ function ClubBanner({ def, list, covers, onSelect }) {
   );
 }
 
-/**
- * The 100 Club: every song past a hundred plays, one per row in the order
- * they got there, each with the day it did. Nothing else — it's a roll call,
- * not a ranking — in the 1000 Club banner's dress.
- */
+const shortDay = (d) => {
+  const [y, m, dd] = String(d).slice(0, 10).split('-');
+  return `${y}.${Number(m)}.${Number(dd)}`;
+};
+
+/** The 1000 Club: every artist past a thousand plays, by when they got there. */
+function ClubBanner({ def, list, covers, onSelect }) {
+  if (!list?.length) return null;
+  const members = [...list].sort((a, b) => String(a.reached_at).localeCompare(String(b.reached_at)));
+  const took = (h) => { const v = formatValue(def, h.value); return `${v.v}${v.unit} 만에`; };
+  return (
+    <Club mode="artists" members={members} covers={covers} onSelect={onSelect}
+          kicker="최근 1000회 달성"
+          when={(h) => `${dayLabel(h.reached_at)} ${String(h.reached_at).slice(11, 16)}`}
+          lead={(h) => `${took(h)}${h.plays != null ? ` · 총 ${Number(h.plays).toLocaleString()}회` : ''}`}
+          sub={took}
+          short={(h) => reachedShort(h.reached_at)}
+          ring={(h) => Number(h.plays) >= 2000} />
+  );
+}
+
+/** The 100 Club: every song past a hundred plays, by the day it got there. */
 function ClubRoster({ def, list, covers, onSelect }) {
   if (!list?.length) return <p className="award-none">아직 100회를 넘긴 곡이 없습니다.</p>;
-  const day = (at) => {
-    const [y, m, d] = String(at).slice(0, 10).split('-');
-    return `${y}.${Number(m)}.${Number(d)}`;
-  };
-  // in the order they got there; the same day goes by who got there faster
-  list = [...list].sort((a, b) => String(a.to).localeCompare(String(b.to)) || a.value - b.value);
-  const latest = list[list.length - 1];
-  const lead = coverOf(covers.tracks, 'tracks', latest);
-  const at = (h) => h.to;
+  // the same day goes by who got there faster
+  const members = [...list].sort((a, b) => String(a.to).localeCompare(String(b.to)) || a.value - b.value);
   const took = (h) => { const v = formatValue(def, h.value); return `${v.v}${v.unit} 만에`; };
-  // the last thirty days' arrivals carry a mark in the list
-  const recent = (h) => Date.now() - new Date(String(at(h)).slice(0, 10)).getTime() < 30 * 864e5;
   return (
-    <div className="club-hero roster">
-      <span className="replay-bg" style={lead ? { backgroundImage: `url(${lead})` } : undefined} aria-hidden="true" />
-      <p className="club-hero-k">최근 100회 달성</p>
-      <button className="club-hero-lead square" onClick={() => onSelect(target(latest))}>
-        <Cover src={lead} size={112} />
-        <span>
-          <b>{latest.track}</b>
-          <span className="club-hero-a">{artistLine(latest)}</span>
-          <span className="club-hero-v">{dayLabel(at(latest))}</span>
-          <i>{list.length}번째 달성 · {took(latest)}</i>
-        </span>
-      </button>
-      <ol className="club-members">
-        {list.map((h, i) => {
-          const img = coverOf(covers.tracks, 'tracks', h);
-          return (
-            <li key={`${h.artist_key}\u0000${h.track_key}`}>
-              <button onClick={() => onSelect(target(h))} aria-label={`${h.track} · ${def.title}`}>
-                <span className="club-m-img" style={img ? { backgroundImage: `url(${img})` } : undefined}>
-                  <span className="club-m-rk">{String(i + 1).padStart(2, '0')}</span>
-                </span>
-                <b>{h.track}</b>
-                <span className="club-m-v">{recent(h) && <em className="club-new">NEW</em>}{day(at(h))}</span>
-                <small>{artistLine(h)} · {took(h)}</small>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+    <Club mode="tracks" members={members} covers={covers} onSelect={onSelect}
+          kicker="최근 100회 달성"
+          when={(h) => dayLabel(h.to)}
+          lead={took}
+          sub={(h) => `${artistLine(h)} · ${took(h)}`}
+          short={(h) => shortDay(h.to)}
+          ring={(h) => Number(h.plays) >= 300}
+          fresh={(h) => Date.now() - new Date(String(h.to).slice(0, 10)).getTime() < 30 * 864e5} />
   );
 }
 

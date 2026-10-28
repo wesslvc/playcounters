@@ -538,12 +538,15 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .ring .cover::before, .cover.gem::before {
   content:''; position:absolute; inset:0; z-index:1; border-radius:inherit; pointer-events:none;
   mix-blend-mode:screen;
-  background:linear-gradient(115deg, transparent 26%, rgba(150,210,255,.5) 40%, rgba(255,255,255,.75) 48%,
-    rgba(190,170,255,.4) 53%, rgba(80,150,220,.45) 58%, transparent 72%);
+  /* a thin streak off the top corner, over the faintest iridescent tint */
+  background:
+    linear-gradient(125deg, transparent 60%, rgba(185,225,255,.28) 66%, rgba(255,255,255,.4) 69%, rgba(200,185,255,.22) 72%, transparent 77%),
+    linear-gradient(125deg, rgba(160,210,255,.12), transparent 45%, rgba(175,155,255,.1));
 }
 .ring.ruby .cover::before, .cover.gem.ruby::before {
-  background:linear-gradient(115deg, transparent 26%, rgba(255,120,140,.5) 40%, rgba(255,240,235,.75) 48%,
-    rgba(255,170,120,.35) 53%, rgba(200,16,46,.5) 58%, transparent 72%);
+  background:
+    linear-gradient(125deg, transparent 60%, rgba(255,160,175,.28) 66%, rgba(255,245,240,.4) 69%, rgba(255,185,140,.2) 72%, transparent 77%),
+    linear-gradient(125deg, rgba(255,140,160,.12), transparent 45%, rgba(200,30,60,.12));
 }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }

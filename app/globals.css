@@ -537,16 +537,14 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
    past 2,000 or 500. `.ring` marks a row or card, `.gem` a picture alone. */
 .ring .cover::before, .cover.gem::before {
   content:''; position:absolute; inset:0; z-index:1; border-radius:inherit; pointer-events:none;
-  mix-blend-mode:screen;
-  /* a thin streak off the top corner, over the faintest iridescent tint */
-  background:
-    linear-gradient(125deg, transparent 60%, rgba(185,225,255,.28) 66%, rgba(255,255,255,.4) 69%, rgba(200,185,255,.22) 72%, transparent 77%),
-    linear-gradient(125deg, rgba(160,210,255,.12), transparent 45%, rgba(175,155,255,.1));
+  /* one thin streak, a bright core between faint dark edges, so it reads the
+     same on a dark sleeve and a light one */
+  background:linear-gradient(125deg, transparent 61%, rgba(15,35,65,.22) 64.5%, rgba(255,255,255,.7) 66.5%,
+    rgba(150,205,255,.6) 68%, rgba(15,35,65,.2) 70.5%, transparent 73%);
 }
 .ring.ruby .cover::before, .cover.gem.ruby::before {
-  background:
-    linear-gradient(125deg, transparent 60%, rgba(255,160,175,.28) 66%, rgba(255,245,240,.4) 69%, rgba(255,185,140,.2) 72%, transparent 77%),
-    linear-gradient(125deg, rgba(255,140,160,.12), transparent 45%, rgba(200,30,60,.12));
+  background:linear-gradient(125deg, transparent 61%, rgba(70,8,20,.24) 64.5%, rgba(255,250,248,.7) 66.5%,
+    rgba(255,115,135,.6) 68%, rgba(70,8,20,.2) 70.5%, transparent 73%);
 }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }

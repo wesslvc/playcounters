@@ -544,7 +544,10 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .ring.ruby .cover, .cover.gem.ruby {
   --gem:linear-gradient(135deg, #F3C9CF 0%, #A3142F 32%, #E07489 52%, #6E0B1E 74%, #C9405A 100%);
 }
-.ring .cover img, .cover.gem img { border-radius:5px }
+/* a square ring keeps its corners concentric: the picture's radius is the
+   ring's less the ring and the gap, so the gap runs even all the way round */
+.ring .cover:not(.round), .cover.gem:not(.round) { border-radius:calc(var(--r) + 4px) !important }
+.ring .cover img, .cover.gem img { border-radius:var(--r) }
 .ring .cover.round img, .cover.gem.round img { border-radius:50% }
 .ring .cover::after, .cover.gem::after { display:none }
 .award, .replay-no1, .leader, .sheet, .runner, .month-card { --gem-gap:var(--surface) }

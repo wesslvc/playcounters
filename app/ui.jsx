@@ -40,7 +40,8 @@ export function Cover({ src, size = 44, round, className = '' }) {
   return (
     <span
       className={`cover${round ? ' round' : ''} ${className}`}
-      style={{ width: size, height: size }}
+      // a square's corner grows with it, so a ring round it can stay concentric
+      style={{ width: size, height: size, '--r': `${Math.max(8, Math.round(size * 0.11))}px` }}
       aria-hidden="true"
     >
       {src && <img src={src} alt="" loading="lazy" decoding="async" />}

@@ -7,6 +7,7 @@ import { artistLine } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
 import { Cover, Delta, Seg, Stat, dayLabel } from './ui';
+import { useElite } from './useElite';
 
 const DAY = 864e5;
 
@@ -277,6 +278,7 @@ export default function Detail({ target, source, estimate, onClose }) {
   const [career, setCareer] = useState(null);
   const [records, setRecords] = useState(null);
   const [tab, setTab] = useState('overview');
+  const elite = useElite(source, estimate);
 
   useEffect(() => { setTab('overview'); }, [target]);
 
@@ -332,7 +334,7 @@ export default function Detail({ target, source, estimate, onClose }) {
       <button className="sheet-scrim" aria-label="닫기" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}>
         <div className="sheet-grip" aria-hidden="true" />
-        <div className="sheet-head">
+        <div className={`sheet-head${elite(target) ? ' ring' : ''}`}>
           <Cover src={coverOf(covers, mode, target)} size={84} round={!target.track} />
           <div className="sheet-title">
             <b>{target.track ?? target.artist}</b>

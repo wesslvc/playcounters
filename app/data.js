@@ -29,6 +29,10 @@ export const loadCareer = (source, estimate) =>
   load(`career|${source}|${estimate}`,
     `/api/season?mode=tracks&all=1&source=${source}${estimate ? '&estimate=1' : ''}`);
 
+/** Artists past 2,000 plays and songs past 300, all-time — framed wherever they appear. */
+export const loadElite = (source, estimate) =>
+  load(`elite|${source}|${estimate}`, `/api/elite?source=${source}${estimate ? '&estimate=1' : ''}`);
+
 export const loadRecords = (source, estimate) =>
   load(`records|${source}|${estimate}`, `/api/records?source=${source}${estimate ? '&estimate=1' : ''}`);
 

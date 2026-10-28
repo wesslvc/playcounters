@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { artistLine, useCredits } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
+import { useElite } from './useElite';
 import { familyLabel } from '@/lib/genre';
 import { Seg, Section, Cover, Stat, Delta, dayLabel } from './ui';
 
@@ -106,6 +107,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [shown, setShown] = useState(10);
+  const elite = useElite(source, estimate);
 
   useEffect(() => {
     if (quarters.length && !quarters.some((x) => pick && x.y === pick.y && x.q === pick.q)) setPick(quarters[0]);
@@ -213,7 +215,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
               const delta = before != null ? before - (i + 1) : prevComplete ? undefined : null;
               return (
                 <li key={`${t.artist_key}-${t.track_key}`}>
-                  <button className="row" onClick={() => onSelect(target(t))}>
+                  <button className={`row${elite(t) ? ' ring' : ''}`} onClick={() => onSelect(target(t))}>
                     <span className="rk" data-top={i < 3 || undefined}>{i + 1}</span>
                     <Cover src={coverOf(songCovers, 'tracks', t)} size={44} />
                     <span className="nm"><b>{t.track}</b><span>{artistLine(t)}</span></span>
@@ -285,7 +287,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
               <ol className="ranks compact">
                 {data.debuts.top.map((t, i) => (
                   <li key={`${t.artist_key}-${t.track_key}`}>
-                    <button className="row" onClick={() => onSelect(target(t))}>
+                    <button className={`row${elite(t) ? ' ring' : ''}`} onClick={() => onSelect(target(t))}>
                       <span className="rk">{i + 1}</span>
                       <Cover src={coverOf(songCovers, 'tracks', t)} size={40} />
                       <span className="nm"><b>{t.track}</b><span>{t.artist} · {dayLabel(new Date(new Date(t.first_at).getTime() + KST).toISOString())} 처음</span></span>

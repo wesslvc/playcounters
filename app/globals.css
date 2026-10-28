@@ -530,12 +530,17 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar: the whole row framed in slate blue, nothing said */
-.club { --slate:#5F84B4 }
-.club .ring { box-shadow:inset 0 0 0 1.5px var(--slate); background:color-mix(in oklab, var(--slate) 9%, transparent) }
-.club .replay-no1.ring { border-color:var(--slate); box-shadow:inset 0 0 0 .5px var(--slate) }
-.club-ranks li:has(.ring), .club-ranks li:has(.ring) + li { border-top-color:transparent }
-.club-ranks .row.ring { margin-block:3px }
+/* gone far past the bar — an artist past 2,000 plays all time, a song past
+   300: framed in slate blue wherever it appears, nothing said */
+:root { --slate:#5F84B4 }
+.ring { box-shadow:inset 0 0 0 1.5px var(--slate) !important; background-color:color-mix(in oklab, var(--slate) 9%, transparent) !important }
+.replay-no1.ring { border-color:var(--slate) }
+.ranks li:has(.ring), .ranks li:has(.ring) + li, .award-rest > li:has(.ring), .award-rest > li:has(.ring) + li { border-top-color:transparent }
+.ranks .row.ring { margin-block:3px }
+.award-holder.ring { padding:8px; margin-left:-8px; width:calc(100% + 16px); border-radius:16px }
+.award-rest > li > button.ring { padding-inline:8px; margin-left:-8px; width:calc(100% + 16px); border-radius:12px }
+.runner.ring { border-radius:14px }
+.sheet-head.ring { padding:10px; margin:-10px -10px 12px; border-radius:20px }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }

@@ -372,7 +372,7 @@ export default function Detail({ target, source, estimate, onClose }) {
         {awards.length === 0 && <p className="note">{records ? '보유하거나 뒤쫓는 기록이 없어요' : '불러오는 중…'}</p>}
         {awards.length > 0 && (() => {
           const held = awards.filter((x) => x.place === 1);
-          const near = awards.filter((x) => x.place > 1);
+          const near = awards.filter((x) => x.place > 1 && x.place <= 3);
           const row = ({ def, place, holder }) => {
             const v = formatValue(def, holder.value);
             return (

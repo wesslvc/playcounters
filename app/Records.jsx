@@ -94,6 +94,10 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
   const mode = (h) => (h.track ? 'tracks' : 'artists');
   // A split record's figure opens the holder's breakdown instead of the sheet.
   const [open, setOpen] = useState(null);
+  // a long list (a club's every member) shows five until asked for the rest
+  const [all, setAll] = useState(false);
+  const FIRST = 4;
+  const shownRest = all ? rest : rest.slice(0, FIRST);
   const toggle = (h) => setOpen((k) => (k === h.artist_key ? null : h.artist_key));
   const splitV = (h, className) => {
     const v = formatValue(def, h.value);
@@ -131,7 +135,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
           {!club && <p className="award-when">{when(def, first)}</p>}
           {rest.length > 0 && (
             <ol className="award-rest">
-              {rest.map((h, i) => (
+              {shownRest.map((h, i) => (
                 <li key={i} className={def.split ? 'rest-split' : undefined}>
                   <button className={elite(h) ? 'ring' : undefined} onClick={() => onSelect(target(h))}>
                     <span className="award-place">{i + 2}</span>
@@ -148,6 +152,11 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
                 </li>
               ))}
             </ol>
+          )}
+          {rest.length > shownRest.length && (
+            <button className="linkish award-more" onClick={() => setAll(true)}>
+              나머지 {rest.length - shownRest.length}{first.track ? '곡' : '팀'} 펼치기
+            </button>
           )}
         </>
       ) : (

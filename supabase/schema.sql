@@ -1799,7 +1799,9 @@ as $$
              'artist', l.artist, 'track', l.track, 'artist_key', t.ak, 'track_key', t.tk,
              'value', t.v, 'from', t.d_from, 'to', t.d_to,
              'plays', case when t.cat = 'club100' then round(l.plays) end) as j
-    from top3 t join lab l using (ak, tk) where t.r <= 3 or t.cat = 'club100'
+    -- the 100 Club's records list every member, not just the top three
+    from top3 t join lab l using (ak, tk)
+    where t.r <= 3 or t.cat in ('club100', 'fastest_100', 'club100_days', 'club100_since')
     union all
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,

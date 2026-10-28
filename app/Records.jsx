@@ -214,9 +214,24 @@ function ClubRoster({ def, list, covers, onSelect }) {
     const [y, m, d] = String(at).slice(0, 10).split('-');
     return `${y}.${Number(m)}.${Number(d)}`;
   };
+  const latest = list[list.length - 1];
+  const lead = coverOf(covers.tracks, 'tracks', latest);
+  const at = (h) => h.reached_at ?? h.to;
+  // the last thirty days' arrivals carry a mark in the list
+  const recent = (h) => Date.now() - new Date(String(at(h)).slice(0, 10)).getTime() < 30 * 864e5;
   return (
     <div className="club-hero roster">
-      <p className="club-hero-k">100회 달성 순 · {list.length}곡</p>
+      <span className="replay-bg" style={lead ? { backgroundImage: `url(${lead})` } : undefined} aria-hidden="true" />
+      <p className="club-hero-k">최근 100회 달성</p>
+      <button className="club-hero-lead square" onClick={() => onSelect(target(latest))}>
+        <Cover src={lead} size={112} />
+        <span>
+          <b>{latest.track}</b>
+          <span className="club-hero-a">{artistLine(latest)}</span>
+          <span className="club-hero-v">{dayLabel(at(latest))}</span>
+          <i>{list.length}번째 달성</i>
+        </span>
+      </button>
       <ol className="club-members">
         {list.map((h, i) => {
           const img = coverOf(covers.tracks, 'tracks', h);
@@ -227,7 +242,7 @@ function ClubRoster({ def, list, covers, onSelect }) {
                   <span className="club-m-rk">{String(i + 1).padStart(2, '0')}</span>
                 </span>
                 <b>{h.track}</b>
-                <span className="club-m-v">{day(h.reached_at ?? h.to)}</span>
+                <span className="club-m-v">{recent(h) && <em className="club-new">NEW</em>}{day(at(h))}</span>
                 <small>{artistLine(h)}</small>
               </button>
             </li>

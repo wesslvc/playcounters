@@ -196,7 +196,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
           </div>
 
           {no1 && (
-            <button className="replay-no1" onClick={() => onSelect(target(no1))}>
+            <button className={`replay-no1${elite(no1) ? ' ring' : ''}`} onClick={() => onSelect(target(no1))}>
               <Cover src={heroImg} size={168} />
               <span>
                 <em>이번 분기의 노래</em>
@@ -238,7 +238,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
                 {artists.slice(0, 10).map((a, i) => (
                   <button key={a.artist_key} className={i === 0 ? 'artist-tile first' : 'artist-tile'}
                           onClick={() => onSelect(target(a))}>
-                    <Cover src={coverOf(artistCovers, 'artists', a)} size={i === 0 ? 132 : 76} round />
+                    <Cover src={coverOf(artistCovers, 'artists', a)} size={i === 0 ? 132 : 76} round className={elite(a) ? 'gem' : ''} />
                     <span className="artist-rk">{i + 1}</span>
                     <b>{a.artist}</b>
                     <span>{Number(a.plays).toLocaleString()}회</span>
@@ -269,7 +269,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect }
             {data.months.map((m) => (
               <button key={m.month} className="month-card" disabled={!m.top} onClick={() => m.top && onSelect(target(m.top))}>
                 <span className="month-k">{m.month}월</span>
-                <Cover src={m.top ? coverOf(songCovers, 'tracks', m.top) : null} size={64} />
+                <Cover src={m.top ? coverOf(songCovers, 'tracks', m.top) : null} size={64} className={m.top && elite(m.top) ? 'gem' : ''} />
                 <b>{m.top?.track ?? '—'}</b>
                 <span>{m.top ? `${m.top.artist} · ${Number(m.top.plays).toLocaleString()}회` : '아직 기록 없음'}</span>
               </button>

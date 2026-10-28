@@ -6,7 +6,7 @@ import { loadElite } from './data';
 /**
  * How far past the bar a row has gone, all-time: 'ruby' for an artist past
  * 2,000 plays or a song past 500, 'sky' for 1,500 or 300, otherwise null —
- * so every view rings its picture the same way. Null until loaded.
+ * so every view gives its picture the same foil. Null until loaded.
  */
 export function useElite(source, estimate) {
   const [tiers, setTiers] = useState(null);

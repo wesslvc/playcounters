@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Who has gone far past the bar, all-time (elite_tiers), and how far: ruby
  * for artists past 2,000 plays and songs past 500, sky for artists past
- * 1,500 and songs past 300. Every view rings their pictures to match.
+ * 1,500 and songs past 300. Every view gives their pictures a matching foil.
  */
 export async function GET(req) {
   const userId = currentUserId();

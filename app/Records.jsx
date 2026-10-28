@@ -170,7 +170,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
  * A club in the app's own plain vocabulary: its newest member in the card a
  * Replay quarter uses for its song, then every member in the order they got
  * in, as rows of the ranking list. `ring` marks the members who've gone far
- * past the bar by framing their row in slate blue, and nothing else.
+ * past the bar, whose pictures then catch a band of foil, and nothing else.
  */
 function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead, ring, fresh }) {
   const latest = members[members.length - 1];

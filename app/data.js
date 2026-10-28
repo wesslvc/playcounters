@@ -29,7 +29,7 @@ export const loadCareer = (source, estimate) =>
   load(`career|${source}|${estimate}`,
     `/api/season?mode=tracks&all=1&source=${source}${estimate ? '&estimate=1' : ''}`);
 
-/** Artists and songs far past the bar, all-time, with their tier — ringed wherever they appear. */
+/** Artists and songs far past the bar, all-time, with their tier — foiled wherever they appear. */
 export const loadElite = (source, estimate) =>
   load(`elite|${source}|${estimate}`, `/api/elite?source=${source}${estimate ? '&estimate=1' : ''}`);
 

@@ -531,26 +531,20 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar, all time: a thin metal ring round the picture,
-   set off by a hairline gap, wherever it appears and with nothing said.
-   Platinum ice ('sky') for an artist past 1,500 plays or a song past 300;
-   garnet ('ruby') past 2,000 or 500. `.ring` marks a row or card, `.gem` a
-   picture on its own. */
-.ring .cover, .cover.gem {
-  --gem:linear-gradient(135deg, #D6EAF8 0%, #6FA6D3 30%, #EAF4FC 50%, #4E8BC0 72%, #C9E1F4 100%);
-  box-sizing:border-box; border:2px solid transparent; padding:2px;
-  background:linear-gradient(var(--gem-gap, var(--bg)), var(--gem-gap, var(--bg))) padding-box, var(--gem) border-box;
+/* gone far past the bar, all time: the picture catches a band of foil, like
+   a holo trading card, wherever it appears and with nothing said. Ice-blue
+   ('sky') for an artist past 1,500 plays or a song past 300; garnet ('ruby')
+   past 2,000 or 500. `.ring` marks a row or card, `.gem` a picture alone. */
+.ring .cover::before, .cover.gem::before {
+  content:''; position:absolute; inset:0; z-index:1; border-radius:inherit; pointer-events:none;
+  mix-blend-mode:screen;
+  background:linear-gradient(115deg, transparent 26%, rgba(150,210,255,.5) 40%, rgba(255,255,255,.75) 48%,
+    rgba(190,170,255,.4) 53%, rgba(80,150,220,.45) 58%, transparent 72%);
 }
-.ring.ruby .cover, .cover.gem.ruby {
-  --gem:linear-gradient(135deg, #F3C9CF 0%, #A3142F 32%, #E07489 52%, #6E0B1E 74%, #C9405A 100%);
+.ring.ruby .cover::before, .cover.gem.ruby::before {
+  background:linear-gradient(115deg, transparent 26%, rgba(255,120,140,.5) 40%, rgba(255,240,235,.75) 48%,
+    rgba(255,170,120,.35) 53%, rgba(200,16,46,.5) 58%, transparent 72%);
 }
-/* a square ring keeps its corners concentric: the picture's radius is the
-   ring's less the ring and the gap, so the gap runs even all the way round */
-.ring .cover:not(.round), .cover.gem:not(.round) { border-radius:calc(var(--r) + 4px) !important }
-.ring .cover img, .cover.gem img { border-radius:var(--r) }
-.ring .cover.round img, .cover.gem.round img { border-radius:50% }
-.ring .cover::after, .cover.gem::after { display:none }
-.award, .replay-no1, .leader, .sheet, .runner, .month-card { --gem-gap:var(--surface) }
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }

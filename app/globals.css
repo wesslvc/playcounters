@@ -523,7 +523,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .award-rest-v { font-weight:600; color:var(--ink-2); white-space:nowrap }
 .award-rest > li > button:hover .award-rest-nm { text-decoration:underline; text-underline-offset:3px }
 .award-none { font-size:13px; color:var(--ink-3); margin:16px 0 6px }
-.award-group .sec { margin-top:44px }
+.award-group { margin-top:20px }
 /* the 1000 Club banner: a Replay hero, dark and quiet, champagne only in
    the small print */
 .club-hero { --champ:#CDB88E; position:relative; isolation:isolate; overflow:hidden; margin-bottom:12px; padding:28px 28px 22px; border-radius:30px;

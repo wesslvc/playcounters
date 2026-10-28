@@ -5,7 +5,7 @@ import { AWARD_GROUPS, gpRecords, formatValue } from '@/lib/awards';
 import { artistLine, useCredits } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
-import { Section, Cover, Stat, dayLabel } from './ui';
+import { Cover, Stat, dayLabel } from './ui';
 
 const ym = (d) => {
   const [y, m] = String(d).split('-');
@@ -204,6 +204,41 @@ function ClubBanner({ def, list, covers, onSelect }) {
 }
 
 /**
+ * The 100 Club: every song past a hundred plays, one per row in the order
+ * they got there, each with the day it did. Nothing else — it's a roll call,
+ * not a ranking — in the 1000 Club banner's dress.
+ */
+function ClubRoster({ def, list, covers, onSelect }) {
+  if (!list?.length) return <p className="award-none">아직 100회를 넘긴 곡이 없습니다.</p>;
+  const day = (at) => {
+    const [y, m, d] = String(at).slice(0, 10).split('-');
+    return `${y}.${Number(m)}.${Number(d)}`;
+  };
+  return (
+    <div className="club-hero roster">
+      <p className="club-hero-k">100회 달성 순 · {list.length}곡</p>
+      <ol className="club-members">
+        {list.map((h, i) => {
+          const img = coverOf(covers.tracks, 'tracks', h);
+          return (
+            <li key={`${h.artist_key}\u0000${h.track_key}`}>
+              <button onClick={() => onSelect(target(h))} aria-label={`${h.track} · ${def.title}`}>
+                <span className="club-m-img" style={img ? { backgroundImage: `url(${img})` } : undefined}>
+                  <span className="club-m-rk">{String(i + 1).padStart(2, '0')}</span>
+                </span>
+                <b>{h.track}</b>
+                <span className="club-m-v">{day(h.reached_at ?? h.to)}</span>
+                <small>{artistLine(h)}</small>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
  * The record book: every category's holder and the two behind them —
  * dominance (who owned the days, weeks and months), velocity (how fast a
  * song got to fifty or a hundred), endurance, the Grand Prix, and artists.
@@ -211,6 +246,8 @@ function ClubBanner({ def, list, covers, onSelect }) {
  * Prix ones from the all-time championship.
  */
 export default function Records({ source, estimate, version, onSelect }) {
+  // one group at a time, the 1000 Club first, rather than one long scroll
+  const [group, setGroup] = useState(AWARD_GROUPS[0].key);
   const [plays, setPlays] = useState(null);
   const [career, setCareer] = useState(null);
   const [error, setError] = useState(null);
@@ -253,17 +290,23 @@ export default function Records({ source, estimate, version, onSelect }) {
       </div>
 
       <nav className="jump" aria-label="부문">
-        {AWARD_GROUPS.map((g) => <a key={g.key} href={`#rec-${g.key}`}>{g.title}</a>)}
+        {AWARD_GROUPS.map((g) => (
+          <button key={g.key} className="chip" aria-pressed={group === g.key} onClick={() => setGroup(g.key)}>
+            {g.title}
+          </button>
+        ))}
       </nav>
 
-      {AWARD_GROUPS.map((g) => (
+      {AWARD_GROUPS.filter((g) => g.key === group).map((g) => (
         <div key={g.key} className="award-group">
-          <Section id={`rec-${g.key}`} title={g.title} />
           {g.items.filter((def) => def.banner).map((def) => (
             <ClubBanner key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
           ))}
+          {g.items.filter((def) => def.roster).map((def) => (
+            <ClubRoster key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
+          ))}
           <div className="awards">
-            {g.items.filter((def) => !def.banner).map((def) => (
+            {g.items.filter((def) => !def.banner && !def.roster).map((def) => (
               <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect}
                      club={g.key === 'club'} source={source} estimate={estimate} />
             ))}

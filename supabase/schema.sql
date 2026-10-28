@@ -1695,6 +1695,12 @@ as $$
     union all
     select 'debut_day', c.ak, c.tk, round(c.n), c.day, c.day, true
     from cum c join lab l using (ak, tk) where c.day = l.first_day
+    union all
+    -- the 100 Club: every song past a hundred plays, in the order they got
+    -- there (the crossing play's time stands in as the value)
+    select 'club100', ak, tk, extract(epoch from played_at)::numeric,
+           (played_at at time zone p_tz)::date, (played_at at time zone p_tz)::date, false
+    from pc where before < 100 and c >= 100
   ),
   acand as (
     select 'artist_fastest_500' as cat, ak,
@@ -1780,8 +1786,9 @@ as $$
   holders as (
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', l.track, 'artist_key', t.ak, 'track_key', t.tk,
-             'value', t.v, 'from', t.d_from, 'to', t.d_to) as j
-    from top3 t join lab l using (ak, tk) where t.r <= 3
+             'value', t.v, 'from', t.d_from, 'to', t.d_to,
+             'reached_at', case when t.cat = 'club100' then to_char(to_timestamp(t.v) at time zone p_tz, 'YYYY-MM-DD"T"HH24:MI') end) as j
+    from top3 t join lab l using (ak, tk) where t.r <= 3 or t.cat = 'club100'
     union all
     select t.cat, t.r, jsonb_build_object(
              'artist', l.artist, 'track', null, 'artist_key', t.ak, 'track_key', null,

@@ -1049,8 +1049,10 @@ async function milestoneContext(userId, { src, estimate }) {
   ];
 }
 
-// Terra has the better voice and takes what's read first — the opening line and
-// the top cards; Luna, quicker and cheaper, takes the rest in parallel.
+// Terra has the better voice and the better head: it takes the lines that have
+// to weigh several things at once — odds, projections, how long a lead lasts, a
+// race's whole story — and the opening line. Luna, quicker and cheaper, takes
+// the plain facts: a climb, a milestone, a record.
 const TERRA = () => process.env.OPENAI_MODEL || 'gpt-6.1-terra';
 const LUNA = () => process.env.OPENAI_MODEL_FAST || 'gpt-6-luna';
 const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 베테랑 캐스터다. '
@@ -1100,6 +1102,18 @@ const OPENER = {
   properties: { headline: { type: 'string' } },
 };
 
+/** Lines that weigh several things at once — odds, projections, a lead's lifetime, a race's story. */
+const COMPLEX = new Set([
+  'odds', 'win-odds', 'cx-odds', 'hold', 'career-hold', 'lead', 'eta', 'champion', 'locked', 'swing', 'cx-swing',
+  'cx-lead', 'streak-on', 'first-win', 'gp-win', 'gp-changes', 'gp-late', 'gp-standings', 'gp-tally',
+]);
+const complex = (e) => COMPLEX.has(e.kind) || Boolean(e.odds || e.duel?.eta != null || e.duel?.after != null);
+const split = (list, n) => {
+  const out = [];
+  for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n));
+  return out;
+};
+
 /**
  * Rewords the lines as race radio — several casters at once, a few lines
  * each, so a long feed comes back as fast as a short one — while another
@@ -1111,14 +1125,19 @@ async function polish(events, context) {
   if (!process.env.OPENAI_API_KEY || !events.length) return { items: events, headline: null };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 12000);
-  const chunks = [];
-  for (let i = 0; i < events.length; i += 4) chunks.push(events.slice(i, i + 4).map((e, j) => ({ id: i + j, e })));
+  const tagged = events.map((e, id) => ({ id, e }));
+  const heavy = tagged.filter(({ e }) => complex(e));
+  const light = tagged.filter(({ e }) => !complex(e));
+  const chunks = [
+    ...split(heavy, 3).map((items) => ({ model: TERRA(), items })),
+    ...split(light, 5).map((items) => ({ model: LUNA(), items })),
+  ];
   try {
     const [parts, opener] = await Promise.all([
-      Promise.all(chunks.map((chunk, i) => ask(
-        i === 0 ? TERRA() : LUNA(),
+      Promise.all(chunks.map((chunk) => ask(
+        chunk.model,
         `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
-        { context, items: chunk.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
+        { context, items: chunk.items.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
         LINES, ctl.signal,
       ).catch(() => ({ items: [] })))),
       ask(
@@ -1136,8 +1155,8 @@ async function polish(events, context) {
       kept += 1;
       return { ...e, text: t, ai: true };
     });
-    console.log(`radio polish ok · ${TERRA()} + ${LUNA()} · ${kept}/${events.length} · ${chunks.length} casters`);
-    return { items, headline: opener?.headline?.trim() || null };
+    console.log(`radio polish ok · ${kept}/${events.length} · terra ${heavy.length} / luna ${light.length} lines · ${chunks.length} casters`);
+    return { items, headline: opener?.headline?.trim() || null, models: [...new Set([TERRA(), ...(light.length ? [LUNA()] : [])])] };
   } catch (e) {
     console.error('radio polish failed', e.message);
     return { items: events, headline: null };
@@ -1183,14 +1202,14 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const { items: top, headline } = await polish(
+    const { items: top, headline, models = [] } = await polish(
       pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12),
       `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`,
     );
     const body = {
       items: top.map(({ weight, ...e }) => e),
       headline,
-      model: top.some((e) => e.ai) || headline ? (top.length > 4 ? `${TERRA()} · ${LUNA()}` : TERRA()) : null,
+      model: top.some((e) => e.ai) || headline ? models.join(' · ') : null,
       at: new Date().toISOString(),
     };
     cache.set(ck, { at: Date.now(), body });

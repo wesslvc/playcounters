@@ -64,7 +64,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   if (isNow) {
     const m = kst.getUTCMonth() + 1;
     const race = await windowEvents(userId, { from: monthStart(y, m), to: monthStart(y, m + 1), mode, src, estimate });
-    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}` });
+    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}`, card: e.card && { ...e.card, tag: `${m}월 GP` } });
   }
 
   const { data, error } = await rpcAll('season_races', {
@@ -98,6 +98,10 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         title: `챔피언십 P${was} → P${pos}`,
         text: `이번 달이 지금 순위로 끝나면 ${name(c)} 챔피언십 P${was}에서 P${pos}로`,
         target: tgt(c),
+        card: {
+          head: 'CHAMPIONSHIP PROJECTION', left: { name: name(c), sub: c.track ? c.artist : null, artist: c.artist },
+          mid: { top: 'IF IT ENDED NOW', big: `P${was} ▸ P${pos}` }, foot: { l: `${y} SEASON`, r: `${c.pts} PTS` },
+        },
       });
     }
     if (i > 0) {
@@ -108,6 +112,13 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
           title: `챔피언십 P${pos - 1} 경쟁`,
           text: `${name(ifNow[i - 1])} vs ${name(c)}, ${gap === 0 ? '동점' : `${gap}pt 차`}`,
           target: tgt(c),
+          card: {
+            head: 'CHAMPIONSHIP BATTLE',
+            left: { name: name(c), sub: `${c.pts} PTS`, artist: c.artist },
+            right: { name: name(ifNow[i - 1]), sub: `${ifNow[i - 1].pts} PTS`, artist: ifNow[i - 1].artist },
+            mid: gap === 0 ? { top: 'POINTS', big: 'LEVEL' } : { top: 'GAP', big: String(gap), unit: 'PTS' },
+            foot: { l: `CHASING P${pos - 1}`, r: `${gap} PTS AHEAD` },
+          },
         });
       }
     }
@@ -117,6 +128,12 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       kind: 'lead', weight: 12, title: `${y} 챔피언십 선두`,
       text: `${name(ifNow[0])}, ${ifNow[0].pts - ifNow[1].pts}pt 차 선두`,
       target: tgt(ifNow[0]),
+      card: {
+        head: 'CHAMPIONSHIP LEADER',
+        left: { name: name(ifNow[0]), sub: `${ifNow[0].pts} PTS`, artist: ifNow[0].artist },
+        right: { name: name(ifNow[1]), sub: `${ifNow[1].pts} PTS`, artist: ifNow[1].artist },
+        mid: { top: 'LEAD', big: String(ifNow[0].pts - ifNow[1].pts), unit: 'PTS' }, foot: { l: 'P1', r: 'P2' },
+      },
     });
   }
   return events;

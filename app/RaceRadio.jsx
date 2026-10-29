@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { artistColor } from '@/lib/genre';
 
 /** What each kind of message is about, as a coloured dot beside its tag. */
 const TONE = {
@@ -8,6 +9,55 @@ const TONE = {
   projected: 'var(--ink)', lead: 'var(--ink-3)', hit: 'var(--gold)', near: 'var(--gold)',
 };
 const seenKey = (k) => `radio-seen|${k}`;
+
+/** The overtake-difficulty bar: ten cells, green to red, lit up to `v`. */
+function Meter({ v }) {
+  const lit = Math.round(Math.min(1, Math.max(0, v)) * 10);
+  return (
+    <span className="ins-meter" aria-label={`추월 난이도 ${Math.round(v * 100)}%`}>
+      <span className="ins-cells">
+        {Array.from({ length: 10 }, (_, i) => <i key={i} data-on={i < lit || undefined} style={{ '--h': 120 - i * 12 }} />)}
+      </span>
+      <small>OVERTAKE DIFFICULTY</small>
+    </span>
+  );
+}
+
+/**
+ * One message as a broadcast graphic, the way F1 TV's Insights panels sit
+ * over the race: a red-ruled head, the chaser on the left and the car ahead
+ * on the right in their team colours, the forecast boxed in the middle, and
+ * a strip of detail along the foot.
+ */
+function Broadcast({ card }) {
+  const s = (x, right) => x && (
+    <span className={`ins-side${right ? ' r' : ''}`} style={{ '--team': artistColor(x.artist) }}>
+      <b>{x.name}</b>
+      {x.sub && <small>{x.sub}</small>}
+    </span>
+  );
+  return (
+    <span className={`ins${card.right ? '' : ' solo'}`}>
+      <span className="ins-head">
+        <b>{card.head}</b>
+        <em>{card.tag ? `${card.tag} · ` : ''}<i>Insights</i></em>
+      </span>
+      <span className="ins-body">
+        {s(card.left)}
+        <span className="ins-mid">
+          <small>{card.mid.top}</small>
+          <b>{card.mid.pre && <i>{card.mid.pre} </i>}{card.mid.big}{card.mid.unit && <i> {card.mid.unit}</i>}</b>
+        </span>
+        {s(card.right, true)}
+      </span>
+      <span className="ins-foot">
+        <span>▸ {card.foot?.l}</span>
+        {card.meter != null ? <Meter v={card.meter} /> : <span />}
+        <span className="r">{card.foot?.r}</span>
+      </span>
+    </span>
+  );
+}
 
 /**
  * Race radio: the fights, overtakes, projected passes and milestones in
@@ -62,8 +112,12 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
     <>
       {toast && !open && (
         <button className="rr-toast" onClick={() => { setToast(null); setOpen(true); }}>
-          <span className="rr-tag"><i style={{ background: TONE[toast.kind] }} />{toast.title}</span>
-          <span className="rr-text">{toast.text}</span>
+          {toast.card ? <Broadcast card={toast.card} /> : (
+            <>
+              <span className="rr-tag"><i style={{ background: TONE[toast.kind] }} />{toast.title}</span>
+              <span className="rr-text">{toast.text}</span>
+            </>
+          )}
         </button>
       )}
 
@@ -80,7 +134,9 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
                 {items.map((it, i) => (
                   <li key={i}>
                     <button onClick={() => go(it)} disabled={!it.target}>
-                      <span className="rr-tag"><i style={{ background: TONE[it.kind] }} />{it.title}</span>
+                      {it.card ? <Broadcast card={it.card} /> : (
+                        <span className="rr-tag"><i style={{ background: TONE[it.kind] }} />{it.title}</span>
+                      )}
                       <span className="rr-text">{it.text}</span>
                     </button>
                   </li>

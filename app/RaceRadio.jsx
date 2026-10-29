@@ -7,7 +7,7 @@ import { nameOf, span } from '@/lib/radio';
 
 /** What the viewer can narrow the feed to. */
 const GROUPS = [
-  ['all', '전체'], ['battle', '경쟁'], ['move', '순위 변동'], ['forecast', '예상'],
+  ['all', '전체'], ['lead', '선두'], ['battle', '경쟁'], ['move', '순위 변동'], ['forecast', '예상'],
   ['milestone', '마일스톤'], ['champ', '챔피언십'],
 ];
 const seenKey = (k) => `radio-seen|${k}`;
@@ -56,6 +56,28 @@ function Side({ s, t, pic, top, align }) {
 function RadioCard({ it, covers, onOpen }) {
   const pics = (it.targets ?? []).slice(0, 2);
   const pic = (t) => coverOf(covers[isTrack(t) ? 'tracks' : 'artists'], isTrack(t) ? 'tracks' : 'artists', t);
+  if (it.odds?.length) {
+    return (
+      <button className="rr-card rr-odds" data-group={it.group} onClick={() => onOpen(it)}>
+        <span className="rr-tag">{it.title}</span>
+        <span className="rr-odds-list">
+          {it.odds.map((o, i) => (
+            <span className="rr-odd" key={i}>
+              <Cover src={pic(o)} size={i ? 36 : 44} round={!isTrack(o)} />
+              <span className="rr-odd-body">
+                <b className="rr-name">{nameOf(o)}</b>
+                <span className="rr-bar"><i style={{ width: `${Math.max(2, o.pct)}%` }} /></span>
+              </span>
+              <span className="rr-odd-pct" data-first={i === 0 || undefined}>{o.pct}<small>%</small></span>
+            </span>
+          ))}
+        </span>
+        <Line text={it.text} />
+        {it.detail && <span className="rr-detail">{it.detail}</span>}
+      </button>
+    );
+  }
+
   const d = it.duel;
   if (d && pics.length === 2) {
     const [a, b] = d.sides;
@@ -67,7 +89,13 @@ function RadioCard({ it, covers, onOpen }) {
         <span className="rr-vs">
           <Side s={a} t={pics[0]} pic={pic(pics[0])} top={top} align="l" />
           <span className="rr-mid">
-            {d.eta != null ? (
+            {d.hold != null ? (
+              <>
+                <small>1위 유지</small>
+                <b>{d.hold}%</b>
+                <small>{d.until} · {num(d.gap)}{unit} 차</small>
+              </>
+            ) : d.eta != null ? (
               <>
                 <small>추월까지</small>
                 <b>{span(d.eta)}</b>
@@ -237,7 +265,7 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
             ) : (
               <p className="rr-none">{data ? '지금은 조용해요. 눈에 띄는 경쟁이나 변동이 없어요.' : '무선 연결 중…'}</p>
             )}
-            {items.some((x) => x.ai) && <p className="rr-foot">AI 해설 · 수치는 실제 기록 기준</p>}
+            {data?.model && <p className="rr-foot">{data.model} 해설 · 수치는 실제 기록 기준</p>}
           </div>
         </>
       )}

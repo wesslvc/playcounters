@@ -840,6 +840,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-card { --acc:var(--ink-3); width:100%; padding:14px; border-radius:18px; background:var(--surface); border:1px solid var(--hair); text-align:left }
 .rr-card[data-group="battle"] { --acc:var(--live) }
 .rr-card[data-group="move"] { --acc:var(--pos) }
+.rr-card[data-group="lead"] { --acc:var(--gold) }
 .rr-card[data-group="forecast"] { --acc:#A855F7 }
 .rr-card[data-group="milestone"], .rr-card[data-group="champ"] { --acc:var(--gold) }
 .rr-dock > .rr-card { box-shadow:var(--shadow) }
@@ -880,6 +881,18 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-drift { margin-top:6px; padding:3px 8px; border-radius:999px; font-size:10.5px; font-weight:750; white-space:nowrap; background:var(--sunk); color:var(--ink-2) }
 .rr-mid .rr-after { margin-top:4px; font-size:10.5px; color:var(--ink-3) }
 .rr-drift[data-drift="closing"] { background:color-mix(in srgb, var(--acc) 14%, transparent); color:var(--acc) }
+
+/* the title odds: a bar each */
+.rr-odds { display:flex; flex-direction:column; gap:12px }
+.rr-odds-list { display:flex; flex-direction:column; gap:10px }
+.rr-odd { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px }
+.rr-odd-body { display:flex; flex-direction:column; gap:5px; min-width:0 }
+.rr-odd-body .rr-name { -webkit-line-clamp:1 }
+.rr-odd .rr-bar i { background:var(--sunk-2) }
+.rr-odd:first-child .rr-bar i { background:var(--acc) }
+.rr-odd-pct { min-width:52px; text-align:right; font-size:20px; font-weight:850; letter-spacing:-.04em; color:var(--ink-2); font-variant-numeric:tabular-nums }
+.rr-odd-pct[data-first] { font-size:28px; color:var(--acc) }
+.rr-odd-pct small { font-size:12px; font-weight:700; margin-left:1px }
 
 /* anything else: one picture, the line, its pace, the number large */
 .rr-solo { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:center }

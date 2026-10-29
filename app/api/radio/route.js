@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, F1_POINTS } from '@/lib/rank';
-import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick } from '@/lib/radio';
+import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -61,6 +61,33 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
 }
 
 /**
+ * Each contender's chance of the title. The rounds still to run are drawn
+ * from the rounds already run — a whole month at a time, so only one car
+ * can win each one — the recent months drawn more often, since form moves.
+ */
+function titleOdds(start, months, rounds, keys, runs = 4000) {
+  const won = new Array(keys.length).fill(0);
+  const weights = months.map((_, i) => i + 1);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const draw = () => {
+    let x = Math.random() * sum;
+    for (let i = 0; i < months.length; i++) if ((x -= weights[i]) < 0) return months[i];
+    return months[months.length - 1];
+  };
+  for (let s = 0; s < runs; s++) {
+    const tot = keys.map((k) => start.get(k) ?? 0);
+    for (let r = 0; r < rounds; r++) {
+      const m = draw();
+      keys.forEach((k, i) => { tot[i] += m.get(k) ?? 0; });
+    }
+    const best = Math.max(...tot);
+    const top = tot.flatMap((t, i) => (t === best ? [i] : []));
+    for (const i of top) won[i] += 1 / top.length;
+  }
+  return won.map((w) => w / runs);
+}
+
+/**
  * The championship: this month's race; the champion, or the leader and
  * whether it's settled; places no remaining round can change; and what
  * the standings become if this month ended now.
@@ -75,7 +102,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   if (isNow) {
     const m = lastM;
     const race = await windowEvents(userId, { from: monthStart(y, m), to: monthStart(y, m + 1), mode, src, estimate });
-    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}` });
+    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}`, ...(e.kind === 'lead' ? { weight: e.weight + 4 } : {}) });
   }
 
   const { data, error } = await rpcAll('season_races', {
@@ -102,6 +129,101 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   const roundsLeft = isNow ? 12 - lastM + 1 : 0;
   const maxLeft = F1_POINTS[0] * roundsLeft;
   const group = 'champ';
+
+  // each finished round's points, by car, oldest first
+  const byMonth = new Map();
+  for (const r of data ?? []) {
+    if (isNow && r.yr === y && r.mo === lastM) continue;
+    const m = byMonth.get(r.mo) ?? new Map();
+    m.set(keyOf(r), (m.get(keyOf(r)) ?? 0) + pointsForRank(r.place));
+    byMonth.set(r.mo, m);
+  }
+  const months = [...byMonth.keys()].sort((a, b) => a - b).map((k) => byMonth.get(k));
+
+  // the title odds: this month as it stands, the rest drawn from the season so far
+  if (isNow && ifNow.length >= 2 && months.length >= 2) {
+    const field = ifNow.slice(0, 10);
+    const start = new Map(field.map((c) => [keyOf(c), c.pts]));
+    const odds = titleOdds(start, months, 12 - lastM, field.map(keyOf))
+      .map((p, i) => ({ c: field[i], p }))
+      .sort((a, b) => b.p - a.p)
+      .slice(0, 3);
+    const alive = done.filter((c) => c.pts + maxLeft >= (done[0]?.pts ?? 0)).length;
+    const [f] = odds;
+    events.push({
+      kind: 'odds', group, weight: 94, title: `${y} 챔피언 가능성`,
+      text: f.p >= 0.995
+        ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
+        : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
+      detail: `남은 ${12 - lastM}라운드를 지난 라운드들로 4,000번 돌려본 결과 · 산술적 우승 가능 ${alive}명`,
+      stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
+      odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
+      targets: odds.map(({ c }) => targetOf(c)),
+    });
+  }
+
+  // who has won most, who stands on the podium most, who is in form
+  const tally = new Map();
+  for (const r of data ?? []) {
+    if (isNow && r.yr === y && r.mo === lastM) continue;
+    const t = tally.get(keyOf(r)) ?? { ...targetOf(r), wins: 0, podiums: 0, last3: 0 };
+    if (r.place === 1) t.wins += 1;
+    if (r.place <= 3) t.podiums += 1;
+    tally.set(keyOf(r), t);
+  }
+  const recent = months.slice(-3);
+  for (const [k, t] of tally) t.last3 = recent.reduce((a, m) => a + (m.get(k) ?? 0), 0);
+  const all = [...tally.values()];
+  const mostWins = [...all].sort((a, b) => b.wins - a.wins || b.podiums - a.podiums)[0];
+  const mostPods = [...all].sort((a, b) => b.podiums - a.podiums || b.wins - a.wins)[0];
+  const form = [...all].sort((a, b) => b.last3 - a.last3)[0];
+  if (mostWins?.wins >= 2) {
+    events.push({
+      kind: 'wins', group, weight: 52, title: '최다 우승',
+      text: `${nameOf(mostWins)}, 시즌 ${mostWins.wins}승으로 최다 우승`,
+      detail: `포디움 ${mostWins.podiums}회`,
+      stat: { value: String(mostWins.wins), unit: '승' }, targets: [targetOf(mostWins)],
+    });
+  }
+  if (mostPods && mostPods !== mostWins && mostPods.podiums >= 3) {
+    events.push({
+      kind: 'podiums', group, weight: 44, title: '최다 포디움',
+      text: `${nameOf(mostPods)}, 포디움 ${mostPods.podiums}회로 가장 꾸준함`,
+      detail: `우승 ${mostPods.wins}회`,
+      stat: { value: String(mostPods.podiums), unit: '포디움' }, targets: [targetOf(mostPods)],
+    });
+  }
+  if (form && recent.length === 3 && form.last3 > 0) {
+    events.push({
+      kind: 'form', group, weight: 48, title: '최근 폼',
+      text: `${nameOf(form)}, 최근 3라운드 ${form.last3}pt로 가장 뜨거움`,
+      detail: `라운드 평균 ${Math.round(form.last3 / 3)}pt`,
+      stat: { value: String(form.last3), unit: 'pt / 3R' }, targets: [targetOf(form)],
+    });
+  }
+
+  // what this month does to the gap at the top
+  if (isNow && done.length >= 2 && ifNow.length >= 2) {
+    const before = done[0].pts - done[1].pts;
+    const after = ifNow[0].pts - ifNow[1].pts;
+    const sameLead = keyOf(done[0]) === keyOf(ifNow[0]);
+    // would this month, ending as it stands, settle the title?
+    const settles = after > F1_POINTS[0] * (12 - lastM);
+    if (settles || !sameLead || Math.abs(after - before) >= 5) {
+      events.push({
+        kind: 'swing', group, weight: settles ? 85 : sameLead ? 58 : 80, title: `${lastM}월 GP 반영 시`,
+        text: settles
+          ? `${nameOf(ifNow[0])}, ${lastM}월이 이대로 끝나면 ${y} 챔피언 확정 · 격차 ${before}pt → ${after}pt`
+          : sameLead
+            ? `${nameOf(ifNow[0])} 선두 격차 ${before}pt → ${after}pt${after > before ? ' 확대' : ' 축소'}`
+            : `${nameOf(ifNow[0])}, 이번 달 결과대로면 챔피언십 선두 탈환`,
+        detail: `지금 순위로 ${lastM}월이 끝날 때`,
+        stat: { value: `${after}`, unit: 'pt 차' },
+        duel: { sides: [{ pos: 2, pts: ifNow[1].pts }, { pos: 1, pts: ifNow[0].pts }], gap: after, unit: 'pt', eta: null },
+        targets: [targetOf(ifNow[1]), targetOf(ifNow[0])],
+      });
+    }
+  }
 
   if (done.length >= 2) {
     const [a, b] = done;
@@ -242,6 +364,7 @@ async function polish(events, context) {
     const raw = json.output_text
       ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
     const items = JSON.parse(raw).items ?? [];
+    console.log(`radio polish ok · ${model} · ${items.length}/${events.length}`);
     return events.map((e, i) => {
       const t = items.find((x) => x.id === i)?.text?.trim();
       return t ? { ...e, text: t, ai: true } : e;
@@ -287,8 +410,12 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const top = await polish(pick(events), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
-    const body = { items: top.map(({ weight, ...e }) => e), at: new Date().toISOString() };
+    const top = await polish(pick(events, view === 'season' ? 16 : 10), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
+    const body = {
+      items: top.map(({ weight, ...e }) => e),
+      model: top.some((e) => e.ai) ? process.env.OPENAI_MODEL || 'gpt-6.1-terra' : null,
+      at: new Date().toISOString(),
+    };
     cache.set(ck, { at: Date.now(), body });
     if (cache.size > 200) cache.delete(cache.keys().next().value);
     return NextResponse.json(body);

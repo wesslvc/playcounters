@@ -851,3 +851,20 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 
 /* room under the last row for the LIVE button */
 .app { padding-bottom:72px }
+
+/* a finished Grand Prix opens on its podium: P2, P1, P3, the winner tallest */
+.podium { display:grid; grid-template-columns:1fr 1.2fr 1fr; align-items:end; gap:10px; margin:6px 0 14px }
+.pod { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; padding:14px 8px 14px; border-radius:18px;
+  background:var(--surface); border:1px solid var(--hair); text-align:center; --gem-gap:var(--surface) }
+.pod.p1 { padding:18px 10px 20px }
+.pod .cover { margin:6px 0 8px; box-shadow:var(--shadow) }
+.pod-rk { font-size:13px; font-weight:800; letter-spacing:.02em }
+.pod-rk[data-tier="1"] { color:var(--gold) } .pod-rk[data-tier="2"] { color:var(--silver) } .pod-rk[data-tier="3"] { color:var(--bronze) }
+.pod b { max-width:100%; font-size:14px; font-weight:700; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all }
+.pod.p1 b { font-size:16px }
+.pod span { max-width:100%; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.pod em { margin-top:4px; font-style:normal; font-size:11.5px; font-weight:600; color:var(--ink-3); white-space:nowrap }
+@media (max-width:560px) {
+  .pod .cover { width:64px !important; height:64px !important }
+  .pod.p1 .cover { width:88px !important; height:88px !important }
+}

@@ -107,15 +107,33 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
   }, [year, month, mode, source, estimate]);
 
   useCredits(detail?.items);
+  // a finished race opens on its podium, big
+  const podium = !live && detail ? detail.items.filter((t) => t.rank <= 3).slice(0, 3) : [];
+  const covers = useCovers(mode, podium.length ? podium : null);
+  const elite = useElite(source, estimate);
   if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
   if (!detail) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
   const { items, leaders, days } = detail;
   return (
     <>
     {leaders?.length > 0 && <RaceLeaders stints={leaders} days={days} live={live} />}
+    {podium.length === 3 && (
+      <div className="podium">
+        {[podium[1], podium[0], podium[2]].map((t) => (
+          <div key={rowKey(t)} className={`pod p${t.rank}`}>
+            <span className="pod-rk" data-tier={t.rank}>P{t.rank}</span>
+            <Cover src={coverOf(covers, mode, t)} size={t.rank === 1 ? 112 : 80} round={mode === 'artists'}
+                   className={elite(t) ? `gem ${elite(t)}` : ''} />
+            <b>{t.track ?? t.artist}</b>
+            {t.track && <span>{artistLine(t)}</span>}
+            <em>{t.points}pt · {t.plays.toLocaleString()}회</em>
+          </div>
+        ))}
+      </div>
+    )}
     <p className="gp-sub">{live ? '현재 순위' : '최종 순위'}</p>
     <ol className="gp-history result">
-      {items.map((t) => (
+      {items.filter((t) => podium.length !== 3 || t.rank > 3).map((t) => (
         <li className="gph-row" key={rowKey(t)}>
           <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>
             {t.rank <= 10 ? `P${t.rank}` : t.rank}

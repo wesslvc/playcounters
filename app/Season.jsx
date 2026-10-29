@@ -116,6 +116,16 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
   const { items, leaders, days } = detail;
   return (
     <>
+    {!live && (
+      <button
+        className="gp-radio"
+        onClick={() => window.dispatchEvent(new CustomEvent('race-radio', {
+          detail: { view: 'gp', year, month, mode, label: `${year} ${month}월 GP 다시보기` },
+        }))}
+      >
+        <i aria-hidden="true" />레이스 라디오로 다시보기<span aria-hidden="true">›</span>
+      </button>
+    )}
     {leaders?.length > 0 && <RaceLeaders stints={leaders} days={days} live={live} />}
     {podium.length === 3 && (
       <div className="podium">

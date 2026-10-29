@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { currentUserId } from '@/lib/db';
+import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
@@ -568,6 +568,236 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   return events;
 }
 
+/**
+ * A finished Grand Prix, told after the flag: how it was won, who led when,
+ * who came through the field in the second half, the finishes decided by a
+ * play, debut-month runs, and what the race did to both championships.
+ */
+async function gpEvents(userId, { year, month, mode, src, estimate }) {
+  const from = monthStart(year, month);
+  const to = monthStart(year, month + 1);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const args = { p_user: userId, p_from: iso(from), p_to: iso(to), p_mode: mode, p_tz: TZ, p_source: src, p_estimate: estimate };
+  const [fin, half, lead, season, debut] = await Promise.all([
+    standings(userId, from, to, mode, src, estimate, 30),
+    standings(userId, from, from + 15 * DAY, mode, src, estimate, 40),
+    db.rpc('month_leaders', args),
+    rpcAll('season_races', { ...args, p_from: iso(monthStart(year, 1)) }, 5000),
+    firstPlays(userId, mode, src, estimate),
+  ]);
+  if (season.error) throw new Error(season.error.message);
+  const events = [];
+  const [w, p2] = fin;
+  if (!w) return events;
+  const plays = (r) => Number(r.plays);
+  const finPos = new Map(fin.map((r, i) => [keyOf(r), i + 1]));
+  const halfPos = new Map(half.map((r, i) => [keyOf(r), i + 1]));
+  const gp = `${month}월 GP`;
+
+  // the win
+  if (p2) {
+    const gap = plays(w) - plays(p2);
+    const top10 = fin.slice(0, 10).reduce((a, r) => a + plays(r), 0);
+    const close = gap <= Math.max(2, plays(w) * 0.02);
+    const romp = gap >= plays(p2) * 0.3;
+    events.push({
+      kind: 'gp-win', group: 'lead', weight: 99,
+      title: `${gp} · ${romp ? '압도적 우승' : close ? '접전 끝 우승' : '우승'}`,
+      text: gap === 0
+        ? `${nameOf(w)} vs ${nameOf(p2)}, 둘 다 ${plays(w)}회 · 마지막 재생 순서로 ${nameOf(w)} 우승`
+        : `${nameOf(w)}, ${gp} 우승 · 2위 ${nameOf(p2)}에 ${gap}회 차`,
+      detail: `TOP 10 재생의 ${Math.round((plays(w) / top10) * 100)}% · ${plays(w)}회`,
+      stat: gap === 0 ? { value: '동률' } : { value: String(gap), unit: '회 차' },
+      duel: { sides: [{ pos: 1, plays: plays(w) }, { pos: 2, plays: plays(p2) }], gap, eta: null, lead: true, label: '우승 격차' },
+      targets: [targetOf(w), targetOf(p2)],
+    });
+  }
+
+  // who led when, from the day-by-day leaders
+  const stints = [];
+  for (const d of lead.error ? [] : lead.data ?? []) {
+    const k = `${d.artist_key}\u0000${d.track_key ?? ''}`;
+    const day = Number(String(d.day).slice(8, 10));
+    const prev = stints[stints.length - 1];
+    if (prev && prev.k === k) { prev.to = day; continue; }
+    stints.push({ k, from: day, to: day, row: fin.find((r) => keyOf(r) === k) ?? { artist: d.artist_key, track: d.track_key, artist_key: d.artist_key, track_key: d.track_key } });
+  }
+  if (stints.length) stints[stints.length - 1].to = lastDay;
+  if (stints.length === 1) {
+    events.push({
+      kind: 'gp-wire', group: 'lead', weight: 86, title: `${gp} · 폴 투 윈`,
+      text: `${nameOf(w)}, 첫날부터 ${lastDay}일까지 단 한 번도 선두를 내주지 않음`,
+      detail: '처음부터 끝까지 선두',
+      stat: { value: `${lastDay}일`, unit: '선두' }, targets: [targetOf(w)],
+    });
+  } else if (stints.length > 1) {
+    const days = new Map();
+    for (const st of stints) days.set(st.k, (days.get(st.k) ?? 0) + st.to - st.from + 1);
+    const [lk, ln] = [...days].sort((a, b) => b[1] - a[1])[0];
+    const longest = stints.find((st) => st.k === lk).row;
+    events.push({
+      kind: 'gp-changes', group: 'lead', weight: 70 + Math.min(10, stints.length),
+      title: `${gp} · 선두 교체 ${stints.length - 1}회`,
+      text: `${gp} 선두 교체 ${stints.length - 1}회 · 최장 선두 ${nameOf(longest)} ${ln}일`,
+      detail: stints.slice(-4).map((st) => `${st.from}일 ${nameOf(st.row)}`).join(' → '),
+      stat: { value: String(stints.length - 1), unit: '회 교체' }, targets: [targetOf(longest)],
+    });
+    const last = stints[stints.length - 1];
+    if (last.from >= lastDay - 6) {
+      events.push({
+        kind: 'gp-late', group: 'move', weight: 90, title: `${gp} · 막판 역전`,
+        text: `${nameOf(w)}, ${last.from}일에 선두를 빼앗아 역전 우승`,
+        detail: `직전 선두 ${nameOf(stints[stints.length - 2].row)}`,
+        stat: { value: `${last.from}일`, unit: '역전' }, targets: [targetOf(w)],
+      });
+    }
+    const pole = stints[0];
+    if (pole.k !== keyOf(w)) {
+      const p = finPos.get(pole.k);
+      events.push({
+        kind: 'gp-pole', group: 'move', weight: 52, title: `${gp} · 폴 포지션`,
+        text: `첫날 선두 ${nameOf(pole.row)}, 최종 ${p ? `P${p}` : '포인트권 밖'}`,
+        detail: pole.from === pole.to ? `${pole.from}일 선두` : `${pole.from}~${pole.to}일 선두`,
+        stat: { value: p ? `P${p}` : '–' }, targets: [targetOf(pole.row)],
+      });
+    }
+  }
+
+  // the second half: who came through, who faded
+  const moves = fin.slice(0, 10).map((r, i) => ({ r, pos: i + 1, was: halfPos.get(keyOf(r)) ?? 41 }));
+  const up = [...moves].sort((a, b) => (b.was - b.pos) - (a.was - a.pos))[0];
+  if (up && up.was - up.pos >= 3) {
+    events.push({
+      kind: 'gp-charge', group: 'move', weight: 74, title: `${gp} · 후반 질주`,
+      text: `${nameOf(up.r)}, 15일 기준 ${up.was > 40 ? '40위 밖' : `P${up.was}`}에서 최종 P${up.pos}`,
+      detail: `${up.was > 40 ? '40위 밖' : `P${up.was}`} → P${up.pos} · ${plays(up.r)}회`,
+      stat: up.was > 40 ? { value: `P${up.pos}`, unit: '40위 밖에서' } : { value: `+${up.was - up.pos}`, unit: '계단' }, targets: [targetOf(up.r)],
+    });
+  }
+  const down = half.slice(0, 5)
+    .map((r, i) => ({ r, was: i + 1, pos: finPos.get(keyOf(r)) ?? 31 }))
+    .sort((a, b) => (b.pos - b.was) - (a.pos - a.was))[0];
+  if (down && down.pos - down.was >= 3) {
+    events.push({
+      kind: 'gp-fade', group: 'forecast', weight: 60, title: `${gp} · 후반 페이스 하락`,
+      text: `${nameOf(down.r)}, 15일 기준 P${down.was}에서 최종 ${down.pos > 30 ? '30위 밖' : `P${down.pos}`}`,
+      detail: '후반 보름 동안 밀려남',
+      stat: { value: down.pos > 30 ? '–' : `P${down.pos}` }, targets: [targetOf(down.r)],
+    });
+  }
+
+  // places decided by a play or two
+  fin.slice(2, 10).forEach((r, j) => {
+    const i = j + 1; // P1's margin is the win card's
+    const ahead = fin[i];
+    const gap = plays(ahead) - plays(r);
+    if (gap <= 1) {
+      events.push({
+        kind: 'gp-photo', group: 'battle', weight: 66 - i, title: `${gp} · P${i + 1} 사진 판정`,
+        text: `${nameOf(ahead)} vs ${nameOf(r)}, ${gap === 0 ? '동률, 마지막 재생 순서로' : '1회 차로'} P${i + 1} 결정`,
+        detail: `${plays(ahead)}회 vs ${plays(r)}회`,
+        stat: gap === 0 ? { value: '동률' } : { value: '1', unit: '회 차' },
+        duel: { sides: [{ pos: i + 1, plays: plays(ahead) }, { pos: i + 2, plays: plays(r) }], gap, eta: null },
+        targets: [targetOf(ahead), targetOf(r)],
+      });
+    }
+  });
+
+  // debut-month runs
+  fin.slice(0, 10).forEach((r, i) => {
+    const first = debut.get(keyOf(r));
+    if (first == null || first < from || first >= to) return;
+    events.push({
+      kind: 'gp-rookie', group: 'rookie', weight: i === 0 ? 92 : 64 - i,
+      title: i === 0 ? `${gp} · 데뷔전 우승` : `${gp} · 루키 P${i + 1}`,
+      text: i === 0
+        ? `${nameOf(r)}, 처음 들은 지 ${Math.max(1, Math.round((to - first) / DAY))}일 만에 우승`
+        : `${nameOf(r)}, 데뷔 ${Math.max(1, Math.round((to - first) / DAY))}일 만에 P${i + 1}`,
+      detail: `${new Date(first + KST).getUTCDate()}일 첫 재생 · ${plays(r)}회`,
+      stat: { value: `P${i + 1}`, unit: '데뷔전' }, targets: [targetOf(r)],
+    });
+  });
+
+  // the championship, before and after this round
+  const rows = (season.data ?? []).filter((r) => r.yr === year);
+  const tot = (upTo) => {
+    const by = new Map();
+    for (const r of rows.filter((x) => x.mo <= upTo)) {
+      const c = by.get(keyOf(r)) ?? { ...targetOf(r), pts: 0, wins: 0 };
+      c.pts += pointsForRank(r.place);
+      if (r.place === 1) c.wins += 1;
+      by.set(keyOf(r), c);
+    }
+    return [...by.values()].sort((a, b) => b.pts - a.pts || b.wins - a.wins);
+  };
+  const before = tot(month - 1);
+  const after = tot(month);
+  const me = after.find((c) => keyOf(c) === keyOf(w));
+  if (me) {
+    let run = 0;
+    for (let mo = month; mo >= 1 && rows.some((r) => r.mo === mo && r.place === 1 && keyOf(r) === keyOf(w)); mo--) run++;
+    events.push({
+      kind: 'gp-tally', group: 'champ', weight: run >= 2 ? 84 : me.wins === 1 ? 72 : 58,
+      title: run >= 2 ? `${gp} · ${run}연승` : me.wins === 1 ? `${gp} · 시즌 첫 우승` : `${gp} · 시즌 ${me.wins}승째`,
+      text: run >= 2
+        ? `${nameOf(w)}, ${month - run + 1}월부터 ${run}연승`
+        : me.wins === 1 ? `${nameOf(w)}, ${year} 시즌 첫 GP 우승` : `${nameOf(w)}, ${year} 시즌 ${me.wins}승째`,
+      detail: `챔피언십 ${me.pts}pt · P${after.indexOf(me) + 1}`,
+      stat: { value: String(run >= 2 ? run : me.wins), unit: run >= 2 ? '연승' : '승' }, targets: [targetOf(w)],
+    });
+  }
+  if (after.length >= 2) {
+    const [a, b] = after;
+    const changed = before[0] && keyOf(before[0]) !== keyOf(a);
+    events.push({
+      kind: 'gp-standings', group: 'champ', weight: month === 12 ? 97 : changed ? 88 : 56,
+      title: month === 12 ? `${year} 최종전` : changed ? `${gp} 후 챔피언십 선두 교체` : `${gp} 후 챔피언십`,
+      text: month === 12
+        ? `${nameOf(a)}, 최종전까지 마치고 ${year} 챔피언 · ${a.pts - b.pts}pt 차`
+        : changed
+          ? `${nameOf(a)}, 이 GP로 챔피언십 선두 탈환 · ${nameOf(before[0])} 2위 이하로`
+          : `${nameOf(a)} 챔피언십 선두 유지 · 격차 ${before[0] && before[1] ? `${before[0].pts - before[1].pts}pt → ` : ''}${a.pts - b.pts}pt`,
+      detail: `${gp}까지 ${month}라운드`,
+      stat: { value: String(a.pts - b.pts), unit: 'pt 차' },
+      duel: { sides: [{ pos: 1, pts: a.pts }, { pos: 2, pts: b.pts }], gap: a.pts - b.pts, unit: 'pt', eta: null, lead: true },
+      targets: [targetOf(a), targetOf(b)],
+    });
+  }
+
+  // the constructors: who took the most out of this one race
+  if (mode === 'tracks') {
+    const top = fin.slice(0, 10);
+    const credits = await creditsFor(top);
+    const team = new Map();
+    top.forEach((r, i) => {
+      const list = creditList(r, credits);
+      const shares = splitPoints(pointsForRank(i + 1), list.length);
+      list.forEach(({ name, key }, j) => {
+        const t = team.get(key) ?? { artist: name, track: null, artist_key: key, track_key: null, pts: 0, cars: 0 };
+        if (key === r.artist_key) t.artist = r.artist;
+        t.pts += shares[j];
+        t.cars += 1;
+        team.set(key, t);
+      });
+    });
+    const [t] = [...team.values()].sort((a, b) => b.pts - a.pts);
+    let lockout = 0;
+    while (lockout < top.length && top[lockout].artist_key === top[0].artist_key) lockout++;
+    if (t && (t.cars >= 2 || lockout >= 2)) {
+      events.push({
+        kind: 'gp-team', group: 'cx', weight: lockout >= 3 ? 90 : lockout === 2 ? 78 : 54,
+        title: lockout >= 3 ? `${gp} · 포디움 독식` : lockout === 2 ? `${gp} · 원투 피니시` : `${gp} · 팀 최다 득점`,
+        text: lockout >= 3
+          ? `${top[0].artist}, P1~P${lockout} 독식`
+          : lockout === 2 ? `${top[0].artist}, P1·P2 원투 피니시` : `${t.artist}, TOP 10에 ${t.cars}곡 · 팀 최다 ${t.pts}pt`,
+        detail: `${t.artist} 팀 포인트 ${t.pts}pt · ${t.cars}곡`,
+        stat: { value: String(t.pts), unit: 'pt' }, targets: [targetOf(t)],
+      });
+    }
+  }
+  return events;
+}
+
 /** Awards: the clubs' marks in reach, or just passed. */
 async function milestoneContext(userId, { src, estimate }) {
   const now = Date.now();
@@ -605,7 +835,8 @@ async function polish(events, context) {
         instructions:
           '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. '
           + 'detail과 title을 참고하되 숫자·순위·이름은 그대로 두고 새로운 사실을 지어내지 마라. '
-          + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게.',
+          + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게. '
+          + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.',
         input: JSON.stringify({ context, items: events.map((e, i) => ({ id: i, title: e.title, text: e.text, detail: e.detail })) }),
         text: {
           format: {
@@ -667,7 +898,9 @@ export async function GET(req) {
 
   try {
     let events;
-    if (view === 'season') {
+    if (view === 'gp') {
+      events = await gpEvents(userId, { year: Number(q.get('year')), month: Number(q.get('month')), mode, src, estimate });
+    } else if (view === 'season') {
       const year = Number(q.get('year')) || null;
       events = await seasonEvents(userId, { year, mode, src, estimate });
     } else if (view === 'records') {
@@ -677,7 +910,7 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const top = await polish(pick(events, view === 'season' ? 30 : 12), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
+    const top = await polish(pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
     const body = {
       items: top.map(({ weight, ...e }) => e),
       model: top.some((e) => e.ai) ? process.env.OPENAI_MODEL || 'gpt-6.1-terra' : null,

@@ -873,7 +873,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-bar { display:flex; width:100%; height:5px; border-radius:3px; background:var(--sunk); overflow:hidden }
 .rr-side.r .rr-bar { justify-content:flex-end }
 .rr-bar i { display:block; height:100%; border-radius:3px; background:var(--ink) }
-.rr-side.l .rr-bar i { background:var(--acc) }
+.rr-side.fast .rr-bar i { background:var(--acc) }
 .rr-bar.wide { margin-top:6px }
 .rr-bar.wide i { background:var(--acc) }
 .rr-p7 { font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums }
@@ -924,6 +924,12 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .rr-mid b { font-size:26px }
 }
 @keyframes rr-in { from { opacity:0; transform:translate(-50%, 8px) } to { opacity:1; transform:translate(-50%, 0) } }
+
+/* a finished Grand Prix: replay it on the radio */
+.gp-radio { display:flex; align-items:center; gap:8px; width:100%; margin:4px 0 12px; padding:11px 14px; border-radius:14px;
+  background:var(--surface); border:1px solid var(--hair); font-size:13.5px; font-weight:700; color:var(--ink); text-align:left }
+.gp-radio i { width:7px; height:7px; border-radius:50%; background:var(--live) }
+.gp-radio span { margin-left:auto; font-size:18px; line-height:1; color:var(--ink-3) }
 
 /* room under the last row for the LIVE button */
 .app { padding-bottom:72px }

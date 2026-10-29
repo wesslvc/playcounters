@@ -31,7 +31,7 @@ function Line({ text }) {
 /** One car: picture, name, place, and its pace — the last three days, large, against the week. */
 function Side({ s, t, pic, top, align }) {
   return (
-    <span className={`rr-side ${align}`}>
+    <span className={`rr-side ${align}${s.p3 != null && top > 0 && s.p3 === top ? ' fast' : ''}`}>
       <Cover src={pic} size={48} round={!isTrack(t)} />
       <b className="rr-name">{nameOf(t)}</b>
       <small className="rr-pos">P{s.pos} · {s.pts != null ? `${num(s.pts)}pt` : `${num(s.plays)}회`}</small>
@@ -80,14 +80,17 @@ function RadioCard({ it, covers, onOpen }) {
 
   const d = it.duel;
   if (d && pics.length === 2) {
-    const [a, b] = d.sides;
+    // the higher place always on the left
+    const flip = d.sides[0].pos > d.sides[1].pos;
+    const [a, b] = flip ? [d.sides[1], d.sides[0]] : d.sides;
+    const [ta, tb] = flip ? [pics[1], pics[0]] : pics;
     const top = Math.max(a.p3 ?? 0, b.p3 ?? 0);
     const unit = d.unit ?? '회';
     return (
       <button className="rr-card rr-duel" data-group={it.group} onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-vs">
-          <Side s={a} t={pics[0]} pic={pic(pics[0])} top={top} align="l" />
+          <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
           <span className="rr-mid">
             {d.hold != null ? (
               <>
@@ -103,7 +106,7 @@ function RadioCard({ it, covers, onOpen }) {
               </>
             ) : (
               <>
-                <small>{d.lead ? '선두 격차' : '격차'}</small>
+                <small>{d.label ?? (d.lead ? '선두 격차' : '격차')}</small>
                 <b>{d.gap === 0 ? '동률' : num(d.gap)}</b>
                 {d.gap !== 0 && <small>{unit} 차</small>}
               </>
@@ -111,7 +114,7 @@ function RadioCard({ it, covers, onOpen }) {
             {d.drift && <span className="rr-drift" data-drift={d.drift}>{DRIFT[d.drift]}</span>}
             {d.after != null && <small className="rr-after">이 페이스면 {span(d.after)} 뒤</small>}
           </span>
-          <Side s={b} t={pics[1]} pic={pic(pics[1])} top={top} align="r" />
+          <Side s={b} t={tb} pic={pic(tb)} top={top} align="r" />
         </span>
         <Line text={it.text} />
       </button>
@@ -155,7 +158,10 @@ function RadioCard({ it, covers, onOpen }) {
  * visit, its top card rises on its own for a few seconds. The numbers come
  * from the server; the wording may be the AI's.
  */
-export default function RaceRadio({ ctx, source, estimate, onSelect }) {
+export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
+  // a view can tune the radio to something else on screen — a past Grand Prix — until it's closed
+  const [pin, setPin] = useState(null);
+  const ctx = pin ?? page;
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -172,7 +178,7 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
     const t = setTimeout(() => {
       const qs = new URLSearchParams({ view: ctx.view, source, label: ctx.label ?? '' });
       if (estimate) qs.set('estimate', '1');
-      for (const k of ['from', 'to', 'mode', 'year']) if (ctx[k] != null) qs.set(k, String(ctx[k]));
+      for (const k of ['from', 'to', 'mode', 'year', 'month']) if (ctx[k] != null) qs.set(k, String(ctx[k]));
       fetch(`/api/radio?${qs}`, { signal: ctl.signal })
         .then((r) => r.json())
         .then((j) => {
@@ -181,7 +187,7 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
           let seen = false;
           try { seen = sessionStorage.getItem(seenKey(ctxKey)) === '1'; sessionStorage.setItem(seenKey(ctxKey), '1'); } catch { /* private mode */ }
           const lead = j.items?.find((x) => x.kind !== 'lead');
-          if (!seen && lead) {
+          if (!seen && lead && !pin) {
             setToast(lead);
             clearTimeout(timer.current);
             timer.current = setTimeout(() => setToast(null), 6000);
@@ -194,7 +200,15 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
   }, [ctxKey]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => { setOpen(false); setToast(null); setGroup('all'); }, [ctxKey]);
+  useEffect(() => { setOpen(Boolean(pin)); setToast(null); setGroup('all'); }, [ctxKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pageKey = page ? JSON.stringify(page) : null;
+  useEffect(() => { setPin(null); }, [pageKey]);
+  useEffect(() => {
+    const on = (e) => setPin(e.detail);
+    window.addEventListener('race-radio', on);
+    return () => window.removeEventListener('race-radio', on);
+  }, []);
+  const close = () => { setOpen(false); setPin(null); };
 
   const items = useMemo(() => (data?.key === ctxKey ? data.items ?? [] : []), [data, ctxKey]);
   const shown = useMemo(() => (group === 'all' ? items : items.filter((x) => x.group === group)), [items, group]);
@@ -218,7 +232,7 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
   };
   const openItem = (it) => {
     if (it.targets?.[0]) onSelect(it.targets[0]);
-    setOpen(false);
+    close();
     setToast(null);
   };
 
@@ -232,11 +246,11 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
 
       {open && (
         <>
-          <button className="scrim" aria-label="닫기" onClick={() => setOpen(false)} />
+          <button className="scrim" aria-label="닫기" onClick={close} />
           <div className="rr-dock rr-panel" role="dialog" aria-label="레이스 라디오">
             <div className="rr-top">
               <b>Race Radio</b>
-              <span>{data?.label}</span>
+              <span>{ctx?.label}</span>
             </div>
             {groups.length > 2 && (
               <div className="rr-groups">
@@ -270,7 +284,7 @@ export default function RaceRadio({ ctx, source, estimate, onSelect }) {
         </>
       )}
 
-      <button className="rr-fab" aria-expanded={open} onClick={() => { setOpen((v) => !v); setToast(null); }}>
+      <button className="rr-fab" aria-expanded={open} onClick={() => { if (open) close(); else setOpen(true); setToast(null); }}>
         <i aria-hidden="true" data-on={news > 0 || undefined} />
         LIVE
         {news > 0 && <b>{news}</b>}

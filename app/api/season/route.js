@@ -4,7 +4,7 @@ import { normRowKey } from '@/lib/keys';
 import { pointsForRank, splitPoints } from '@/lib/rank';
 import { rpcAll } from '@/lib/rpcPage';
 import { genresFor } from '@/lib/families';
-import { creditsFor, creditList } from '@/lib/credits';
+import { creditsFor, creditList } from '@/lib/storedCredits';
 
 export const dynamic = 'force-dynamic';
 

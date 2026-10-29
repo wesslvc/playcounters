@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
-import { creditsFor, creditList } from '@/lib/credits';
+import { creditsFor, creditList } from '@/lib/storedCredits';
 import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';

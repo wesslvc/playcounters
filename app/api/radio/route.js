@@ -334,7 +334,6 @@ const costOf = (u, [pin, pout]) => ({
   usd: Math.round((((u?.input_tokens ?? 0) * pin + (u?.output_tokens ?? 0) * pout) / 1e6) * 1000) / 1000,
 });
 const cleanOdds = (odds, teams) => (odds ?? []).filter((o) => teams.includes(o.team)).sort((a, b) => b.pct - a.pct);
-const spread = (a, b) => Math.max(0, ...a.map((o) => Math.abs(o.pct - (b.find((x) => x.team === o.team)?.pct ?? 0))));
 
 /**
  * The constructors' title, judged from the season's raw records alone —
@@ -344,8 +343,8 @@ const spread = (a, b) => Math.max(0, ...a.map((o) => Math.abs(o.pct - (b.find((x
  *
  * Terra makes the call each day, handed Astra's last verdict and told to keep
  * to it unless things have really moved. Astra is asked when there's no
- * verdict of its own yet, when Terra says the picture has shifted or lands
- * well away from it, or when Terra can't call a close race and Astra's word
+ * verdict of its own yet, when Terra says the picture has shifted, or when
+ * Terra can't call a close race and Astra's word
  * is more than a week old — and never more than four times a month. The
  * day's call is kept in radio_notes; null when there's no key or no answer.
  */
@@ -396,9 +395,8 @@ async function judge(key, input) {
     const why = !astraPrev ? 'Astra 판단 없음'
       : !terra ? (stale ? 'Terra 응답 없음' : null)
         : terra.shifted ? 'Terra가 판세 변화 감지'
-          : spread(terra.odds, astraPrev.odds) >= 15 ? 'Terra와 Astra 판단 차이 15%p 이상'
-            : (!terra.confident || close) && stale ? '접전이라 Terra 판단 보류'
-              : null;
+          : (!terra.confident || close) && stale ? '접전이라 Terra 판단 보류'
+            : null;
     let astra = astraPrev;
     if (why && calls.length < 4) {
       try {

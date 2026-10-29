@@ -28,7 +28,7 @@ function Line({ text }) {
   );
 }
 
-/** One car: picture, name, place, and its pace — the last three days, large, against the week. */
+/** One car: picture, name, place, and its projected pace, large, against the week. */
 function Side({ s, t, pic, top, align }) {
   return (
     <span className={`rr-side ${align}${s.p3 != null && top > 0 && s.p3 === top ? ' fast' : ''}`}>
@@ -38,7 +38,7 @@ function Side({ s, t, pic, top, align }) {
       {s.p3 != null && (
         <>
           <span className="rr-pace" data-trend={s.trend || undefined}>
-            <b>{one(s.p3)}</b><small>회/일</small>{s.trend && <i>{ARROW[s.trend]}</i>}
+            <b>{one(s.p3)}</b><small>회/일 예상</small>{s.trend && <i>{ARROW[s.trend]}</i>}
           </span>
           <span className="rr-bar"><i style={{ width: `${top > 0 ? Math.max(4, (s.p3 / top) * 100) : 0}%` }} /></span>
           <small className="rr-p7">7일 평균 {one(s.p7)}</small>
@@ -138,7 +138,7 @@ function RadioCard({ it, covers, onOpen }) {
         <Line text={it.text} />
         {s?.p3 != null ? (
           <span className="rr-paceline" data-trend={s.trend || undefined}>
-            최근 3일 <b>{one(s.p3)}</b>회/일{s.trend && <i>{ARROW[s.trend]}</i>}
+            예상 페이스 <b>{one(s.p3)}</b>회/일{s.trend && <i>{ARROW[s.trend]}</i>}
             <span>· 7일 평균 {one(s.p7)}</span>
           </span>
         ) : it.detail && <span className="rr-detail">{it.detail}</span>}

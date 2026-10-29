@@ -40,13 +40,13 @@ async function rate(userId, from, days, mode, src, estimate, limit) {
 }
 
 /** The week's pace and the last three days', side by side. */
-async function paceOf(userId, from, mode, src, estimate, limit, long = false) {
+async function paceOf(userId, from, mode, src, estimate, limit) {
   const [p7, p3, p30] = await Promise.all([
     rate(userId, from, 7, mode, src, estimate, limit),
     rate(userId, from, 3, mode, src, estimate, limit),
-    long ? rate(userId, from, 30, mode, src, estimate, limit) : null,
+    rate(userId, from, 30, mode, src, estimate, limit),
   ]);
-  return { p7, p3, ...(p30 ? { p30 } : {}) };
+  return { p7, p3, p30 };
 }
 
 /** When each item was first ever played (ms), by key — the top few hundred. */
@@ -139,9 +139,9 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
   const [cur, then, pace] = await Promise.all([
     standings(userId, from, end, mode, src, estimate, open ? 60 : 15),
     live && now - back > from ? standings(userId, from, now - back, mode, src, estimate, open ? 60 : 15) : null,
-    live ? paceOf(userId, from, mode, src, estimate, 200, open || to - from > 45 * DAY) : null,
+    live ? paceOf(userId, from, mode, src, estimate, 200) : null,
   ]);
-  const events = rankingEvents(cur, then, pace, { live, endsAt: to, open });
+  const events = rankingEvents(cur, then, pace, { live, endsAt: to, open, from });
   if (open) events.push(...careerEvents(cur, then, pace, mode));
   // debuts only mean something in a short window
   if (to - from <= 120 * DAY && from > 0) {
@@ -157,7 +157,8 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
  */
 function titleOdds(start, months, rounds, keys, runs = 4000) {
   const won = new Array(keys.length).fill(0);
-  const weights = months.map((_, i) => i + 1);
+  // recent rounds count more, but only up to twice the oldest
+  const weights = months.map((_, i) => 1 + i / Math.max(1, months.length - 1));
   const sum = weights.reduce((a, b) => a + b, 0);
   const draw = () => {
     let x = Math.random() * sum;
@@ -659,7 +660,10 @@ async function careerSeasonEvents(userId, { mode, src, estimate }) {
     career.set(keyOf(r), c);
   }
   const all = [...career.values()].sort((a, b) => b.pts - a.pts || b.wins - a.wins);
-  const per = (c) => c.recent / Math.min(6, rounds.length);
+  // form and career together: the last six rounds and the average since its first
+  const per = (c) => 0.5 * (c.recent / Math.min(6, rounds.length))
+    // a short career is averaged over six rounds at least, so a hot debut isn't taken as a habit
+    + 0.5 * (c.pts / Math.max(6, rounds.filter((rd) => rd >= c.first).length));
   const months = (n) => (n >= 24 ? `${Math.round(n / 12)}년` : `${Math.round(n)}개월`);
 
   // how long the career lead lasts, on the last six rounds' form
@@ -675,9 +679,9 @@ async function careerSeasonEvents(userId, { mode, src, estimate }) {
     events.push({
       kind: 'career-hold', group, weight: t && t.n <= 6 ? 80 : 66, title,
       text: t
-        ? `${name(a)}, 최근 6라운드 흐름이면 통산 1위 약 ${months(t.n)} 더 유지 · 위협은 P${t.pos} ${name(t.c)}`
+        ? `${name(a)}, 최근 폼과 통산 평균을 함께 보면 통산 1위 약 ${months(t.n)} 더 유지 · 위협은 P${t.pos} ${name(t.c)}`
         : `${name(a)}, 통산 ${a.pts}pt로 1위 · 지금 흐름으로는 따라올 상대가 없음`,
-      detail: `최근 6라운드 평균 ${per(a).toFixed(1)}pt vs ${name(other)} ${per(other).toFixed(1)}pt · ${a.pts - other.pts}pt 차`,
+      detail: `라운드당 예상 ${per(a).toFixed(1)}pt vs ${name(other)} ${per(other).toFixed(1)}pt (최근 6라운드·통산 평균 종합) · ${a.pts - other.pts}pt 차`,
       stat: t ? { value: months(t.n), unit: '유지 예상' } : { value: String(a.pts - b.pts), unit: 'pt 차' },
       duel: { sides: [{ pos: 1, pts: a.pts }, { pos: t?.pos ?? 2, pts: other.pts }], gap: a.pts - other.pts, unit: 'pt', eta: null, lead: true, holdFor: t ? months(t.n) : '안정' },
       targets: [targetOf(a), targetOf(other)],
@@ -779,8 +783,9 @@ async function careerSeasonEvents(userId, { mode, src, estimate }) {
       const list = creditList(r, credits);
       const shares = splitPoints(pointsForRank(r.place), list.length);
       list.forEach(({ name, key }, i) => {
-        const t = team.get(key) ?? { artist: name, track: null, artist_key: key, track_key: null, pts: 0, wins: 0, recent: 0 };
+        const t = team.get(key) ?? { artist: name, track: null, artist_key: key, track_key: null, pts: 0, wins: 0, recent: 0, first: round(r) };
         if (key === r.artist_key) t.artist = r.artist;
+        t.first = Math.min(t.first, round(r));
         t.pts += shares[i];
         if (r.place === 1) t.wins += 1;
         if (recent.has(round(r))) t.recent += shares[i];

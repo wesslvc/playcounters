@@ -1049,20 +1049,24 @@ async function milestoneContext(userId, { src, estimate }) {
   ];
 }
 
-const MODEL = () => process.env.OPENAI_MODEL || 'gpt-6-luna';
-const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. '
+// Terra has the better voice and takes what's read first — the opening line and
+// the top cards; Luna, quicker and cheaper, takes the rest in parallel.
+const TERRA = () => process.env.OPENAI_MODEL || 'gpt-6.1-terra';
+const LUNA = () => process.env.OPENAI_MODEL_FAST || 'gpt-6-luna';
+const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 베테랑 캐스터다. '
   + '숫자·순위·이름은 주어진 그대로 쓰고 새로운 사실을 지어내지 마라. '
-  + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게. '
+  + '생생하고 맛깔나게: 추격, 방어, 언더컷, 슬립스트림, 체커기, 피트월 같은 레이싱 표현을 상황에 맞게 섞고, '
+  + '문장마다 시작과 리듬을 바꿔 같은 패턴을 반복하지 마라. 이모지와 느낌표 남발은 금지. '
   + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.';
 
 /** One structured call to the Responses API. */
-async function ask(instructions, input, schema, signal) {
+async function ask(model, instructions, input, schema, signal) {
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({
-      model: MODEL(),
+      model,
       reasoning: { effort: 'low' },
       instructions,
       input: JSON.stringify(input),
@@ -1111,12 +1115,14 @@ async function polish(events, context) {
   for (let i = 0; i < events.length; i += 4) chunks.push(events.slice(i, i + 4).map((e, j) => ({ id: i + j, e })));
   try {
     const [parts, opener] = await Promise.all([
-      Promise.all(chunks.map((chunk) => ask(
+      Promise.all(chunks.map((chunk, i) => ask(
+        i === 0 ? TERRA() : LUNA(),
         `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
         { context, items: chunk.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
         LINES, ctl.signal,
       ).catch(() => ({ items: [] })))),
       ask(
+        TERRA(),
         `${CASTER} 아래 항목들 중 가장 중요한 것 두세 개를 엮어 중계 오프닝 멘트를 한국어 한두 문장(70자 이내)으로 써라. 숫자는 항목에 있는 것만.`,
         { context, items: events.slice(0, 8).map((e) => ({ title: e.title, text: e.text })) },
         OPENER, ctl.signal,
@@ -1130,7 +1136,7 @@ async function polish(events, context) {
       kept += 1;
       return { ...e, text: t, ai: true };
     });
-    console.log(`radio polish ok · ${MODEL()} · ${kept}/${events.length} · ${chunks.length} casters`);
+    console.log(`radio polish ok · ${TERRA()} + ${LUNA()} · ${kept}/${events.length} · ${chunks.length} casters`);
     return { items, headline: opener?.headline?.trim() || null };
   } catch (e) {
     console.error('radio polish failed', e.message);
@@ -1184,7 +1190,7 @@ export async function GET(req) {
     const body = {
       items: top.map(({ weight, ...e }) => e),
       headline,
-      model: top.some((e) => e.ai) || headline ? MODEL() : null,
+      model: top.some((e) => e.ai) || headline ? (top.length > 4 ? `${TERRA()} · ${LUNA()}` : TERRA()) : null,
       at: new Date().toISOString(),
     };
     cache.set(ck, { at: Date.now(), body });

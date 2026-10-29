@@ -207,10 +207,11 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
  * than points. Every song with recent plays gets its expected plays for each
  * remaining month — the pace model, easing from now toward its long pace,
  * interest fading a little each month — with chance on top, shared by an
- * artist's songs, since going off an artist takes all of them down at once. Most months
- * bring a newcomer or two at the kind of count that has topped recent months
- * (usually someone new, sometimes a new song from a team already here). Each
- * month is then ranked and paid out like a real round, so a team with many
+ * artist's songs, since going off an artist takes all of them down at once.
+ * Each month also brings newcomers the way this season's months actually
+ * did: one past month's brand-new entries replayed as a batch, album drops
+ * and all (`drops`; a guess at P1-level counts only when there's too little
+ * history). Each month is then ranked and paid out like a real round, so a team with many
  * songs doing well collects across the order, and a single runaway song
  * pushes everyone else down a place. Returns each driver's and team's chance
  * of the title and their average points a round.
@@ -220,7 +221,7 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
  * @param base    plays that have taken P1 in recent months
  * @param credits stored credits (tracks mode), or null
  */
-function songSim({ recent, pace, from, base, credits, rounds, drivers, teams, runs = 2000 }) {
+function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, teams, runs = 2000 }) {
   const model = paceModel(pace, { from });
   const kst = new Date(Date.now() + KST);
   const monthEnd = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 1) - KST;
@@ -259,10 +260,22 @@ function songSim({ recent, pace, from, base, credits, rounds, drivers, teams, ru
       const month = new Map();
       const now = (artist) => month.get(artist) ?? month.set(artist, swing(artist) * Math.exp(0.25 * gauss() - 0.03)).get(artist);
       const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * now(s.artist) * Math.exp(0.3 * gauss() - 0.045)) }));
-      // newcomers: none, one or two, at a count that has been topping months
-      for (let n = poisson(0.7); n > 0; n--) {
-        const own = credits && Math.random() < 0.25 ? anyTeam() : null;
-        field.push({ key: `new-${k}-${n}`, team: own ? [own] : null, plays: Math.round(base * Math.exp(0.45 * gauss() - 0.2)) });
+      // newcomers, the way they have actually arrived this season: one past
+      // month's new entries replayed as they came, album drops and all — each
+      // artist's batch as a new team, or a returning one when that's who it was
+      if (drops?.length) {
+        const month = drops[Math.floor(Math.random() * drops.length)];
+        month.forEach((batch, b) => {
+          const team = batch.returning && credits ? anyTeam() : `new-${k}-${b}`;
+          const lift = Math.exp(0.3 * gauss() - 0.045);
+          batch.plays.forEach((pl, j) => {
+            field.push({ key: `new-${k}-${b}-${j}`, team: credits ? [team] : null, plays: Math.round(pl * lift * Math.exp(0.15 * gauss())) });
+          });
+        });
+      } else {
+        for (let n = poisson(0.7); n > 0; n--) {
+          field.push({ key: `new-${k}-${n}`, team: null, plays: Math.round(base * Math.exp(0.45 * gauss() - 0.2)) });
+        }
       }
       field.sort((a, b) => b.plays - a.plays || Math.random() - 0.5);
       field.slice(0, 10).forEach((e, i) => {
@@ -399,12 +412,29 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       .sort((a, b) => b.yr - a.yr || b.mo - a.mo).slice(0, 6).map((r) => Number(r.plays)).filter(Boolean)
       .sort((a, b) => a - b);
     const base = tops.length ? tops[Math.floor(tops.length / 2)] : Number(recent[0]?.plays ?? 0) / 2;
+    // each finished month's brand-new arrivals in the top ten (first played
+    // within six weeks of it), grouped by artist, with their counts
+    const debut = await firstPlays(userId, mode, src, estimate);
+    const doneRowsAll = (data ?? []).filter((r) => !(r.yr === y && r.mo === lastM));
+    const drops = [];
+    const seen = new Set();
+    let freshWins = 0;
+    for (const mo of [...new Set(doneRowsAll.map((r) => r.mo))].sort((a, b) => a - b)) {
+      const rows = doneRowsAll.filter((r) => r.mo === mo);
+      const fresh = rows.filter((r) => (debut.get(keyOf(r)) ?? 0) >= monthStart(y, mo) - 45 * DAY);
+      const byArtist = new Map();
+      for (const r of fresh) byArtist.set(r.artist_key, [...(byArtist.get(r.artist_key) ?? []), Number(r.plays)]);
+      if (mo > 1) drops.push([...byArtist].map(([artist, plays]) => ({ plays, returning: seen.has(artist) })));
+      if (fresh.some((r) => r.place === 1)) freshWins += 1;
+      for (const r of rows) seen.add(r.artist_key);
+    }
     if (recent.length) {
       sim = songSim({
-        recent, pace, from: since, base, credits, rounds: 12 - lastM,
+        recent, pace, from: since, base, drops: drops.length >= 3 ? drops : null, credits, rounds: 12 - lastM,
         drivers: new Map(ifNow.map((c) => [keyOf(c), c.pts])), teams: teamStart,
       });
       sim.base = base;
+      sim.history = `올해 ${drops.length + 1}달 중 ${freshWins}달은 신곡이 1위`;
     }
   }
 
@@ -435,7 +465,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       text: f.p >= 0.995
         ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
         : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
-      detail: `남은 ${12 - lastM}라운드를 곡별 예상 재생 수로 돌려본 결과 (신곡 등장 포함) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
+      detail: `남은 ${12 - lastM}라운드를 곡별 예상 재생 수로 돌린 결과 (신곡 등장은 올해 실제 기록대로) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
       targets: odds.map(({ c }) => targetOf(c)),
@@ -690,7 +720,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       events.push({
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
-        detail: `소속 곡들의 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌려본 결과 · 신곡 등장 포함`,
+        detail: `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`,
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
         targets: odds.map(({ c }) => targetOf(c)),

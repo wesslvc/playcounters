@@ -3,7 +3,7 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
-import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct } from '@/lib/radio';
+import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -40,12 +40,13 @@ async function rate(userId, from, days, mode, src, estimate, limit) {
 }
 
 /** The week's pace and the last three days', side by side. */
-async function paceOf(userId, from, mode, src, estimate, limit) {
-  const [p7, p3] = await Promise.all([
+async function paceOf(userId, from, mode, src, estimate, limit, long = false) {
+  const [p7, p3, p30] = await Promise.all([
     rate(userId, from, 7, mode, src, estimate, limit),
     rate(userId, from, 3, mode, src, estimate, limit),
+    long ? rate(userId, from, 30, mode, src, estimate, limit) : null,
   ]);
-  return { p7, p3 };
+  return { p7, p3, ...(p30 ? { p30 } : {}) };
 }
 
 /** When each item was first ever played (ms), by key — the top few hundred. */
@@ -59,6 +60,54 @@ function firstPlays(userId, mode, src, estimate) {
   p.catch(() => debuts.delete(k));
   debuts.set(k, { at: Date.now(), p });
   return p;
+}
+
+/**
+ * An all-time ranking's own stories: milestones in reach, the longest-serving
+ * and the newest of the top ten, the hottest of the last month, and who has
+ * climbed most in it.
+ */
+function careerEvents(cur, then, pace, mode) {
+  const out = [];
+  const marks = mode === 'artists' ? [500, 1000, 1500, 2000, 3000, 5000] : [100, 200, 300, 500, 1000];
+  // the month's marks passed, the biggest first, and those in reach — a few, not a list
+  const ms = milestoneEvents(cur.slice(0, 40), then, pace, marks, { label: (m) => `통산 ${m}회` })
+    .map((e) => (e.kind === 'hit' ? { ...e, detail: `${e.detail} · 최근 30일 사이` } : e))
+    .sort((a, b) => b.weight - a.weight);
+  out.push(...ms.filter((e) => e.kind === 'hit').slice(0, 2), ...ms.filter((e) => e.kind === 'near').slice(0, 2));
+  const top = cur.slice(0, 10).map((r, i) => ({ r, pos: i + 1, first: Date.parse(r.first_at) })).filter((x) => x.first);
+  const years = (ms) => (Date.now() - ms) / (365 * DAY);
+  const oldest = [...top].sort((a, b) => a.first - b.first)[0];
+  if (oldest && years(oldest.first) >= 1) {
+    out.push({
+      kind: 'veteran', group: 'move', weight: 48, title: '최장수 TOP 10',
+      text: `${nameOf(oldest.r)}, 첫 재생 ${Math.floor(years(oldest.first))}년이 지나도 통산 P${oldest.pos}`,
+      detail: `${new Date(oldest.first + KST).getUTCFullYear()}년 ${new Date(oldest.first + KST).getUTCMonth() + 1}월 첫 재생 · ${Number(oldest.r.plays).toLocaleString('ko-KR')}회`,
+      stat: { value: `${Math.floor(years(oldest.first))}년`, unit: '롱런' }, targets: [targetOf(oldest.r)],
+    });
+  }
+  const newest = [...top].sort((a, b) => b.first - a.first)[0];
+  if (newest && newest !== oldest && years(newest.first) < 1) {
+    const days = Math.round((Date.now() - newest.first) / DAY);
+    out.push({
+      kind: 'fast-riser', group: 'rookie', weight: 62, title: '가장 빠른 통산 TOP 10',
+      text: `${nameOf(newest.r)}, 처음 들은 지 ${span(days)} 만에 통산 P${newest.pos}`,
+      detail: `${Number(newest.r.plays).toLocaleString('ko-KR')}회 · 하루 평균 ${(Number(newest.r.plays) / Math.max(1, days)).toFixed(1)}회`,
+      stat: { value: `P${newest.pos}`, unit: span(days) }, targets: [targetOf(newest.r)],
+    });
+  }
+  if (pace?.p30) {
+    const hot = cur.slice(0, 40).map((r, i) => ({ r, pos: i + 1, p: pace.p30.get(keyOf(r)) ?? 0 })).sort((a, b) => b.p - a.p)[0];
+    if (hot && hot.p >= 1) {
+      out.push({
+        kind: 'hot', group: 'forecast', weight: 56, title: '최근 30일 최고 페이스',
+        text: `${nameOf(hot.r)}, 최근 30일 하루 ${hot.p.toFixed(1)}회로 통산 상위권에서 가장 뜨거움`,
+        detail: `통산 P${hot.pos} · ${Number(hot.r.plays).toLocaleString('ko-KR')}회`,
+        stat: { value: hot.p.toFixed(1), unit: '회/일' }, targets: [targetOf(hot.r)],
+      });
+    }
+  }
+  return out;
 }
 
 /** Items in this window's top ten that debuted inside it. */
@@ -84,12 +133,16 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
   const now = Date.now();
   const live = to > now;
   const end = Math.min(to, now + 60e3);
+  // all-time (or anything longer than a year): never settled, looked back on by the month
+  const open = from <= 0 || to - from > 400 * DAY;
+  const back = open ? 30 * DAY : LOOKBACK;
   const [cur, then, pace] = await Promise.all([
-    standings(userId, from, end, mode, src, estimate),
-    live && now - LOOKBACK > from ? standings(userId, from, now - LOOKBACK, mode, src, estimate) : null,
-    live ? paceOf(userId, from, mode, src, estimate, 200) : null,
+    standings(userId, from, end, mode, src, estimate, open ? 60 : 15),
+    live && now - back > from ? standings(userId, from, now - back, mode, src, estimate, open ? 60 : 15) : null,
+    live ? paceOf(userId, from, mode, src, estimate, 200, open) : null,
   ]);
-  const events = rankingEvents(cur, then, pace, { live, endsAt: to });
+  const events = rankingEvents(cur, then, pace, { live, endsAt: to, open });
+  if (open) events.push(...careerEvents(cur, then, pace, mode));
   // debuts only mean something in a short window
   if (to - from <= 120 * DAY && from > 0) {
     events.push(...rookieEvents(cur, await firstPlays(userId, mode, src, estimate), from, to));
@@ -569,6 +622,187 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
 }
 
 /**
+ * The all-time championship: careers rather than a season. Nothing is ever
+ * settled, so the leader's card says how long the lead should last — each
+ * chaser's points per round over its last six rounds against the leader's.
+ */
+async function careerSeasonEvents(userId, { mode, src, estimate }) {
+  const kst = new Date(Date.now() + KST);
+  const y = kst.getUTCFullYear();
+  const m = kst.getUTCMonth() + 1;
+  const events = [];
+  const race = await windowEvents(userId, { from: monthStart(y, m), to: monthStart(y, m + 1), mode, src, estimate });
+  for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}` });
+
+  const { data, error } = await rpcAll('season_races', {
+    p_user: userId, p_from: iso(0), p_to: iso(monthStart(y, m)),
+    p_mode: mode, p_tz: TZ, p_source: src, p_estimate: estimate,
+  }, 20000);
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  if (!rows.length) return events;
+  const round = (r) => r.yr * 12 + r.mo;
+  const rounds = [...new Set(rows.map(round))].sort((a, b) => a - b);
+  const recent = new Set(rounds.slice(-6));
+
+  const career = new Map();
+  for (const r of rows) {
+    const c = career.get(keyOf(r)) ?? { ...targetOf(r), pts: 0, wins: 0, podiums: 0, starts: 0, recent: 0, first: round(r), places: new Map() };
+    const p = pointsForRank(r.place);
+    c.pts += p;
+    c.starts += 1;
+    if (r.place === 1) c.wins += 1;
+    if (r.place <= 3) c.podiums += 1;
+    if (recent.has(round(r))) c.recent += p;
+    c.first = Math.min(c.first, round(r));
+    c.places.set(round(r), r.place);
+    career.set(keyOf(r), c);
+  }
+  const all = [...career.values()].sort((a, b) => b.pts - a.pts || b.wins - a.wins);
+  const per = (c) => c.recent / Math.min(6, rounds.length);
+  const months = (n) => (n >= 24 ? `${Math.round(n / 12)}년` : `${Math.round(n)}개월`);
+
+  // how long the career lead lasts, on the last six rounds' form
+  const holdCard = (list, name, group, title) => {
+    const [a, b] = list;
+    if (!a || !b) return;
+    const threats = list.slice(1, 8).map((c, i) => {
+      const d = per(c) - per(a);
+      return { c, pos: i + 2, n: d > 0.1 ? (a.pts - c.pts + 1) / d : null };
+    }).filter((x) => x.n != null).sort((x, z) => x.n - z.n);
+    const t = threats[0];
+    const other = t?.c ?? b;
+    events.push({
+      kind: 'career-hold', group, weight: t && t.n <= 6 ? 80 : 66, title,
+      text: t
+        ? `${name(a)}, 최근 6라운드 흐름이면 통산 1위 약 ${months(t.n)} 더 유지 · 위협은 P${t.pos} ${name(t.c)}`
+        : `${name(a)}, 통산 ${a.pts}pt로 1위 · 지금 흐름으로는 따라올 상대가 없음`,
+      detail: `최근 6라운드 평균 ${per(a).toFixed(1)}pt vs ${name(other)} ${per(other).toFixed(1)}pt · ${a.pts - other.pts}pt 차`,
+      stat: t ? { value: months(t.n), unit: '유지 예상' } : { value: String(a.pts - b.pts), unit: 'pt 차' },
+      duel: { sides: [{ pos: 1, pts: a.pts }, { pos: t?.pos ?? 2, pts: other.pts }], gap: a.pts - other.pts, unit: 'pt', eta: null, lead: true, holdFor: t ? months(t.n) : '안정' },
+      targets: [targetOf(a), targetOf(other)],
+    });
+  };
+  holdCard(all, nameOf, 'lead', '통산 포인트 1위 수성');
+
+  const best = (key, min) => {
+    const [c] = [...all].sort((a, b) => b[key] - a[key] || b.pts - a.pts);
+    return c && c[key] >= min ? c : null;
+  };
+  const w = best('wins', 2);
+  if (w) {
+    events.push({
+      kind: 'career-wins', group: 'champ', weight: 60, title: '통산 최다 우승',
+      text: `${nameOf(w)}, 통산 GP ${w.wins}승 · 출전 ${w.starts}라운드`,
+      detail: `승률 ${Math.round((w.wins / w.starts) * 100)}% · 포디움 ${w.podiums}회`,
+      stat: { value: String(w.wins), unit: '승' }, targets: [targetOf(w)],
+    });
+  }
+  const pd = best('podiums', 3);
+  if (pd && pd !== w) {
+    events.push({
+      kind: 'career-podiums', group: 'champ', weight: 50, title: '통산 최다 포디움',
+      text: `${nameOf(pd)}, 통산 포디움 ${pd.podiums}회`,
+      detail: `우승 ${pd.wins}회 · 출전 ${pd.starts}라운드`,
+      stat: { value: String(pd.podiums), unit: '포디움' }, targets: [targetOf(pd)],
+    });
+  }
+  const st = best('starts', 6);
+  if (st) {
+    events.push({
+      kind: 'career-starts', group: 'champ', weight: 46, title: '최다 출전',
+      text: `${nameOf(st)}, ${st.starts}라운드 포인트권 · 가장 오래 달린 차`,
+      detail: `통산 ${st.pts}pt · ${st.wins}승`,
+      stat: { value: String(st.starts), unit: '라운드' }, targets: [targetOf(st)],
+    });
+  }
+
+  // season titles: each finished year's points leader
+  const titles = new Map();
+  for (const yr of [...new Set(rows.map((r) => r.yr))].filter((x) => x < y)) {
+    const by = new Map();
+    for (const r of rows.filter((x) => x.yr === yr)) by.set(keyOf(r), (by.get(keyOf(r)) ?? 0) + pointsForRank(r.place));
+    const [k] = [...by].sort((a, b) => b[1] - a[1])[0] ?? [];
+    if (k) titles.set(k, [...(titles.get(k) ?? []), yr]);
+  }
+  if (titles.size) {
+    const list = [...titles].flatMap(([k, ys]) => ys.map((yr) => ({ yr, c: career.get(k) }))).sort((a, b) => a.yr - b.yr);
+    const [mk, mys] = [...titles].sort((a, b) => b[1].length - a[1].length)[0];
+    const latest = list[list.length - 1];
+    events.push({
+      kind: 'career-titles', group: 'champ', weight: mys.length >= 2 ? 72 : 56, title: '역대 시즌 챔피언',
+      text: mys.length >= 2
+        ? `${nameOf(career.get(mk))}, 시즌 챔피언 ${mys.length}회로 최다`
+        : `역대 챔피언 ${list.map((x) => `${x.yr} ${nameOf(x.c)}`).join(' · ')}`,
+      detail: list.map((x) => `${x.yr} ${nameOf(x.c)}`).join(' · '),
+      stat: { value: String(list.length), unit: '시즌' }, targets: [targetOf(latest.c)],
+    });
+  }
+
+  // the longest run of wins, ever
+  let streak = null;
+  for (const c of all.slice(0, 60)) {
+    let run = 0;
+    for (const rd of rounds) {
+      run = c.places.get(rd) === 1 ? run + 1 : 0;
+      if (run >= 2 && (!streak || run > streak.n)) streak = { c, n: run, end: rd };
+    }
+  }
+  if (streak) {
+    const s0 = streak.end - streak.n + 1;
+    const fmt = (rd) => `${Math.floor((rd - 1) / 12)}년 ${((rd - 1) % 12) + 1}월`;
+    events.push({
+      kind: 'career-streak', group: 'champ', weight: 58 + streak.n, title: '역대 최다 연승',
+      text: `${nameOf(streak.c)}, ${streak.n}연승 · 역대 최장`,
+      detail: `${fmt(s0)} ~ ${fmt(streak.end)}`,
+      stat: { value: String(streak.n), unit: '연승' }, targets: [targetOf(streak.c)],
+    });
+  }
+
+  // the best newcomer of the last year
+  const lastYear = rounds[rounds.length - 1] - 11;
+  const fresh = all.map((c, i) => ({ c, pos: i + 1 })).find((x) => x.c.first >= lastYear);
+  if (fresh) {
+    events.push({
+      kind: 'career-rookie', group: 'rookie', weight: 60, title: '최근 1년 데뷔 최고 순위',
+      text: `${nameOf(fresh.c)}, 데뷔 1년 안에 통산 포인트 P${fresh.pos}`,
+      detail: `${fresh.c.pts}pt · ${fresh.c.wins}승 · ${fresh.c.starts}라운드`,
+      stat: { value: `P${fresh.pos}`, unit: '루키' }, targets: [targetOf(fresh.c)],
+    });
+  }
+
+  // constructors, all time
+  if (mode === 'tracks') {
+    const credits = await creditsFor(rows);
+    const team = new Map();
+    for (const r of rows) {
+      const list = creditList(r, credits);
+      const shares = splitPoints(pointsForRank(r.place), list.length);
+      list.forEach(({ name, key }, i) => {
+        const t = team.get(key) ?? { artist: name, track: null, artist_key: key, track_key: null, pts: 0, wins: 0, recent: 0 };
+        if (key === r.artist_key) t.artist = r.artist;
+        t.pts += shares[i];
+        if (r.place === 1) t.wins += 1;
+        if (recent.has(round(r))) t.recent += shares[i];
+        team.set(key, t);
+      });
+    }
+    const teams = [...team.values()].sort((a, b) => b.pts - a.pts);
+    holdCard(teams, (c) => c.artist, 'cx', '통산 컨스트럭터 1위 수성');
+    const tw = [...teams].sort((a, b) => b.wins - a.wins)[0];
+    if (tw?.wins >= 2) {
+      events.push({
+        kind: 'career-cx-wins', group: 'cx', weight: 54, title: '통산 최다 우승 팀',
+        text: `${tw.artist}, 소속 곡들로 통산 ${tw.wins}승`,
+        detail: `팀 통산 ${tw.pts}pt`,
+        stat: { value: String(tw.wins), unit: '승' }, targets: [targetOf(tw)],
+      });
+    }
+  }
+  return events;
+}
+
+/**
  * A finished Grand Prix, told after the flag: how it was won, who led when,
  * who came through the field in the second half, the finishes decided by a
  * play, debut-month runs, and what the race did to both championships.
@@ -815,61 +1049,92 @@ async function milestoneContext(userId, { src, estimate }) {
   ];
 }
 
+const MODEL = () => process.env.OPENAI_MODEL || 'gpt-6-luna';
+const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. '
+  + '숫자·순위·이름은 주어진 그대로 쓰고 새로운 사실을 지어내지 마라. '
+  + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게. '
+  + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.';
+
+/** One structured call to the Responses API. */
+async function ask(instructions, input, schema, signal) {
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: MODEL(),
+      reasoning: { effort: 'low' },
+      instructions,
+      input: JSON.stringify(input),
+      text: { format: { type: 'json_schema', name: 'radio', strict: true, schema } },
+    }),
+  });
+  if (!res.ok) throw new Error(`openai ${res.status}`);
+  const json = await res.json();
+  const raw = json.output_text
+    ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
+  return JSON.parse(raw);
+}
+
+/** Every figure in a line, so a rewrite that drops or invents one can be refused. */
+const figures = (t) => (String(t).match(/\d+(?:[.,]\d+)*/g) ?? []).map((x) => x.replace(/,/g, '')).sort().join('|');
+
+const LINES = {
+  type: 'object', additionalProperties: false, required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['id', 'text'],
+        properties: { id: { type: 'integer' }, text: { type: 'string' } },
+      },
+    },
+  },
+};
+const OPENER = {
+  type: 'object', additionalProperties: false, required: ['headline'],
+  properties: { headline: { type: 'string' } },
+};
+
 /**
- * Rewords each message's line as race radio. Facts stay as given; any
- * failure leaves the plain lines in place.
+ * Rewords the lines as race radio — several casters at once, a few lines
+ * each, so a long feed comes back as fast as a short one — while another
+ * writes the opening line for the whole picture. A rewrite whose figures
+ * don't match the original's is thrown away; any failure leaves the plain
+ * lines in place.
  */
 async function polish(events, context) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || !events.length) return events;
-  const model = process.env.OPENAI_MODEL || 'gpt-6.1-terra';
+  if (!process.env.OPENAI_API_KEY || !events.length) return { items: events, headline: null };
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 9000);
+  const timer = setTimeout(() => ctl.abort(), 12000);
+  const chunks = [];
+  for (let i = 0; i < events.length; i += 4) chunks.push(events.slice(i, i + 4).map((e, j) => ({ id: i + j, e })));
   try {
-    const res = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      signal: ctl.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        instructions:
-          '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. '
-          + 'detail과 title을 참고하되 숫자·순위·이름은 그대로 두고 새로운 사실을 지어내지 마라. '
-          + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게. '
-          + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.',
-        input: JSON.stringify({ context, items: events.map((e, i) => ({ id: i, title: e.title, text: e.text, detail: e.detail })) }),
-        text: {
-          format: {
-            type: 'json_schema', name: 'radio', strict: true,
-            schema: {
-              type: 'object', additionalProperties: false, required: ['items'],
-              properties: {
-                items: {
-                  type: 'array',
-                  items: {
-                    type: 'object', additionalProperties: false, required: ['id', 'text'],
-                    properties: { id: { type: 'integer' }, text: { type: 'string' } },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
+    const [parts, opener] = await Promise.all([
+      Promise.all(chunks.map((chunk) => ask(
+        `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
+        { context, items: chunk.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
+        LINES, ctl.signal,
+      ).catch(() => ({ items: [] })))),
+      ask(
+        `${CASTER} 아래 항목들 중 가장 중요한 것 두세 개를 엮어 중계 오프닝 멘트를 한국어 한두 문장(70자 이내)으로 써라. 숫자는 항목에 있는 것만.`,
+        { context, items: events.slice(0, 8).map((e) => ({ title: e.title, text: e.text })) },
+        OPENER, ctl.signal,
+      ).catch(() => null),
+    ]);
+    const lines = new Map(parts.flatMap((p) => p.items ?? []).map((x) => [x.id, x.text?.trim()]));
+    let kept = 0;
+    const items = events.map((e, i) => {
+      const t = lines.get(i);
+      if (!t || figures(t) !== figures(e.text)) return e;
+      kept += 1;
+      return { ...e, text: t, ai: true };
     });
-    if (!res.ok) throw new Error(`openai ${res.status}`);
-    const json = await res.json();
-    const raw = json.output_text
-      ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
-    const items = JSON.parse(raw).items ?? [];
-    console.log(`radio polish ok · ${model} · ${items.length}/${events.length}`);
-    return events.map((e, i) => {
-      const t = items.find((x) => x.id === i)?.text?.trim();
-      return t ? { ...e, text: t, ai: true } : e;
-    });
+    console.log(`radio polish ok · ${MODEL()} · ${kept}/${events.length} · ${chunks.length} casters`);
+    return { items, headline: opener?.headline?.trim() || null };
   } catch (e) {
     console.error('radio polish failed', e.message);
-    return events;
+    return { items: events, headline: null };
   } finally {
     clearTimeout(timer);
   }
@@ -900,6 +1165,8 @@ export async function GET(req) {
     let events;
     if (view === 'gp') {
       events = await gpEvents(userId, { year: Number(q.get('year')), month: Number(q.get('month')), mode, src, estimate });
+    } else if (view === 'season' && q.get('all') === '1') {
+      events = await careerSeasonEvents(userId, { mode, src, estimate });
     } else if (view === 'season') {
       const year = Number(q.get('year')) || null;
       events = await seasonEvents(userId, { year, mode, src, estimate });
@@ -910,10 +1177,14 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const top = await polish(pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
+    const { items: top, headline } = await polish(
+      pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12),
+      `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`,
+    );
     const body = {
       items: top.map(({ weight, ...e }) => e),
-      model: top.some((e) => e.ai) ? process.env.OPENAI_MODEL || 'gpt-6.1-terra' : null,
+      headline,
+      model: top.some((e) => e.ai) || headline ? MODEL() : null,
       at: new Date().toISOString(),
     };
     cache.set(ck, { at: Date.now(), body });

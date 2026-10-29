@@ -92,7 +92,13 @@ function RadioCard({ it, covers, onOpen }) {
         <span className="rr-vs">
           <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
           <span className="rr-mid">
-            {d.hold != null ? (
+            {d.holdFor != null ? (
+              <>
+                <small>1위 유지</small>
+                <b>{d.holdFor}</b>
+                <small>{num(d.gap)}{unit} 차</small>
+              </>
+            ) : d.hold != null ? (
               <>
                 <small>1위 유지</small>
                 <b>{d.hold}%</b>
@@ -178,7 +184,7 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
     const t = setTimeout(() => {
       const qs = new URLSearchParams({ view: ctx.view, source, label: ctx.label ?? '' });
       if (estimate) qs.set('estimate', '1');
-      for (const k of ['from', 'to', 'mode', 'year', 'month']) if (ctx[k] != null) qs.set(k, String(ctx[k]));
+      for (const k of ['from', 'to', 'mode', 'year', 'month', 'all']) if (ctx[k] != null) qs.set(k, String(ctx[k]));
       fetch(`/api/radio?${qs}`, { signal: ctl.signal })
         .then((r) => r.json())
         .then((j) => {
@@ -252,6 +258,7 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
               <b>Race Radio</b>
               <span>{ctx?.label}</span>
             </div>
+            {data?.key === ctxKey && data.headline && <p className="rr-headline">{data.headline}</p>}
             {groups.length > 2 && (
               <div className="rr-groups">
                 {groups.map(([g, l]) => (

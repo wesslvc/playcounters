@@ -26,7 +26,7 @@ export default function Championship({ source, mode, estimate, calendar, version
   }, [years, year]);
   // what's on screen, for the race radio: a season (all-time follows this one)
   useEffect(() => {
-    onContext?.({ view: 'season', year: allTime ? null : year, mode, label: allTime ? '역대 통산' : `${year} 시즌` });
+    onContext?.({ view: 'season', year: allTime ? null : year, ...(allTime ? { all: 1 } : {}), mode, label: allTime ? '역대 통산' : `${year} 시즌` });
   }, [year, allTime, mode, onContext]);
 
   return (

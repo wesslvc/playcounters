@@ -3,7 +3,10 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
-import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span } from '@/lib/radio';
+import {
+  keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span,
+  paceModel, expectIn, poisson, gauss,
+} from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -199,6 +202,88 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
   return { odds: won.map((w) => w / runs), form };
 }
 
+/**
+ * The rest of the season played out song by song, on play counts rather
+ * than points. Every song with recent plays gets its expected plays for each
+ * remaining month — the pace model, easing from now toward its long pace,
+ * interest fading a little each month — with chance on top. Most months
+ * bring a newcomer or two at the kind of count that has topped recent months
+ * (usually someone new, sometimes a new song from a team already here). Each
+ * month is then ranked and paid out like a real round, so a team with many
+ * songs doing well collects across the order, and a single runaway song
+ * pushes everyone else down a place. Returns each driver's and team's chance
+ * of the title and their average points a round.
+ *
+ * @param recent  songs played in the last two months (ranked rows)
+ * @param pace    { p3, p7, p30 } for them
+ * @param base    plays that have taken P1 in recent months
+ * @param credits stored credits (tracks mode), or null
+ */
+function songSim({ recent, pace, from, base, credits, rounds, drivers, teams, runs = 2000 }) {
+  const model = paceModel(pace, { from });
+  const kst = new Date(Date.now() + KST);
+  const monthEnd = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 1) - KST;
+  const t0 = Math.max(0, (monthEnd - Date.now()) / DAY);
+  const songs = recent.map((r) => {
+    const m = model(r);
+    const team = credits ? creditList(r, credits).map((c) => c.key) : null;
+    // expected plays in each remaining month, interest fading 10% a month
+    const exp = Array.from({ length: rounds }, (_, k) => (expectIn(m, t0 + 30 * (k + 1)) - expectIn(m, t0 + 30 * k)) * 0.9 ** (k + 1));
+    return { key: keyOf(r), team, exp };
+  });
+  const teamWeight = new Map();
+  for (const s of songs) if (s.team) teamWeight.set(s.team[0], (teamWeight.get(s.team[0]) ?? 0) + s.exp[0]);
+  const teamPool = [...teamWeight];
+  const teamTotal = teamPool.reduce((a, [, w]) => a + w, 0);
+  const anyTeam = () => {
+    let x = Math.random() * teamTotal;
+    for (const [k, w] of teamPool) if ((x -= w) < 0) return k;
+    return teamPool[0]?.[0];
+  };
+
+  const dKeys = [...drivers.keys()];
+  const tKeys = [...(teams?.keys() ?? [])];
+  const dWon = new Map(dKeys.map((k) => [k, 0]));
+  const tWon = new Map(tKeys.map((k) => [k, 0]));
+  const dGot = new Map(dKeys.map((k) => [k, 0]));
+  const tGot = new Map(tKeys.map((k) => [k, 0]));
+  for (let run = 0; run < runs; run++) {
+    const d = new Map(drivers);
+    const t = new Map(teams ?? []);
+    for (let k = 0; k < rounds; k++) {
+      const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * Math.exp(0.35 * gauss() - 0.06)) }));
+      // newcomers: none, one or two, at a count that has been topping months
+      for (let n = poisson(0.7); n > 0; n--) {
+        const own = credits && Math.random() < 0.25 ? anyTeam() : null;
+        field.push({ key: `new-${k}-${n}`, team: own ? [own] : null, plays: Math.round(base * Math.exp(0.45 * gauss() - 0.2)) });
+      }
+      field.sort((a, b) => b.plays - a.plays || Math.random() - 0.5);
+      field.slice(0, 10).forEach((e, i) => {
+        const pts = F1_POINTS[i];
+        d.set(e.key, (d.get(e.key) ?? 0) + pts);
+        if (dGot.has(e.key)) dGot.set(e.key, dGot.get(e.key) + pts / rounds / runs);
+        if (e.team) {
+          splitPoints(pts, e.team.length).forEach((share, j) => {
+            t.set(e.team[j], (t.get(e.team[j]) ?? 0) + share);
+            if (tGot.has(e.team[j])) tGot.set(e.team[j], tGot.get(e.team[j]) + share / rounds / runs);
+          });
+        }
+      });
+    }
+    const crown = (m, won) => {
+      let best = -1;
+      let who = [];
+      for (const [k, v] of m) {
+        if (v > best) { best = v; who = [k]; } else if (v === best) who.push(k);
+      }
+      for (const k of who) if (won.has(k)) won.set(k, won.get(k) + 1 / who.length / runs);
+    };
+    crown(d, dWon);
+    if (teams) crown(t, tWon);
+  }
+  return { drivers: dWon, teams: tWon, driverPace: dGot, teamPace: tGot };
+}
+
 /** How far through the current month we are, in Seoul. */
 function monthElapsed() {
   const kst = new Date(Date.now() + KST);
@@ -219,8 +304,8 @@ function chaseCards(field, form, rounds, name, group, label) {
     if (rounds < 1 || need <= 0 || now < need * 0.8) return;
     out.push({
       kind: 'chase', group, weight: now >= need ? 78 - i : 60 - i, title: `${label} 역전 시나리오`,
-      text: `${name(c)}, 남은 ${rounds}라운드 라운드당 ${need}pt면 ${name(lead)} 역전 · 지금 폼은 라운드당 ${now}pt`,
-      detail: `현재 ${c.pts}pt vs ${lead.pts}pt · 폼은 이번 달·지난달·시즌 평균 종합`,
+      text: `${name(c)}, 남은 ${rounds}라운드 라운드당 ${need}pt면 ${name(lead)} 역전 · 예상 득점은 라운드당 ${now}pt`,
+      detail: `현재 ${c.pts}pt vs ${lead.pts}pt · 예상 득점은 곡별 재생 수 시뮬레이션 기준`,
       stat: { value: String(need), unit: 'pt/라운드 필요' },
       duel: { sides: [{ pos: 1, pts: lead.pts }, { pos: i + 2, pts: c.pts }], gap: lead.pts - c.pts, unit: 'pt', eta: null },
       targets: [targetOf(c), targetOf(lead)],
@@ -282,18 +367,59 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   }
   const months = [...byMonth.keys()].sort((a, b) => a - b).map((k) => byMonth.get(k));
 
-  // the title odds: this month as it stands, the rest drawn from the season so far
-  if (isNow && ifNow.length >= 2 && months.length >= 2) {
+  // the rest of the season played out song by song, once for both championships
+  let sim = null;
+  if (isNow && ifNow.length >= 2 && 12 - lastM > 0) {
+    const now = Date.now();
+    const since = now - 60 * DAY;
+    const [recent, pace] = await Promise.all([
+      standings(userId, since, now + 60e3, mode, src, estimate, 120),
+      paceOf(userId, since, mode, src, estimate, 200),
+    ]);
+    const credits = mode === 'tracks' ? await creditsFor([...recent, ...(data ?? [])]) : null;
+    let teamStart = null;
+    if (credits) {
+      teamStart = new Map();
+      for (const r of data ?? []) {
+        const list = creditList(r, credits);
+        splitPoints(pointsForRank(r.place), list.length).forEach((share, j) => {
+          teamStart.set(list[j].key, (teamStart.get(list[j].key) ?? 0) + share);
+        });
+      }
+    }
+    // what it has taken to top a month lately: the middle of the last six winners, so one runaway month doesn't set the bar
+    const tops = (data ?? []).filter((r) => r.place === 1 && !(r.yr === y && r.mo === lastM))
+      .sort((a, b) => b.yr - a.yr || b.mo - a.mo).slice(0, 6).map((r) => Number(r.plays)).filter(Boolean)
+      .sort((a, b) => a - b);
+    const base = tops.length ? tops[Math.floor(tops.length / 2)] : Number(recent[0]?.plays ?? 0) / 2;
+    if (recent.length) {
+      sim = songSim({
+        recent, pace, from: since, base, credits, rounds: 12 - lastM,
+        drivers: new Map(ifNow.map((c) => [keyOf(c), c.pts])), teams: teamStart,
+      });
+      sim.base = base;
+    }
+  }
+
+  // the title odds: this month as it stands, the rest played out
+  if (isNow && ifNow.length >= 2 && (sim || months.length >= 2)) {
     const field = ifNow.slice(0, 10);
     const start = new Map(field.map((c) => [keyOf(c), c.pts]));
-    const live = new Map();
-    for (const r of data ?? []) if (r.yr === y && r.mo === lastM) live.set(keyOf(r), pointsForRank(r.place));
-    const sim = titleOdds(start, months, live, 12 - lastM, field.map(keyOf), monthElapsed());
-    const odds = sim.odds
+    let chances;
+    let form;
+    if (sim) {
+      chances = field.map((c) => sim.drivers.get(keyOf(c)) ?? 0);
+      form = field.map((c) => sim.driverPace.get(keyOf(c)) ?? 0);
+    } else {
+      const live = new Map();
+      for (const r of data ?? []) if (r.yr === y && r.mo === lastM) live.set(keyOf(r), pointsForRank(r.place));
+      ({ odds: chances, form } = titleOdds(start, months, live, 12 - lastM, field.map(keyOf), monthElapsed()));
+    }
+    const odds = chances
       .map((p, i) => ({ c: field[i], p }))
       .sort((a, b) => b.p - a.p)
       .slice(0, 3);
-    if (sim.odds[0] < 0.97) events.push(...chaseCards(field, sim.form, 12 - lastM, nameOf, group, '챔피언십'));
+    if (chances[0] < 0.97) events.push(...chaseCards(field, form, 12 - lastM, nameOf, group, '챔피언십'));
     // still able to win it on paper, with this month ending as it stands
     const alive = ifNow.filter((c) => c.pts + F1_POINTS[0] * (12 - lastM) >= ifNow[0].pts).length;
     const [f] = odds;
@@ -302,7 +428,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       text: f.p >= 0.995
         ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
         : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
-      detail: `남은 ${12 - lastM}라운드 4,000번 시뮬레이션 (현재 폼·시즌 평균·깜짝 상승 종합) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
+      detail: `남은 ${12 - lastM}라운드를 곡별 예상 재생 수로 돌려본 결과 (신곡 등장 포함) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
       targets: odds.map(({ c }) => targetOf(c)),
@@ -542,15 +668,22 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     if (isNow && cNow.length >= 2 && months.length >= 2) {
       const field = cNow.slice(0, 8);
       const cMonths = doneMos.map((mo) => new Map(teams(doneRows.filter((r) => r.mo === mo)).map((c) => [c.artist_key, c.pts])));
-      const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
-      const sim = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed());
-      const odds = sim.odds.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
-      // ranked by points with this month in, for the chase: who could catch the leader
-      events.push(...chaseCards(field, sim.form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
+      let chances;
+      let form;
+      if (sim) {
+        chances = field.map((c) => sim.teams.get(c.artist_key) ?? 0);
+        form = field.map((c) => sim.teamPace.get(c.artist_key) ?? 0);
+      } else {
+        const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
+        ({ odds: chances, form } = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed()));
+      }
+      const odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      // who could still catch the leader, and what it would take
+      events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
       events.push({
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
-        detail: `남은 ${12 - lastM}라운드 4,000번 시뮬레이션 · 현재 폼(이번 달·지난달)·시즌 평균·깜짝 상승 가능성 종합`,
+        detail: `소속 곡들의 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌려본 결과 · 신곡 등장 포함`,
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
         targets: odds.map(({ c }) => targetOf(c)),
@@ -594,7 +727,10 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
             : oneTwo
               ? `${t.artist}, ${lastM}월 GP 원투 피니시 페이스 · TOP 10에 ${top10}곡`
               : `${t.artist}, ${lastM}월 GP TOP 10에 ${top10}곡`,
-          detail: `이대로면 팀 포인트 +${t.pts}pt`,
+          // points like these come from many songs doing well and nobody running away with it
+          detail: `이대로면 팀 포인트 +${t.pts}pt${sim?.base && Number(liveRows[0].plays)
+            ? ` · 이번 달 1위 곡 ${Number(liveRows[0].plays)}회 (최근 1위 보통 ${Math.round(sim.base)}회)${Number(liveRows[0].plays) < sim.base * 0.75 ? ' · 압도적인 곡 없이 고른 강세' : ''}`
+            : ''}`,
           stat: { value: `+${t.pts}`, unit: 'pt' },
           targets: [targetOf(t)],
         });

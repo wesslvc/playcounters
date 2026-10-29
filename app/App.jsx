@@ -6,6 +6,7 @@ import Championship from './Championship';
 import Replay from './Replay';
 import Records from './Records';
 import Detail from './Detail';
+import RaceRadio from './RaceRadio';
 import Picker from './Picker';
 import { Seg } from './ui';
 import { invalidate } from './data';
@@ -78,6 +79,8 @@ export default function App({ initialTab = 'chart' }) {
   const [syncMsg, setSyncMsg] = useState(null);
   const [menu, setMenu] = useState(false);
   const [detail, setDetail] = useState(null);
+  // what the open view is showing, for the race radio
+  const [radioCtx, setRadioCtx] = useState(null);
   // A year handed over from the chart ("스탠딩 보기"), read once by the championship.
   const [seasonYear, setSeasonYear] = useState(null);
 
@@ -159,7 +162,7 @@ export default function App({ initialTab = 'chart' }) {
 
   const syncedAt = me?.user?.last_synced_at;
   const calibrated = Boolean(me?.calibrated);
-  const shared = { source: src, mode, estimate: estimate && calibrated, calendar, version, onSelect: setDetail, go };
+  const shared = { source: src, mode, estimate: estimate && calibrated, calendar, version, onSelect: setDetail, go, onContext: setRadioCtx };
 
   return (
     <div className="app">
@@ -228,6 +231,7 @@ export default function App({ initialTab = 'chart' }) {
       </main>
 
       <Detail target={detail} source={src} estimate={estimate && calibrated} onClose={closeDetail} />
+      <RaceRadio ctx={radioCtx} source={src} estimate={estimate && calibrated} onSelect={setDetail} />
 
       <footer className="foot" />
     </div>

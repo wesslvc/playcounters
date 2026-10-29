@@ -11,7 +11,7 @@ import Season from './Season';
  * one fixed ruler to mean anything across months — whatever the chart tab
  * happens to be sorted by.
  */
-export default function Championship({ source, mode, estimate, calendar, version, onSelect, year: asked, onYear }) {
+export default function Championship({ source, mode, estimate, calendar, version, onSelect, year: asked, onYear, onContext }) {
   const [allTime, setAllTime] = useState(false);
   const years = useMemo(() => yearsFromCalendar(calendar ?? []), [calendar]);
   const [year, setYear] = useState(asked ?? null);
@@ -24,6 +24,10 @@ export default function Championship({ source, mode, estimate, calendar, version
   useEffect(() => {
     if (years.length && !years.some((y) => y.value === year)) setYear(years[0].value);
   }, [years, year]);
+  // what's on screen, for the race radio: a season (all-time follows this one)
+  useEffect(() => {
+    onContext?.({ view: 'season', year: allTime ? null : year, mode, label: allTime ? '역대 통산' : `${year} 시즌` });
+  }, [year, allTime, mode, onContext]);
 
   return (
     <section className="view season-view">

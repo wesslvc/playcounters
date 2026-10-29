@@ -101,13 +101,20 @@ function Export({ tracks, year, q }) {
  * albums, what was new in it, each month's number one — and the songs
  * ready to take away as a playlist.
  */
-export default function Replay({ source, estimate, calendar, version, onSelect }) {
+export default function Replay({ source, estimate, calendar, version, onSelect, onContext }) {
   const quarters = useMemo(() => quartersOf(calendar), [calendar]);
   const [pick, setPick] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [shown, setShown] = useState(10);
   const elite = useElite(source, estimate);
+  // what's on screen, for the race radio: the quarter's songs
+  useEffect(() => {
+    if (!pick) return;
+    const at = (y, m) => new Date(Date.UTC(y, m - 1, 1) - 9 * 3600e3).toISOString();
+    const m0 = (pick.q - 1) * 3 + 1;
+    onContext?.({ view: 'replay', from: at(pick.y, m0), to: at(pick.y, m0 + 3), mode: 'tracks', label: `${pick.y} Q${pick.q}` });
+  }, [pick, onContext]);
 
   useEffect(() => {
     if (quarters.length && !quarters.some((x) => pick && x.y === pick.y && x.q === pick.q)) setPick(quarters[0]);

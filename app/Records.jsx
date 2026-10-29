@@ -257,10 +257,11 @@ function ClubRoster({ def, list, covers, onSelect, elite }) {
  * The listening records come from one query over all of history; the Grand
  * Prix ones from the all-time championship.
  */
-export default function Records({ source, estimate, version, onSelect }) {
+export default function Records({ source, estimate, version, onSelect, onContext }) {
   // one group at a time, the 1000 Club first, rather than one long scroll
   const [group, setGroup] = useState(AWARD_GROUPS[0].key);
   const elite = useElite(source, estimate);
+  useEffect(() => { onContext?.({ view: 'records', label: 'Awards' }); }, [onContext]);
   const [plays, setPlays] = useState(null);
   const [career, setCareer] = useState(null);
   const [error, setError] = useState(null);

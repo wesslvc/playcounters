@@ -250,7 +250,7 @@ function Highlights({ rows, ranks, daily, prevRank, prevComplete, familyOf }) {
  * Prix finishes, and every row shows how it moved against the window before
  * (or that it is new); the championship, with its points, is one tap away.
  */
-export default function Chart({ source: src, mode, estimate, calendar, version, onSelect, go }) {
+export default function Chart({ source: src, mode, estimate, calendar, version, onSelect, go, onContext }) {
   const [sel, setSel] = useState(null);
   const [sort, setSort] = useState('plays');
   const [viz, setViz] = useState('count');
@@ -313,6 +313,10 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
   }, [monthDaysWithPlays, sel?.y, sel?.m, sel?.w]);
 
   const range = useMemo(() => rangeFor(sel), [sel]);
+  // what's on screen, for the race radio
+  useEffect(() => {
+    onContext?.({ view: 'chart', from: range.from, to: range.to, mode, label: rangeTitle(sel) });
+  }, [range, mode, sel, onContext]);
 
   const fetchStats = useCallback(async (signal) => {
     const { from, to, prevFrom, prevTo } = range;

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
-import { pointsForRank, F1_POINTS } from '@/lib/rank';
+import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
+import { creditsFor, creditList } from '@/lib/credits';
 import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +48,37 @@ async function paceOf(userId, from, mode, src, estimate, limit) {
   return { p7, p3 };
 }
 
+/** When each item was first ever played (ms), by key — the top few hundred. */
+const debuts = new Map();
+function firstPlays(userId, mode, src, estimate) {
+  const k = `${userId}|${mode}|${src}|${estimate}`;
+  const hit = debuts.get(k);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.p;
+  const p = standings(userId, 0, Date.now() + 60e3, mode, src, estimate, 400)
+    .then((rows) => new Map(rows.map((r) => [keyOf(r), Date.parse(r.first_at)])));
+  p.catch(() => debuts.delete(k));
+  debuts.set(k, { at: Date.now(), p });
+  return p;
+}
+
+/** Items in this window's top ten that debuted inside it. */
+function rookieEvents(rows, debut, from, to) {
+  const out = [];
+  rows.slice(0, 10).forEach((r, i) => {
+    const first = debut.get(keyOf(r));
+    if (first == null || first < from || first > to) return;
+    const days = Math.max(1, Math.round((Math.min(to, Date.now()) - first) / DAY));
+    out.push({
+      kind: 'rookie', group: 'rookie', weight: 58 - i * 2, title: `루키 · P${i + 1}`,
+      text: `${nameOf(r)}, 데뷔 ${days}일 만에 P${i + 1}`,
+      detail: `${new Date(first + KST).getUTCMonth() + 1}월 ${new Date(first + KST).getUTCDate()}일 첫 재생 · ${Number(r.plays)}회`,
+      stat: { value: `P${i + 1}`, unit: '루키' },
+      targets: [targetOf(r)],
+    });
+  });
+  return out.slice(0, 3);
+}
+
 /** A ranked window: the chart's, a Replay quarter, this month's Grand Prix. */
 async function windowEvents(userId, { from, to, mode, src, estimate }) {
   const now = Date.now();
@@ -57,7 +89,12 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
     live && now - LOOKBACK > from ? standings(userId, from, now - LOOKBACK, mode, src, estimate) : null,
     live ? paceOf(userId, from, mode, src, estimate, 200) : null,
   ]);
-  return rankingEvents(cur, then, pace, { live, endsAt: to });
+  const events = rankingEvents(cur, then, pace, { live, endsAt: to });
+  // debuts only mean something in a short window
+  if (to - from <= 120 * DAY && from > 0) {
+    events.push(...rookieEvents(cur, await firstPlays(userId, mode, src, estimate), from, to));
+  }
+  return events;
 }
 
 /**
@@ -148,14 +185,15 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       .map((p, i) => ({ c: field[i], p }))
       .sort((a, b) => b.p - a.p)
       .slice(0, 3);
-    const alive = done.filter((c) => c.pts + maxLeft >= (done[0]?.pts ?? 0)).length;
+    // still able to win it on paper, with this month ending as it stands
+    const alive = ifNow.filter((c) => c.pts + F1_POINTS[0] * (12 - lastM) >= ifNow[0].pts).length;
     const [f] = odds;
     events.push({
       kind: 'odds', group, weight: 94, title: `${y} 챔피언 가능성`,
       text: f.p >= 0.995
         ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
         : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
-      detail: `남은 ${12 - lastM}라운드를 지난 라운드들로 4,000번 돌려본 결과 · 산술적 우승 가능 ${alive}명`,
+      detail: `남은 ${12 - lastM}라운드를 지난 라운드들로 4,000번 돌려본 결과 · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
       targets: odds.map(({ c }) => targetOf(c)),
@@ -268,6 +306,235 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         });
       }
     }
+  }
+
+  const isLive = (r) => isNow && r.yr === y && r.mo === lastM;
+  const doneRows = (data ?? []).filter((r) => !isLive(r));
+  const liveRows = (data ?? []).filter(isLive).sort((a, b) => a.place - b.place);
+  const doneMos = [...new Set(doneRows.map((r) => r.mo))].sort((a, b) => a - b);
+  const lastMo = doneMos[doneMos.length - 1];
+
+  // ---- streaks, first wins, last round's winner ----
+  const places = new Map(); // key -> Map(month -> place)
+  for (const r of doneRows) {
+    const m = places.get(keyOf(r)) ?? new Map();
+    m.set(r.mo, r.place);
+    places.set(keyOf(r), m);
+  }
+  const winRun = (k, upTo) => { // wins in a row, ending at month upTo
+    let n = 0;
+    for (let i = doneMos.indexOf(upTo); i >= 0 && places.get(k)?.get(doneMos[i]) === 1; i--) n++;
+    return n;
+  };
+  let bestRun = null;
+  for (const r of doneRows.filter((x) => x.place === 1)) {
+    const n = winRun(keyOf(r), r.mo);
+    if (n >= 2 && (!bestRun || n > bestRun.n)) bestRun = { r, n };
+  }
+  if (bestRun) {
+    events.push({
+      kind: 'win-streak', group, weight: 46 + bestRun.n, title: '최다 연승',
+      text: `${nameOf(bestRun.r)}, 시즌 최다 ${bestRun.n}연승`,
+      detail: `${doneMos[doneMos.indexOf(bestRun.r.mo) - bestRun.n + 1]}~${bestRun.r.mo}월 GP`,
+      stat: { value: String(bestRun.n), unit: '연승' }, targets: [targetOf(bestRun.r)],
+    });
+  }
+  // the longest run of scoring rounds still going
+  let scoring = null;
+  for (const [k, m] of places) {
+    let n = 0;
+    for (let i = doneMos.length - 1; i >= 0 && m.has(doneMos[i]); i--) n++;
+    if (n >= 4 && (!scoring || n > scoring.n)) scoring = { k, n };
+  }
+  if (scoring) {
+    const r = doneRows.find((x) => keyOf(x) === scoring.k);
+    events.push({
+      kind: 'points-streak', group, weight: 42 + scoring.n / 2, title: '연속 포인트',
+      text: `${nameOf(r)}, ${scoring.n}라운드 연속 포인트 피니시`,
+      detail: '매달 TOP 10 안에 든 연속 기록',
+      stat: { value: String(scoring.n), unit: '라운드' }, targets: [targetOf(r)],
+    });
+  }
+  if (liveRows.length && lastMo) {
+    const p1 = liveRows[0];
+    const run = winRun(keyOf(p1), lastMo);
+    const wins = [...(places.get(keyOf(p1))?.values() ?? [])].filter((x) => x === 1).length;
+    if (run >= 1) {
+      events.push({
+        kind: 'streak-on', group, weight: 64 + run, title: `${lastM}월 GP · ${run + 1}연승 도전`,
+        text: `${nameOf(p1)}, 이대로면 ${run + 1}연승`,
+        detail: `${lastMo}월 GP 우승에 이어 ${lastM}월도 선두`,
+        stat: { value: String(run + 1), unit: '연승' }, targets: [targetOf(p1)],
+      });
+    } else if (wins === 0) {
+      events.push({
+        kind: 'first-win', group, weight: 66, title: `${lastM}월 GP · 첫 우승 도전`,
+        text: `${nameOf(p1)}, ${y} 시즌 첫 GP 우승 눈앞`,
+        detail: `${lastM}월 GP 현재 선두`,
+        stat: { value: 'P1' }, targets: [targetOf(p1)],
+      });
+    }
+    // last round's winner, and how this month is going for them
+    const champ = doneRows.find((x) => x.mo === lastMo && x.place === 1);
+    if (champ && keyOf(champ) !== keyOf(p1)) {
+      const now = liveRows.find((x) => keyOf(x) === keyOf(champ));
+      events.push({
+        kind: 'defending', group, weight: now && now.place <= 3 ? 40 : 54, title: '지난 라운드 우승',
+        text: now
+          ? `${lastMo}월 우승 ${nameOf(champ)}, ${lastM}월은 P${now.place}`
+          : `${lastMo}월 우승 ${nameOf(champ)}, ${lastM}월은 포인트권 밖`,
+        detail: now ? `${pointsForRank(now.place)}pt 페이스` : '이대로면 0pt',
+        stat: { value: now ? `P${now.place}` : '–' }, targets: [targetOf(champ)],
+      });
+    }
+  }
+
+  // ---- constructors: every track's points onto the artists credited on it ----
+  if (mode === 'tracks') {
+    const credits = await creditsFor(data ?? []);
+    const teams = (rows) => {
+      const by = new Map();
+      for (const r of rows) {
+        const list = creditList(r, credits);
+        const shares = splitPoints(pointsForRank(r.place), list.length);
+        list.forEach(({ name, key }, i) => {
+          const c = by.get(key) ?? { artist: name, track: null, artist_key: key, track_key: null, pts: 0, wins: 0, podiums: 0, cars: 0 };
+          if (key === r.artist_key) c.artist = r.artist;
+          c.pts += shares[i];
+          c.cars += 1;
+          if (r.place === 1) c.wins += 1;
+          if (r.place <= 3) c.podiums += 1;
+          by.set(key, c);
+        });
+      }
+      return [...by.values()].sort((a, b) => b.pts - a.pts || b.wins - a.wins);
+    };
+    const cx = 'cx';
+    const cDone = teams(doneRows);
+    const cNow = teams(data ?? []);
+    const cMaxLeft = F1_POINTS.reduce((a, b) => a + b, 0) * roundsLeft;
+    if (cDone.length >= 2) {
+      const [a, b] = cDone;
+      const lead = a.pts - b.pts;
+      events.push({
+        kind: 'cx-lead', group: cx, weight: !isNow ? 90 : lead > cMaxLeft ? 88 : 62,
+        title: !isNow ? `${y} 컨스트럭터 챔피언` : lead > cMaxLeft ? '컨스트럭터 조기 확정' : '컨스트럭터 선두',
+        text: !isNow
+          ? `${a.artist}, ${y} 컨스트럭터 챔피언 · ${lead}pt 차`
+          : lead > cMaxLeft
+            ? `${a.artist}, 남은 라운드와 상관없이 컨스트럭터 타이틀 확정`
+            : `${a.artist}, 컨스트럭터 ${lead}pt 차 선두 · ${a.wins}승 ${a.podiums}포디움`,
+        detail: `2위 ${b.artist} · 팀 득점 ${a.cars}회`,
+        stat: { value: String(lead), unit: 'pt 차' },
+        duel: { sides: [{ pos: 1, pts: a.pts }, { pos: 2, pts: b.pts }], gap: lead, unit: 'pt', eta: null, lead: true },
+        targets: [targetOf(a), targetOf(b)],
+      });
+    }
+    if (isNow && cNow.length >= 2 && months.length >= 2) {
+      const field = cNow.slice(0, 8);
+      const cMonths = doneMos.map((mo) => new Map(teams(doneRows.filter((r) => r.mo === mo)).map((c) => [c.artist_key, c.pts])));
+      const odds = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, 12 - lastM, field.map((c) => c.artist_key))
+        .map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      events.push({
+        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
+        text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
+        detail: `남은 ${12 - lastM}라운드 시뮬레이션 4,000회 · 이번 달은 현재 순위 기준`,
+        stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
+        odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
+        targets: odds.map(({ c }) => targetOf(c)),
+      });
+    }
+    // swap at the top if this month ended now
+    if (isNow && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {
+      events.push({
+        kind: 'cx-swing', group: cx, weight: 82, title: `${lastM}월 GP 반영 시`,
+        text: `${cNow[0].artist}, 이번 달 결과대로면 컨스트럭터 선두 탈환`,
+        detail: `${cDone[0].artist} ${cDone[0].pts}pt → ${cNow.find((c) => c.artist_key === cDone[0].artist_key)?.pts ?? cDone[0].pts}pt`,
+        stat: { value: String(cNow[0].pts), unit: 'pt' }, targets: [targetOf(cNow[0])],
+      });
+    }
+    cNow.slice(1, 6).forEach((c, i) => {
+      const ahead = cNow[i];
+      const gap = ahead.pts - c.pts;
+      if (gap <= 15) {
+        events.push({
+          kind: 'cx-battle', group: cx, weight: 50 - i, title: `컨스트럭터 P${i + 1} 경쟁`,
+          text: `${ahead.artist} vs ${c.artist}, ${gap === 0 ? '동점' : `${gap}pt 차`}`,
+          detail: isNow ? '이번 달 결과 포함 시' : null,
+          stat: gap === 0 ? { value: '동점' } : { value: String(gap), unit: 'pt 차' },
+          duel: { sides: [{ pos: i + 2, pts: c.pts }, { pos: i + 1, pts: ahead.pts }], gap, unit: 'pt', eta: null },
+          targets: [targetOf(c), targetOf(ahead)],
+        });
+      }
+    });
+    // this month: one team filling the top of the order
+    if (liveRows.length >= 2) {
+      const [t] = teams(liveRows);
+      const top10 = liveRows.filter((r) => r.artist_key === t.artist_key).length;
+      const oneTwo = liveRows[0].artist_key === liveRows[1].artist_key;
+      let lockout = 0;
+      while (lockout < liveRows.length && liveRows[lockout].artist_key === liveRows[0].artist_key) lockout++;
+      if (oneTwo || top10 >= 3) {
+        events.push({
+          kind: 'cx-month', group: cx, weight: lockout >= 3 ? 78 : 68, title: `${lastM}월 GP · ${t.artist}`,
+          text: lockout >= 3
+            ? `${t.artist}, ${lastM}월 GP P1~P${lockout} 독식 중 · TOP 10에 ${top10}곡`
+            : oneTwo
+              ? `${t.artist}, ${lastM}월 GP 원투 피니시 페이스 · TOP 10에 ${top10}곡`
+              : `${t.artist}, ${lastM}월 GP TOP 10에 ${top10}곡`,
+          detail: `이대로면 팀 포인트 +${t.pts}pt`,
+          stat: { value: `+${t.pts}`, unit: 'pt' },
+          targets: [targetOf(t)],
+        });
+      }
+    }
+    // the season's one-two finishes
+    const oneTwos = new Map();
+    for (const mo of doneMos) {
+      const [p1, p2] = doneRows.filter((r) => r.mo === mo).sort((a, b) => a.place - b.place);
+      if (p1 && p2 && p1.artist_key === p2.artist_key) {
+        const o = oneTwos.get(p1.artist_key) ?? { r: p1, n: 0, mos: [] };
+        o.n += 1;
+        o.mos.push(mo);
+        oneTwos.set(p1.artist_key, o);
+      }
+    }
+    const most12 = [...oneTwos.values()].sort((a, b) => b.n - a.n)[0];
+    if (most12) {
+      events.push({
+        kind: 'cx-1-2', group: cx, weight: 45 + most12.n, title: '원투 피니시',
+        text: `${most12.r.artist}, 시즌 원투 피니시 ${most12.n}회`,
+        detail: `${most12.mos.join(', ')}월 GP`,
+        stat: { value: String(most12.n), unit: '회' },
+        targets: [{ artist: most12.r.artist, track: null, artist_key: most12.r.artist_key, track_key: null }],
+      });
+    }
+  }
+
+  // ---- rookies: first ever played this season ----
+  const debut = await firstPlays(userId, mode, src, estimate);
+  const yStart = monthStart(y, 1);
+  const rookies = ifNow
+    .map((c, i) => ({ c, pos: i + 1, first: debut.get(keyOf(c)) }))
+    .filter((x) => x.first != null && x.first >= yStart);
+  if (rookies.length) {
+    const [r1, r2] = rookies;
+    const wins1 = r1.c.wins;
+    events.push({
+      kind: 'rookie', group: 'rookie', weight: 63, title: r2 ? '올해의 루키 경쟁' : '올해의 루키',
+      text: `${nameOf(r1.c)}, 데뷔 시즌 챔피언십 P${r1.pos}${wins1 ? ` · ${wins1}승` : ''}${r2 ? ` · 루키 2위 ${nameOf(r2.c)}에 ${r1.c.pts - r2.c.pts}pt 앞섬` : ''}`,
+      detail: `${new Date(r1.first + KST).getUTCMonth() + 1}월 첫 재생`,
+      stat: { value: `P${r1.pos}`, unit: '루키 1위' },
+      ...(r2 ? { duel: { sides: [{ pos: r2.pos, pts: r2.c.pts }, { pos: r1.pos, pts: r1.c.pts }], gap: r1.c.pts - r2.c.pts, unit: 'pt', eta: null } } : {}),
+      targets: r2 ? [targetOf(r2.c), targetOf(r1.c)] : [targetOf(r1.c)],
+    });
+    events.push({
+      kind: 'rookie-class', group: 'rookie', weight: 41, title: `${y} 루키 클래스`,
+      text: `올해 데뷔한 ${rookies.length}곡이 포인트 획득 · 최고 P${r1.pos}`,
+      detail: rookies.slice(0, 3).map((x) => nameOf(x.c)).join(', '),
+      stat: { value: String(rookies.length), unit: '곡' },
+      targets: rookies.slice(0, 2).map((x) => targetOf(x.c)),
+    });
   }
 
   ifNow.slice(0, 8).forEach((c, i) => {
@@ -410,7 +677,7 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const top = await polish(pick(events, view === 'season' ? 16 : 10), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
+    const top = await polish(pick(events, view === 'season' ? 30 : 12), `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`);
     const body = {
       items: top.map(({ weight, ...e }) => e),
       model: top.some((e) => e.ai) ? process.env.OPENAI_MODEL || 'gpt-6.1-terra' : null,

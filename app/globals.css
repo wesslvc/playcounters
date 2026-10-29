@@ -841,6 +841,8 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-card[data-group="battle"] { --acc:var(--live) }
 .rr-card[data-group="move"] { --acc:var(--pos) }
 .rr-card[data-group="lead"] { --acc:var(--gold) }
+.rr-card[data-group="cx"] { --acc:#2E7DD7 }
+.rr-card[data-group="rookie"] { --acc:#14A38B }
 .rr-card[data-group="forecast"] { --acc:#A855F7 }
 .rr-card[data-group="milestone"], .rr-card[data-group="champ"] { --acc:var(--gold) }
 .rr-dock > .rr-card { box-shadow:var(--shadow) }

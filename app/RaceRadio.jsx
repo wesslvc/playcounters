@@ -8,7 +8,7 @@ import { nameOf, span } from '@/lib/radio';
 /** What the viewer can narrow the feed to. */
 const GROUPS = [
   ['all', '전체'], ['lead', '선두'], ['battle', '경쟁'], ['move', '순위 변동'], ['forecast', '예상'],
-  ['milestone', '마일스톤'], ['champ', '챔피언십'],
+  ['milestone', '마일스톤'], ['champ', '챔피언십'], ['cx', '컨스트럭터'], ['rookie', '루키'],
 ];
 const seenKey = (k) => `radio-seen|${k}`;
 const isTrack = (t) => Boolean(t?.track);

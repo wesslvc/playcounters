@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCovers, coverOf } from './useCovers';
 import { Cover } from './ui';
+import { nameOf, span } from '@/lib/radio';
 
 /** What the viewer can narrow the feed to. */
 const GROUPS = [
@@ -12,22 +13,101 @@ const GROUPS = [
 const seenKey = (k) => `radio-seen|${k}`;
 const isTrack = (t) => Boolean(t?.track);
 
+const num = (v) => Math.round(Number(v)).toLocaleString('ko-KR');
+const one = (v) => (Math.round(v * 10) / 10).toLocaleString('ko-KR');
+const ARROW = { up: '▲', down: '▼' };
+const DRIFT = { closing: '좁혀지는 중', opening: '벌어지는 중', steady: '그대로' };
+
+/** The line, with the bits worth reading twice marked up. */
+const KEY = /(약 \d+(?:시간|일) 뒤|곧|[\d,.]+(?:회|pt)(?: 차)?|P\d+|동률|동점|사실상 확정|조기 확정|챔피언 확정|추월 가시권|추월 예상|페이스 하락 중|느려지는 중|빨라지는 중|돌파)/;
+function Line({ text }) {
+  return (
+    <span className="rr-text">
+      {String(text).split(KEY).map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part))}
+    </span>
+  );
+}
+
+/** One car: picture, name, place, and its pace — the last three days, large, against the week. */
+function Side({ s, t, pic, top, align }) {
+  return (
+    <span className={`rr-side ${align}`}>
+      <Cover src={pic} size={48} round={!isTrack(t)} />
+      <b className="rr-name">{nameOf(t)}</b>
+      <small className="rr-pos">P{s.pos} · {s.pts != null ? `${num(s.pts)}pt` : `${num(s.plays)}회`}</small>
+      {s.p3 != null && (
+        <>
+          <span className="rr-pace" data-trend={s.trend || undefined}>
+            <b>{one(s.p3)}</b><small>회/일</small>{s.trend && <i>{ARROW[s.trend]}</i>}
+          </span>
+          <span className="rr-bar"><i style={{ width: `${top > 0 ? Math.max(4, (s.p3 / top) * 100) : 0}%` }} /></span>
+          <small className="rr-p7">7일 평균 {one(s.p7)}</small>
+        </>
+      )}
+    </span>
+  );
+}
+
 /**
- * One message as a card: the picture (or the two, for a fight), what it is,
- * the line, the figures behind it, and the number that matters, large.
+ * One message as a card. A fight puts both cars side by side — the chaser
+ * on the left, the car ahead on the right — with when the pass comes, or
+ * the gap, large between them. Anything else is one picture and its figures.
  */
 function RadioCard({ it, covers, onOpen }) {
   const pics = (it.targets ?? []).slice(0, 2);
   const pic = (t) => coverOf(covers[isTrack(t) ? 'tracks' : 'artists'], isTrack(t) ? 'tracks' : 'artists', t);
+  const d = it.duel;
+  if (d && pics.length === 2) {
+    const [a, b] = d.sides;
+    const top = Math.max(a.p3 ?? 0, b.p3 ?? 0);
+    const unit = d.unit ?? '회';
+    return (
+      <button className="rr-card rr-duel" data-group={it.group} onClick={() => onOpen(it)}>
+        <span className="rr-tag">{it.title}</span>
+        <span className="rr-vs">
+          <Side s={a} t={pics[0]} pic={pic(pics[0])} top={top} align="l" />
+          <span className="rr-mid">
+            {d.eta != null ? (
+              <>
+                <small>추월까지</small>
+                <b>{span(d.eta)}</b>
+                <small>{num(d.gap)}{unit} 차</small>
+              </>
+            ) : (
+              <>
+                <small>{d.lead ? '선두 격차' : '격차'}</small>
+                <b>{d.gap === 0 ? '동률' : num(d.gap)}</b>
+                {d.gap !== 0 && <small>{unit} 차</small>}
+              </>
+            )}
+            {d.drift && <span className="rr-drift" data-drift={d.drift}>{DRIFT[d.drift]}</span>}
+            {d.after != null && <small className="rr-after">이 페이스면 {span(d.after)} 뒤</small>}
+          </span>
+          <Side s={b} t={pics[1]} pic={pic(pics[1])} top={top} align="r" />
+        </span>
+        <Line text={it.text} />
+      </button>
+    );
+  }
+
+  const s = it.solo;
   return (
-    <button className="rr-card" onClick={() => onOpen(it)} disabled={!pics.length}>
+    <button className="rr-card rr-solo" data-group={it.group} onClick={() => onOpen(it)} disabled={!pics.length}>
       <span className={`rr-pics n${pics.length}`} aria-hidden="true">
-        {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 44 : 56} round={!isTrack(t)} />)}
+        {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 52 : 72} round={!isTrack(t)} />)}
       </span>
       <span className="rr-body">
-        <span className="rr-tag" data-group={it.group}>{it.title}</span>
-        <span className="rr-text">{it.text}</span>
-        {it.detail && <span className="rr-detail">{it.detail}</span>}
+        <span className="rr-tag">{it.title}</span>
+        <Line text={it.text} />
+        {s?.p3 != null ? (
+          <span className="rr-paceline" data-trend={s.trend || undefined}>
+            최근 3일 <b>{one(s.p3)}</b>회/일{s.trend && <i>{ARROW[s.trend]}</i>}
+            <span>· 7일 평균 {one(s.p7)}</span>
+          </span>
+        ) : it.detail && <span className="rr-detail">{it.detail}</span>}
+        {s?.mark && (
+          <span className="rr-bar wide"><i style={{ width: `${Math.min(100, (s.plays / s.mark) * 100)}%` }} /></span>
+        )}
       </span>
       {it.stat && (
         <span className="rr-stat">

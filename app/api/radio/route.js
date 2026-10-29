@@ -170,6 +170,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
           text: `${nameOf(ahead)} vs ${nameOf(c)}, ${gap === 0 ? '동점' : `${gap}pt 차`}`,
           detail: isNow ? '이번 달 결과 포함 시' : null,
           stat: gap === 0 ? { value: '동점' } : { value: String(gap), unit: 'pt 차' },
+          duel: { sides: [{ pos, pts: c.pts }, { pos: pos - 1, pts: ahead.pts }], gap, unit: 'pt', eta: null },
           targets: [targetOf(c), targetOf(ahead)],
         });
       }

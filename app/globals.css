@@ -837,24 +837,61 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-track { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; border-radius:18px }
 .rr-track::-webkit-scrollbar { display:none }
 .rr-slide { flex:0 0 100%; display:flex; scroll-snap-align:center; scroll-snap-stop:always }
-.rr-card { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:center; width:100%;
-  padding:14px; border-radius:18px; background:var(--surface); border:1px solid var(--hair); text-align:left }
+.rr-card { --acc:var(--ink-3); width:100%; padding:14px; border-radius:18px; background:var(--surface); border:1px solid var(--hair); text-align:left }
+.rr-card[data-group="battle"] { --acc:var(--live) }
+.rr-card[data-group="move"] { --acc:var(--pos) }
+.rr-card[data-group="forecast"] { --acc:#A855F7 }
+.rr-card[data-group="milestone"], .rr-card[data-group="champ"] { --acc:var(--gold) }
 .rr-dock > .rr-card { box-shadow:var(--shadow) }
 .rr-card:disabled { cursor:default }
+.rr-tag { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:800; letter-spacing:.03em; color:var(--acc) }
+.rr-tag::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--acc); flex:none }
+/* the line: bold, with the key bits under a marker in the card's colour */
+.rr-text { font-size:15.5px; font-weight:700; line-height:1.45; letter-spacing:-.02em; color:var(--ink); word-break:keep-all; overflow-wrap:anywhere }
+.rr-text em { font-style:normal; font-weight:850; padding:0 1px;
+  background:linear-gradient(transparent 58%, color-mix(in srgb, var(--acc) 30%, transparent) 0) }
+.rr-detail { font-size:12.5px; line-height:1.4; color:var(--ink-2); word-break:keep-all; overflow-wrap:anywhere }
+
+/* a fight: chaser left, the car ahead right, the pass (or the gap) between */
+.rr-duel { display:flex; flex-direction:column; gap:12px }
+.rr-vs { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:start; gap:10px }
+.rr-side { display:flex; flex-direction:column; gap:3px; min-width:0 }
+.rr-side.r { align-items:flex-end; text-align:right }
+.rr-side .cover { margin-bottom:4px }
+.rr-name { font-size:14px; font-weight:750; line-height:1.25; letter-spacing:-.02em; word-break:keep-all;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+.rr-pos { font-size:11.5px; font-weight:600; color:var(--ink-3); font-variant-numeric:tabular-nums }
+.rr-pace { display:flex; align-items:baseline; gap:2px; margin-top:6px }
+.rr-pace b { font-size:26px; font-weight:850; letter-spacing:-.04em; line-height:1; font-variant-numeric:tabular-nums }
+.rr-pace small { font-size:11px; font-weight:650; color:var(--ink-3) }
+.rr-pace i, .rr-paceline i { font-style:normal; font-size:10px; margin-left:3px }
+[data-trend="up"] > i { color:var(--pos) }
+[data-trend="down"] > i { color:var(--neg) }
+.rr-bar { display:flex; width:100%; height:5px; border-radius:3px; background:var(--sunk); overflow:hidden }
+.rr-side.r .rr-bar { justify-content:flex-end }
+.rr-bar i { display:block; height:100%; border-radius:3px; background:var(--ink) }
+.rr-side.l .rr-bar i { background:var(--acc) }
+.rr-bar.wide { margin-top:6px }
+.rr-bar.wide i { background:var(--acc) }
+.rr-p7 { font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums }
+.rr-mid { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:76px; padding:14px 6px 0; text-align:center }
+.rr-mid small { font-size:11px; font-weight:650; color:var(--ink-3); white-space:nowrap }
+.rr-mid b { font-size:30px; font-weight:850; letter-spacing:-.05em; line-height:1.05; color:var(--acc); white-space:nowrap; font-variant-numeric:tabular-nums }
+.rr-drift { margin-top:6px; padding:3px 8px; border-radius:999px; font-size:10.5px; font-weight:750; white-space:nowrap; background:var(--sunk); color:var(--ink-2) }
+.rr-mid .rr-after { margin-top:4px; font-size:10.5px; color:var(--ink-3) }
+.rr-drift[data-drift="closing"] { background:color-mix(in srgb, var(--acc) 14%, transparent); color:var(--acc) }
+
+/* anything else: one picture, the line, its pace, the number large */
+.rr-solo { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:center }
 .rr-pics { display:flex; align-items:center }
 .rr-pics.n2 .cover + .cover { margin-left:-12px; box-shadow:0 0 0 2px var(--surface) }
-.rr-body { display:flex; flex-direction:column; gap:3px; min-width:0 }
-.rr-tag { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--ink-3) }
-.rr-tag::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--ink-3); flex:none }
-.rr-tag[data-group="battle"]::before { background:var(--live) }
-.rr-tag[data-group="move"]::before { background:var(--pos) }
-.rr-tag[data-group="forecast"]::before { background:#A855F7 }
-.rr-tag[data-group="milestone"]::before, .rr-tag[data-group="champ"]::before { background:var(--gold) }
-.rr-text { font-size:15px; font-weight:650; line-height:1.4; letter-spacing:-.01em; color:var(--ink); word-break:keep-all; overflow-wrap:anywhere }
-.rr-detail { font-size:12.5px; line-height:1.4; color:var(--ink-2); word-break:keep-all; overflow-wrap:anywhere }
+.rr-body { display:flex; flex-direction:column; gap:4px; min-width:0 }
+.rr-paceline { font-size:12.5px; color:var(--ink-2); font-variant-numeric:tabular-nums }
+.rr-paceline b { font-size:15px; font-weight:800; color:var(--ink) }
+.rr-paceline span { color:var(--ink-3); margin-left:4px }
 .rr-stat { display:flex; flex-direction:column; align-items:flex-end; text-align:right; white-space:nowrap }
-.rr-stat b { font-size:24px; font-weight:800; letter-spacing:-.04em; line-height:1.05; font-variant-numeric:tabular-nums }
-.rr-stat small { font-size:11px; font-weight:600; color:var(--ink-3); margin-top:2px }
+.rr-stat b { font-size:28px; font-weight:850; letter-spacing:-.05em; line-height:1.05; color:var(--acc); font-variant-numeric:tabular-nums }
+.rr-stat small { font-size:11px; font-weight:650; color:var(--ink-3); margin-top:2px }
 .rr-nav { display:flex; align-items:center; justify-content:space-between; padding:8px 2px 0 }
 .rr-nav .icon-btn { width:32px; height:32px; font-size:20px; line-height:1; background:var(--sunk) }
 .rr-nav .icon-btn:disabled { opacity:.35 }
@@ -864,9 +901,12 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-none { font-size:13px; color:var(--ink-3); padding:10px 4px 12px }
 .rr-foot { margin-top:6px; padding:6px 4px 0; font-size:11px; color:var(--ink-3) }
 @media (max-width:560px) {
-  .rr-card { gap:12px; padding:12px }
-  .rr-stat b { font-size:20px }
-  .rr-text { font-size:14px }
+  .rr-card { padding:13px }
+  .rr-solo { gap:12px }
+  .rr-stat b { font-size:24px }
+  .rr-text { font-size:15px }
+  .rr-pace b { font-size:23px }
+  .rr-mid b { font-size:26px }
 }
 @keyframes rr-in { from { opacity:0; transform:translate(-50%, 8px) } to { opacity:1; transform:translate(-50%, 0) } }
 

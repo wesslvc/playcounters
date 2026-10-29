@@ -139,7 +139,7 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
   const [cur, then, pace] = await Promise.all([
     standings(userId, from, end, mode, src, estimate, open ? 60 : 15),
     live && now - back > from ? standings(userId, from, now - back, mode, src, estimate, open ? 60 : 15) : null,
-    live ? paceOf(userId, from, mode, src, estimate, 200, open) : null,
+    live ? paceOf(userId, from, mode, src, estimate, 200, open || to - from > 45 * DAY) : null,
   ]);
   const events = rankingEvents(cur, then, pace, { live, endsAt: to, open });
   if (open) events.push(...careerEvents(cur, then, pace, mode));

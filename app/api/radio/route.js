@@ -313,10 +313,20 @@ const ASTRA = () => process.env.OPENAI_MODEL_ASTRA || 'gpt-6-astra';
  * modelling goes with it. Kept in radio_notes so the question is asked once
  * a day rather than on every view; null when there's no key or no answer.
  */
-async function astraTitle(key, input) {
+const asking = new Map();
+function astraTitle(key, input) {
+  // one question at a time, however many views ask at once
+  if (!asking.has(key)) asking.set(key, askAstra(key, input).finally(() => asking.delete(key)));
+  return asking.get(key);
+}
+
+async function askAstra(key, input) {
   if (!process.env.OPENAI_API_KEY) return null;
   const { data: kept } = await db.from('radio_notes').select('body, created_at').eq('key', key).maybeSingle();
-  if (kept && Date.now() - Date.parse(kept.created_at) < DAY) return kept.body;
+  if (kept?.body?.odds && Date.now() - Date.parse(kept.created_at) < DAY) return kept.body;
+  // another instance already asking: don't ask twice, use what's kept (or nothing) meanwhile
+  if (kept?.body?.pending && Date.now() - Date.parse(kept.created_at) < 90e3) return kept.body.last ?? null;
+  await db.from('radio_notes').upsert({ key, body: { pending: true, last: kept?.body?.odds ? kept.body : null }, created_at: new Date().toISOString() });
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 45000);
   try {
@@ -347,14 +357,22 @@ async function astraTitle(key, input) {
       'medium',
     );
     const odds = (answer.odds ?? []).filter((o) => teams.includes(o.team)).sort((a, b) => b.pct - a.pct);
-    if (!odds.length) return null;
-    const body = { odds, reasoning: String(answer.reasoning ?? '').trim(), model: ASTRA() };
+    if (!odds.length) throw new Error('no odds');
+    const u = answer.usage ?? {};
+    // list price per million tokens: $10 in, $50 out
+    const usd = ((u.input_tokens ?? 0) * 10 + (u.output_tokens ?? 0) * 50) / 1e6;
+    const body = {
+      odds, reasoning: String(answer.reasoning ?? '').trim(), model: ASTRA(),
+      usage: { input: u.input_tokens ?? null, output: u.output_tokens ?? null, reasoning: u.output_tokens_details?.reasoning_tokens ?? null, usd: Math.round(usd * 1000) / 1000 },
+    };
     await db.from('radio_notes').upsert({ key, body, created_at: new Date().toISOString() });
-    console.log(`radio astra ok · ${key}`);
+    console.log(`radio astra ok · ${key} · in ${body.usage.input} / out ${body.usage.output} (reasoning ${body.usage.reasoning}) tokens · ≈$${body.usage.usd}`);
     return body;
   } catch (e) {
     console.error('radio astra failed', e.message);
-    return kept?.body ?? null;
+    const last = kept?.body?.odds ? kept.body : kept?.body?.last ?? null;
+    await db.from('radio_notes').upsert({ key, body: last ?? { failed: true }, created_at: last ? kept.created_at : new Date(0).toISOString() });
+    return last;
   } finally {
     clearTimeout(timer);
   }
@@ -1437,7 +1455,10 @@ async function ask(model, instructions, input, schema, signal, effort = 'low') {
   const json = await res.json();
   const raw = json.output_text
     ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
-  return JSON.parse(raw);
+  const out = JSON.parse(raw);
+  // what the call cost, in tokens — kept off the answer itself
+  Object.defineProperty(out, 'usage', { value: json.usage ?? null });
+  return out;
 }
 
 /** Every figure in a line, so a rewrite that drops or invents one can be refused. */

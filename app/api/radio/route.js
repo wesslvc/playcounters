@@ -341,8 +341,9 @@ const cleanOdds = (odds, teams) => (odds ?? []).filter((o) => teams.includes(o.t
  * the standings, each song's recent counts and first play, and the rules.
  * None of this radio's own modelling goes with it.
  *
- * Terra makes the call each day, handed Astra's last verdict and told to keep
- * to it unless things have really moved. Astra is asked when there's no
+ * Astra's verdict is the one shown. Terra looks each day, handed that
+ * verdict, and says whether things have really moved; its own odds are shown
+ * only when they have and Astra can't be asked again this month. Astra is asked when there's no
  * verdict of its own yet, when Terra says the picture has shifted, or when
  * Terra can't call a close race and Astra's word
  * is more than a week old — and never more than four times a month. The
@@ -412,9 +413,10 @@ async function judge(key, input) {
       }
     }
     const fresh = astra && astra.date === today;
-    const current = fresh ? { ...astra, by: 'astra' }
-      : terra ? { ...terra, by: 'terra', anchor: astra?.date ?? null }
-        : astra ? { ...astra, by: 'astra' } : null;
+    // Astra's word stands until Terra sees the picture move and Astra can't be asked again
+    const current = astra && (fresh || !terra?.shifted) ? { ...astra, by: 'astra', checked: terra ? today : null }
+      : terra ? { ...terra, by: 'terra' }
+        : null;
     if (terra) console.log(`radio title terra · confident ${terra.confident} · shifted ${terra.shifted} · ≈$${terra.usage.usd}${fresh ? ' · escalated' : ''}`);
     await save({ date: today, current, terra, astra, astraCalls: [...(prev.astraCalls ?? []).filter((d) => !d.startsWith(month)), ...calls] });
     return current;
@@ -468,10 +470,11 @@ function chaseCards(field, form, rounds, name, group, label) {
     if (rounds < 1 || need <= 0 || now < need * 0.8) return;
     out.push({
       kind: 'chase', group, weight: now >= need ? 78 - i : 60 - i, title: `${label} 역전 시나리오`,
-      text: `${name(c)}, 남은 ${rounds}라운드 라운드당 ${need}pt면 ${name(lead)} 역전 · 예상 득점은 라운드당 ${now}pt`,
-      detail: `현재 ${c.pts}pt vs ${lead.pts}pt · 예상 득점은 곡별 재생 수 시뮬레이션 기준`,
+      text: `${name(c)} → ${name(lead)} 역전 조건, 남은 ${rounds}라운드 라운드당 ${need}pt · 예상 득점 라운드당 ${now}pt`,
+      detail: `지금 ${lead.pts - c.pts}pt 차 (${c.pts}pt vs ${lead.pts}pt) · 예상 득점은 곡별 재생 수 시뮬레이션 기준`,
       stat: { value: String(need), unit: 'pt/라운드 필요' },
-      duel: { sides: [{ pos: 1, pts: lead.pts }, { pos: i + 2, pts: c.pts }], gap: lead.pts - c.pts, unit: 'pt', eta: null },
+      // sides in the same order as targets: the chaser, then the leader
+      duel: { sides: [{ pos: i + 2, pts: c.pts }, { pos: 1, pts: lead.pts }], gap: lead.pts - c.pts, unit: 'pt', eta: null, need, expect: now },
       targets: [targetOf(c), targetOf(lead)],
     });
   });
@@ -907,8 +910,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}${biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''}`,
         detail: (astra
           ? `${astra.reasoning} — ${astra.by === 'astra'
-            ? `${astra.model}가 올해 기록만 보고 판단`
-            : `${astra.model}가 판단${astra.anchor ? ` (${Number(astra.anchor.slice(5, 7))}월 ${Number(astra.anchor.slice(8))}일 Astra 판단 기준)` : ''}`}`
+            ? `${astra.model} 판단 (${Number(astra.date.slice(5, 7))}월 ${Number(astra.date.slice(8))}일)${astra.checked && astra.checked !== astra.date ? ' · 이후 큰 변화 없음' : ''}`
+            : `${astra.model} 판단 · Astra 이후 판세 변화 감지`}`
           : `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`)
           + (since ? ` · 화살표는 ${Number(since.slice(5, 7))}월 ${Number(since.slice(8))}일 대비` : ''),
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },

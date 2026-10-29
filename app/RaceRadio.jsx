@@ -99,7 +99,13 @@ function RadioCard({ it, covers, onOpen }) {
         <span className="rr-vs">
           <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
           <span className="rr-mid">
-            {d.holdFor != null ? (
+            {d.need != null ? (
+              <>
+                <small>라운드당 필요</small>
+                <b>{num(d.need)}{unit}</b>
+                <small>예상 {num(d.expect)}{unit} · {num(d.gap)}{unit} 차</small>
+              </>
+            ) : d.holdFor != null ? (
               <>
                 <small>1위 유지</small>
                 <b>{d.holdFor}</b>

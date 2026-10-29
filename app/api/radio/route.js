@@ -151,13 +151,23 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
 }
 
 /**
- * Each contender's chance of the title. The rounds still to run are drawn
- * from the rounds already run — a whole month at a time, so only one car
- * can win each one — the recent months drawn more often, since form moves.
+ * Each contender's chance of the title, over the rounds still to run.
+ *
+ * Each round runs on form: what each car is doing now — this month as it
+ * stands, last month, and its season average, the month counting for more
+ * the further it has got — easing back toward the season average the
+ * further out the round is, with a wobble each time. One round in four is
+ * shaken up as well: half of it plays out like one of the season's past
+ * rounds (the recent ones somewhat more often), which is what happens when
+ * someone comes from nowhere and takes a share of the points.
+ *
+ * @param start   points with this month counted as it stands
+ * @param months  finished rounds, oldest first, each key -> points
+ * @param live    this month's points so far, key -> points
+ * @param elapsed how far through this month we are, 0..1
  */
-function titleOdds(start, months, rounds, keys, runs = 4000) {
+function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
   const won = new Array(keys.length).fill(0);
-  // recent rounds count more, but only up to twice the oldest
   const weights = months.map((_, i) => 1 + i / Math.max(1, months.length - 1));
   const sum = weights.reduce((a, b) => a + b, 0);
   const draw = () => {
@@ -165,17 +175,58 @@ function titleOdds(start, months, rounds, keys, runs = 4000) {
     for (let i = 0; i < months.length; i++) if ((x -= weights[i]) < 0) return months[i];
     return months[months.length - 1];
   };
+  const prev = months[months.length - 1] ?? new Map();
+  const avg = keys.map((k) => months.reduce((a, m) => a + (m.get(k) ?? 0), 0) / Math.max(1, months.length));
+  const wl = 0.55 * elapsed;
+  const wp = 0.25 + 0.55 * (1 - elapsed);
+  const form = keys.map((k, i) => wl * (live.get(k) ?? 0) + wp * (prev.get(k) ?? 0) + 0.2 * avg[i]);
   for (let s = 0; s < runs; s++) {
     const tot = keys.map((k) => start.get(k) ?? 0);
     for (let r = 0; r < rounds; r++) {
-      const m = draw();
-      keys.forEach((k, i) => { tot[i] += m.get(k) ?? 0; });
+      const d = 0.7 ** r;
+      // now and then the round goes some other way: half of it plays out like a past round
+      const shake = Math.random() < 0.25 ? draw() : null;
+      keys.forEach((k, i) => {
+        const g = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+        const onForm = (d * form[i] + (1 - d) * avg[i]) * Math.exp(0.45 * g - 0.1);
+        tot[i] += shake ? 0.5 * onForm + 0.5 * (shake.get(k) ?? 0) : onForm;
+      });
     }
     const best = Math.max(...tot);
     const top = tot.flatMap((t, i) => (t === best ? [i] : []));
     for (const i of top) won[i] += 1 / top.length;
   }
-  return won.map((w) => w / runs);
+  return { odds: won.map((w) => w / runs), form };
+}
+
+/** How far through the current month we are, in Seoul. */
+function monthElapsed() {
+  const kst = new Date(Date.now() + KST);
+  const days = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 0)).getUTCDate();
+  return Math.min(1, (kst.getUTCDate() - 1 + kst.getUTCHours() / 24) / days);
+}
+
+/**
+ * The cars behind the title favourite that can still take it: what they'd
+ * need a round, against what they're scoring now.
+ */
+function chaseCards(field, form, rounds, name, group, label) {
+  const out = [];
+  const [lead] = field;
+  field.slice(1, 4).forEach((c, i) => {
+    const need = Math.ceil((lead.pts - c.pts + 1) / rounds);
+    const now = Math.round(form[i + 1]);
+    if (rounds < 1 || need <= 0 || now < need * 0.8) return;
+    out.push({
+      kind: 'chase', group, weight: now >= need ? 78 - i : 60 - i, title: `${label} 역전 시나리오`,
+      text: `${name(c)}, 남은 ${rounds}라운드 라운드당 ${need}pt면 ${name(lead)} 역전 · 지금 폼은 라운드당 ${now}pt`,
+      detail: `현재 ${c.pts}pt vs ${lead.pts}pt · 폼은 이번 달·지난달·시즌 평균 종합`,
+      stat: { value: String(need), unit: 'pt/라운드 필요' },
+      duel: { sides: [{ pos: 1, pts: lead.pts }, { pos: i + 2, pts: c.pts }], gap: lead.pts - c.pts, unit: 'pt', eta: null },
+      targets: [targetOf(c), targetOf(lead)],
+    });
+  });
+  return out;
 }
 
 /**
@@ -235,10 +286,14 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   if (isNow && ifNow.length >= 2 && months.length >= 2) {
     const field = ifNow.slice(0, 10);
     const start = new Map(field.map((c) => [keyOf(c), c.pts]));
-    const odds = titleOdds(start, months, 12 - lastM, field.map(keyOf))
+    const live = new Map();
+    for (const r of data ?? []) if (r.yr === y && r.mo === lastM) live.set(keyOf(r), pointsForRank(r.place));
+    const sim = titleOdds(start, months, live, 12 - lastM, field.map(keyOf), monthElapsed());
+    const odds = sim.odds
       .map((p, i) => ({ c: field[i], p }))
       .sort((a, b) => b.p - a.p)
       .slice(0, 3);
+    if (sim.odds[0] < 0.97) events.push(...chaseCards(field, sim.form, 12 - lastM, nameOf, group, '챔피언십'));
     // still able to win it on paper, with this month ending as it stands
     const alive = ifNow.filter((c) => c.pts + F1_POINTS[0] * (12 - lastM) >= ifNow[0].pts).length;
     const [f] = odds;
@@ -247,7 +302,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       text: f.p >= 0.995
         ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
         : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
-      detail: `남은 ${12 - lastM}라운드를 지난 라운드들로 4,000번 돌려본 결과 · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
+      detail: `남은 ${12 - lastM}라운드 4,000번 시뮬레이션 (현재 폼·시즌 평균·깜짝 상승 종합) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
       targets: odds.map(({ c }) => targetOf(c)),
@@ -487,12 +542,15 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     if (isNow && cNow.length >= 2 && months.length >= 2) {
       const field = cNow.slice(0, 8);
       const cMonths = doneMos.map((mo) => new Map(teams(doneRows.filter((r) => r.mo === mo)).map((c) => [c.artist_key, c.pts])));
-      const odds = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, 12 - lastM, field.map((c) => c.artist_key))
-        .map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
+      const sim = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed());
+      const odds = sim.odds.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      // ranked by points with this month in, for the chase: who could catch the leader
+      events.push(...chaseCards(field, sim.form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
       events.push({
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
-        detail: `남은 ${12 - lastM}라운드 시뮬레이션 4,000회 · 이번 달은 현재 순위 기준`,
+        detail: `남은 ${12 - lastM}라운드 4,000번 시뮬레이션 · 현재 폼(이번 달·지난달)·시즌 평균·깜짝 상승 가능성 종합`,
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
         targets: odds.map(({ c }) => targetOf(c)),
@@ -1110,7 +1168,7 @@ const OPENER = {
 /** Lines that weigh several things at once — odds, projections, a lead's lifetime, a race's story. */
 const COMPLEX = new Set([
   'odds', 'win-odds', 'cx-odds', 'hold', 'career-hold', 'lead', 'eta', 'champion', 'locked', 'swing', 'cx-swing',
-  'cx-lead', 'streak-on', 'first-win', 'gp-win', 'gp-changes', 'gp-late', 'gp-standings', 'gp-tally',
+  'cx-lead', 'streak-on', 'first-win', 'chase', 'gp-win', 'gp-changes', 'gp-late', 'gp-standings', 'gp-tally',
 ]);
 const complex = (e) => COMPLEX.has(e.kind) || Boolean(e.odds || e.duel?.eta != null || e.duel?.after != null);
 const split = (list, n) => {

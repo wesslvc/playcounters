@@ -870,7 +870,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-pace small { font-size:11px; font-weight:650; color:var(--ink-3) }
 .rr-pace i, .rr-paceline i { font-style:normal; font-size:10px; margin-left:3px }
 [data-trend="up"] > i { color:var(--pos) }
-[data-trend="down"] > i { color:var(--neg) }
+[data-trend="down"] > i, [data-trend="plunge"] > i { color:var(--neg) }
 .rr-bar { display:flex; width:100%; height:5px; border-radius:3px; background:var(--sunk); overflow:hidden }
 .rr-side.r .rr-bar { justify-content:flex-end }
 .rr-bar i { display:block; height:100%; border-radius:3px; background:var(--ink) }

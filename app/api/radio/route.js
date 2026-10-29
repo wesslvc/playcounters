@@ -206,7 +206,8 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
  * The rest of the season played out song by song, on play counts rather
  * than points. Every song with recent plays gets its expected plays for each
  * remaining month — the pace model, easing from now toward its long pace,
- * interest fading a little each month — with chance on top. Most months
+ * interest fading a little each month — with chance on top, shared by an
+ * artist's songs, since going off an artist takes all of them down at once. Most months
  * bring a newcomer or two at the kind of count that has topped recent months
  * (usually someone new, sometimes a new song from a team already here). Each
  * month is then ranked and paid out like a real round, so a team with many
@@ -229,7 +230,7 @@ function songSim({ recent, pace, from, base, credits, rounds, drivers, teams, ru
     const team = credits ? creditList(r, credits).map((c) => c.key) : null;
     // expected plays in each remaining month, interest fading 10% a month
     const exp = Array.from({ length: rounds }, (_, k) => (expectIn(m, t0 + 30 * (k + 1)) - expectIn(m, t0 + 30 * k)) * 0.9 ** (k + 1));
-    return { key: keyOf(r), team, exp };
+    return { key: keyOf(r), artist: r.artist_key, team, exp };
   });
   const teamWeight = new Map();
   for (const s of songs) if (s.team) teamWeight.set(s.team[0], (teamWeight.get(s.team[0]) ?? 0) + s.exp[0]);
@@ -250,8 +251,14 @@ function songSim({ recent, pace, from, base, credits, rounds, drivers, teams, ru
   for (let run = 0; run < runs; run++) {
     const d = new Map(drivers);
     const t = new Map(teams ?? []);
+    // an artist's songs rise and fall together: one swing per artist for the
+    // run, and a smaller one on top each month
+    const mood = new Map();
+    const swing = (artist) => mood.get(artist) ?? mood.set(artist, Math.exp(0.4 * gauss() - 0.08)).get(artist);
     for (let k = 0; k < rounds; k++) {
-      const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * Math.exp(0.35 * gauss() - 0.06)) }));
+      const month = new Map();
+      const now = (artist) => month.get(artist) ?? month.set(artist, swing(artist) * Math.exp(0.25 * gauss() - 0.03)).get(artist);
+      const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * now(s.artist) * Math.exp(0.3 * gauss() - 0.045)) }));
       // newcomers: none, one or two, at a count that has been topping months
       for (let n = poisson(0.7); n > 0; n--) {
         const own = credits && Math.random() < 0.25 ? anyTeam() : null;

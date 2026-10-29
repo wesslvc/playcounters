@@ -15,7 +15,7 @@ const isTrack = (t) => Boolean(t?.track);
 
 const num = (v) => Math.round(Number(v)).toLocaleString('ko-KR');
 const one = (v) => (Math.round(v * 10) / 10).toLocaleString('ko-KR');
-const ARROW = { up: '▲', down: '▼' };
+const ARROW = { up: '▲', down: '▼', plunge: '▼▼' };
 const DRIFT = { closing: '좁혀지는 중', opening: '벌어지는 중', steady: '그대로' };
 
 /** The line, with the bits worth reading twice marked up. */

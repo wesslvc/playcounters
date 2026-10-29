@@ -16,7 +16,7 @@ function Meter({ v }) {
   return (
     <span className="ins-meter" aria-label={`추월 난이도 ${Math.round(v * 100)}%`}>
       <span className="ins-cells">
-        {Array.from({ length: 10 }, (_, i) => <i key={i} data-on={i < lit || undefined} style={{ '--h': 120 - i * 12 }} />)}
+        {Array.from({ length: 10 }, (_, i) => <i key={i} data-on={i < lit || undefined} style={{ '--i': i }} />)}
       </span>
       <small>OVERTAKE DIFFICULTY</small>
     </span>
@@ -24,10 +24,10 @@ function Meter({ v }) {
 }
 
 /**
- * One message as a broadcast graphic, the way F1 TV's Insights panels sit
- * over the race: a red-ruled head, the chaser on the left and the car ahead
- * on the right in their team colours, the forecast boxed in the middle, and
- * a strip of detail along the foot.
+ * One message laid out like F1 TV's Insights panels, in the app's own
+ * style: a head, the chaser on the left and the car ahead on the right in
+ * their team colours, the forecast boxed in the middle, and a strip of
+ * detail along the foot.
  */
 function Broadcast({ card }) {
   const s = (x, right) => x && (

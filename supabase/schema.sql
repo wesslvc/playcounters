@@ -1880,3 +1880,13 @@ as $$
   order by plays desc, first_at, ak, tk
   limit p_limit;
 $$;
+
+-- ---------- race radio notes ----------
+-- Answers worth keeping between visits — the one question the radio puts to
+-- GPT-6 Astra (the constructors' title), so it's asked once a day, not per view.
+create table if not exists radio_notes (
+  key        text primary key,
+  body       jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table radio_notes enable row level security;

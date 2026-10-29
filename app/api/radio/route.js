@@ -9,7 +9,7 @@ import {
 } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const TZ = 'Asia/Seoul';
 const KST = 9 * 3600e3;
@@ -304,6 +304,62 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
   return { drivers: dWon, teams: tWon, driverPace: dGot, teamPace: tGot };
 }
 
+const ASTRA = () => process.env.OPENAI_MODEL_ASTRA || 'gpt-6-astra';
+/**
+ * The constructors' title, put to GPT-6 Astra once a day: it gets the season
+ * as raw records — every month's top ten with counts and credited artists,
+ * this month so far, the standings, each song's recent counts and first
+ * play — and the rules, and makes its own call. None of this radio's own
+ * modelling goes with it. Kept in radio_notes so the question is asked once
+ * a day rather than on every view; null when there's no key or no answer.
+ */
+async function astraTitle(key, input) {
+  if (!process.env.OPENAI_API_KEY) return null;
+  const { data: kept } = await db.from('radio_notes').select('body, created_at').eq('key', key).maybeSingle();
+  if (kept && Date.now() - Date.parse(kept.created_at) < DAY) return kept.body;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 45000);
+  try {
+    const teams = input.standings.map((t) => t.team);
+    const answer = await ask(
+      ASTRA(),
+      '너는 음악 감상 기록으로 치르는 F1식 시즌의 분석가다. 아래는 이 사람의 올해 기록 전부다. '
+        + '매달 재생 횟수로 순위를 매기고 1~10위에 25-18-15-12-10-8-6-4-2-1점을 준다. '
+        + '컨스트럭터는 곡에 크레딧된 아티스트들이 그 곡의 점수를 나눠 갖는다. '
+        + '남은 라운드 동안의 흐름을 스스로 판단해서 컨스트럭터 타이틀을 누가 가져갈지 확률로 답하라. '
+        + '기존 강세의 지속, 하락 조짐, 신곡·앨범의 등장 가능성 등 무엇을 어떻게 볼지는 네가 정한다. '
+        + 'reasoning은 한국어 두 문장 이내, 핵심 근거만.',
+      input,
+      {
+        type: 'object', additionalProperties: false, required: ['odds', 'reasoning'],
+        properties: {
+          odds: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false, required: ['team', 'pct'],
+              properties: { team: { type: 'string', enum: teams }, pct: { type: 'number' } },
+            },
+          },
+          reasoning: { type: 'string' },
+        },
+      },
+      ctl.signal,
+      'medium',
+    );
+    const odds = (answer.odds ?? []).filter((o) => teams.includes(o.team)).sort((a, b) => b.pct - a.pct);
+    if (!odds.length) return null;
+    const body = { odds, reasoning: String(answer.reasoning ?? '').trim(), model: ASTRA() };
+    await db.from('radio_notes').upsert({ key, body, created_at: new Date().toISOString() });
+    console.log(`radio astra ok · ${key}`);
+    return body;
+  } catch (e) {
+    console.error('radio astra failed', e.message);
+    return kept?.body ?? null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** How far through the current month we are, in Seoul. */
 function monthElapsed() {
   const kst = new Date(Date.now() + KST);
@@ -389,6 +445,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
 
   // the rest of the season played out song by song, once for both championships
   let sim = null;
+  let raw = null; // the same records, kept for the one question put to Astra
   if (isNow && ifNow.length >= 2 && 12 - lastM > 0) {
     const now = Date.now();
     const since = now - 60 * DAY;
@@ -415,6 +472,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     // each finished month's brand-new arrivals in the top ten (first played
     // within six weeks of it), grouped by artist, with their counts
     const debut = await firstPlays(userId, mode, src, estimate);
+    raw = { recent, pace, debut, credits };
     const doneRowsAll = (data ?? []).filter((r) => !(r.yr === y && r.mo === lastM));
     const drops = [];
     const seen = new Set();
@@ -714,13 +772,49 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
         ({ odds: chances, form } = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed()));
       }
-      const odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      let odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
+      // this one question goes to Astra, with the records and nothing of ours
+      let astra = null;
+      if (raw) {
+        const day = (ms) => new Date(ms + KST).toISOString().slice(0, 10);
+        const names = (r) => creditList(r, raw.credits).map((c) => c.name);
+        const kst = new Date(Date.now() + KST);
+        const before = new Map(cDone.map((c) => [c.artist_key, c.pts]));
+        const input = {
+          season: y,
+          today: day(Date.now()),
+          roundsLeft: 12 - lastM,
+          currentMonth: { month: lastM, day: kst.getUTCDate(), daysInMonth: new Date(Date.UTC(y, lastM, 0)).getUTCDate(), provisional: true },
+          months: [...new Set((data ?? []).map((r) => r.mo))].sort((a, b) => a - b).map((mo) => ({
+            month: mo,
+            provisional: mo === lastM,
+            top10: (data ?? []).filter((r) => r.mo === mo).sort((a, b) => a.place - b.place)
+              .map((r) => ({ place: r.place, song: r.track ?? r.artist, artists: names(r), plays: Number(r.plays) })),
+          })),
+          standings: field.map((c) => ({ team: c.artist, points: c.pts, beforeThisMonth: before.get(c.artist_key) ?? 0 })),
+          recentSongs: raw.recent.slice(0, 40).map((r) => ({
+            song: r.track ?? r.artist,
+            artists: names(r),
+            last3d: Math.round((raw.pace.p3.get(keyOf(r)) ?? 0) * 3),
+            last7d: Math.round((raw.pace.p7.get(keyOf(r)) ?? 0) * 7),
+            last30d: Math.round((raw.pace.p30.get(keyOf(r)) ?? 0) * 30),
+            firstPlayed: raw.debut.get(keyOf(r)) ? day(raw.debut.get(keyOf(r))) : null,
+          })),
+        };
+        astra = await astraTitle(`cx-title|${userId}|${y}-${lastM}|${src}|${estimate}`, input);
+        if (astra) {
+          const byName = new Map(field.map((c) => [c.artist, c]));
+          odds = astra.odds.slice(0, 3).map((o) => ({ c: byName.get(o.team), p: o.pct / 100 })).filter((o) => o.c);
+        }
+      }
       // who could still catch the leader, and what it would take
       events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
       events.push({
-        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
+        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성${astra ? ' · Astra 판단' : ''}`,
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
-        detail: `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`,
+        detail: astra
+          ? `${astra.reasoning} — ${astra.model}가 올해 기록만 보고 판단`
+          : `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`,
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
         targets: odds.map(({ c }) => targetOf(c)),
@@ -1298,14 +1392,14 @@ const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 베테�
   + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.';
 
 /** One structured call to the Responses API. */
-async function ask(model, instructions, input, schema, signal) {
+async function ask(model, instructions, input, schema, signal, effort = 'low') {
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({
       model,
-      reasoning: { effort: 'low' },
+      reasoning: { effort },
       instructions,
       input: JSON.stringify(input),
       text: { format: { type: 'json_schema', name: 'radio', strict: true, schema } },

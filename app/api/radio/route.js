@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { db, currentUserId } from '@/lib/db';
+import { currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
-import { pointsForRank } from '@/lib/rank';
-import { keyOf, ranked, rankingEvents, milestoneEvents, pick } from '@/lib/radio';
+import { pointsForRank, F1_POINTS } from '@/lib/rank';
+import { keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick } from '@/lib/radio';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -12,8 +12,6 @@ const KST = 9 * 3600e3;
 const DAY = 864e5;
 /** How far back "then" is, for overtakes and gaps closing. */
 const LOOKBACK = 3 * DAY;
-/** The window pace is measured over. */
-const PACE = 7 * DAY;
 const CACHE_MS = 20 * 60e3;
 
 const cache = new Map();
@@ -31,13 +29,22 @@ async function standings(userId, from, to, mode, src, estimate, limit = 15) {
   return ranked(data ?? []);
 }
 
-/** Plays per day over the last week (or since `from`), by key. */
-async function paceOf(userId, from, mode, src, estimate, limit) {
+/** Plays per day over the last `days` (or since `from`), by key. */
+async function rate(userId, from, days, mode, src, estimate, limit) {
   const now = Date.now();
-  const start = Math.max(from, now - PACE);
-  const days = Math.max(1, (now - start) / DAY);
+  const start = Math.max(from, now - days * DAY);
+  const span = Math.max(0.5, (now - start) / DAY);
   const rows = await standings(userId, start, now + 60e3, mode, src, estimate, limit);
-  return new Map(rows.map((r) => [keyOf(r), Number(r.plays) / days]));
+  return new Map(rows.map((r) => [keyOf(r), Number(r.plays) / span]));
+}
+
+/** The week's pace and the last three days', side by side. */
+async function paceOf(userId, from, mode, src, estimate, limit) {
+  const [p7, p3] = await Promise.all([
+    rate(userId, from, 7, mode, src, estimate, limit),
+    rate(userId, from, 3, mode, src, estimate, limit),
+  ]);
+  return { p7, p3 };
 }
 
 /** A ranked window: the chart's, a Replay quarter, this month's Grand Prix. */
@@ -53,7 +60,11 @@ async function windowEvents(userId, { from, to, mode, src, estimate }) {
   return rankingEvents(cur, then, pace, { live, endsAt: to });
 }
 
-/** The championship: this month's race, and what it does to the standings. */
+/**
+ * The championship: this month's race; the champion, or the leader and
+ * whether it's settled; places no remaining round can change; and what
+ * the standings become if this month ended now.
+ */
 async function seasonEvents(userId, { year, mode, src, estimate }) {
   const kst = new Date(Date.now() + KST);
   const y = year ?? kst.getUTCFullYear();
@@ -62,9 +73,9 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   const events = [];
 
   if (isNow) {
-    const m = kst.getUTCMonth() + 1;
+    const m = lastM;
     const race = await windowEvents(userId, { from: monthStart(y, m), to: monthStart(y, m + 1), mode, src, estimate });
-    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}`, card: e.card && { ...e.card, tag: `${m}월 GP` } });
+    for (const e of race) events.push({ ...e, title: `${m}월 GP · ${e.title}` });
   }
 
   const { data, error } = await rpcAll('season_races', {
@@ -77,65 +88,93 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     const by = new Map();
     for (const r of rows) {
       const k = keyOf(r);
-      const c = by.get(k) ?? { artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null, pts: 0 };
+      const c = by.get(k) ?? { ...targetOf(r), pts: 0, wins: 0 };
       c.pts += pointsForRank(r.place);
+      if (r.place === 1) c.wins += 1;
       by.set(k, c);
     }
-    return [...by.values()].sort((a, b) => b.pts - a.pts);
+    return [...by.values()].sort((a, b) => b.pts - a.pts || b.wins - a.wins);
   };
   const done = total((data ?? []).filter((r) => !(isNow && r.yr === y && r.mo === lastM)));
   const ifNow = total(data ?? []);
   const doneRank = new Map(done.map((c, i) => [keyOf(c), i + 1]));
-  const name = (c) => (c.track ? c.track.replace(/\s*[([（［].*$/, '').trim() || c.track : c.artist);
-  const tgt = (c) => ({ artist: c.artist, track: c.track, artist_key: c.artist_key, track_key: c.track_key });
+  // points still to be won: this month's race and every month after it
+  const roundsLeft = isNow ? 12 - lastM + 1 : 0;
+  const maxLeft = F1_POINTS[0] * roundsLeft;
+  const group = 'champ';
+
+  if (done.length >= 2) {
+    const [a, b] = done;
+    const lead = a.pts - b.pts;
+    if (!isNow) {
+      events.push({
+        kind: 'champion', group, weight: 95, title: `${y} 챔피언`,
+        text: `${nameOf(a)}, ${y} 시즌 챔피언`,
+        detail: `${a.pts}pt · ${a.wins}승 · 2위 ${nameOf(b)}와(과) ${lead}pt 차`,
+        stat: { value: String(a.pts), unit: 'pt' }, targets: [targetOf(a)],
+      });
+    } else if (lead > maxLeft) {
+      events.push({
+        kind: 'champion', group, weight: 96, title: `${y} 챔피언 조기 확정`,
+        text: `${nameOf(a)}, 남은 ${roundsLeft}라운드와 상관없이 ${y} 챔피언 확정`,
+        detail: `${lead}pt 차 · 남은 최대 ${maxLeft}pt`,
+        stat: { value: String(a.pts), unit: 'pt' }, targets: [targetOf(a)],
+      });
+    } else {
+      events.push({
+        kind: 'champion', group, weight: 60, title: `${y} 챔피언십 선두`,
+        text: `${nameOf(a)}, ${lead}pt 차 선두 · 확정까지 ${maxLeft - lead + 1}pt 더`,
+        detail: `남은 ${roundsLeft}라운드 최대 ${maxLeft}pt · 2위 ${nameOf(b)}`,
+        stat: { value: String(lead), unit: 'pt 차' }, targets: [targetOf(a)],
+      });
+    }
+
+    // places no remaining round can change
+    if (roundsLeft > 0) {
+      const locked = [];
+      for (let i = 0; i < Math.min(10, done.length); i++) {
+        const up = i === 0 || done[i - 1].pts - done[i].pts > maxLeft;
+        const down = i === done.length - 1 || done[i].pts - done[i + 1].pts > maxLeft;
+        if (up && down) locked.push(i);
+      }
+      if (locked.length > (lead > maxLeft ? 1 : 0)) {
+        events.push({
+          kind: 'locked', group, weight: 75, title: '확정된 순위',
+          text: locked.map((i) => `P${i + 1} ${nameOf(done[i])}`).join(' · '),
+          detail: `남은 최대 ${maxLeft}pt로 바뀔 수 없는 순위`,
+          stat: { value: String(locked.length), unit: '자리' }, targets: locked.slice(0, 2).map((i) => targetOf(done[i])),
+        });
+      }
+    }
+  }
 
   ifNow.slice(0, 8).forEach((c, i) => {
     const pos = i + 1;
     const was = doneRank.get(keyOf(c));
     if (isNow && was && was !== pos) {
       events.push({
-        kind: 'projected', weight: was > pos ? 70 - pos : 50 - pos,
-        title: `챔피언십 P${was} → P${pos}`,
-        text: `이번 달이 지금 순위로 끝나면 ${name(c)} 챔피언십 P${was}에서 P${pos}로`,
-        target: tgt(c),
-        card: {
-          head: 'CHAMPIONSHIP PROJECTION', left: { name: name(c), sub: c.track ? c.artist : null, artist: c.artist },
-          mid: { top: 'IF IT ENDED NOW', big: `P${was} ▸ P${pos}` }, foot: { l: `${y} SEASON`, r: `${c.pts} PTS` },
-        },
+        kind: 'projected', group, weight: was > pos ? 70 - pos : 50 - pos,
+        title: `챔피언십 P${was} → P${pos} 예상`,
+        text: `이번 달이 지금 순위로 끝나면 ${nameOf(c)} P${was}에서 P${pos}로`,
+        detail: `${c.pts}pt`,
+        stat: { value: `P${pos}` }, targets: [targetOf(c)],
       });
     }
     if (i > 0) {
-      const gap = ifNow[i - 1].pts - c.pts;
+      const ahead = ifNow[i - 1];
+      const gap = ahead.pts - c.pts;
       if (gap <= 10) {
         events.push({
-          kind: 'battle', weight: 60 - pos,
+          kind: 'battle', group, weight: 60 - pos,
           title: `챔피언십 P${pos - 1} 경쟁`,
-          text: `${name(ifNow[i - 1])} vs ${name(c)}, ${gap === 0 ? '동점' : `${gap}pt 차`}`,
-          target: tgt(c),
-          card: {
-            head: 'CHAMPIONSHIP BATTLE',
-            left: { name: name(c), sub: `${c.pts} PTS`, artist: c.artist },
-            right: { name: name(ifNow[i - 1]), sub: `${ifNow[i - 1].pts} PTS`, artist: ifNow[i - 1].artist },
-            mid: gap === 0 ? { top: 'POINTS', big: 'LEVEL' } : { top: 'GAP', big: String(gap), unit: 'PTS' },
-            foot: { l: `CHASING P${pos - 1}`, r: `${gap} PTS AHEAD` },
-          },
+          text: `${nameOf(ahead)} vs ${nameOf(c)}, ${gap === 0 ? '동점' : `${gap}pt 차`}`,
+          detail: isNow ? '이번 달 결과 포함 시' : null,
+          stat: gap === 0 ? { value: '동점' } : { value: String(gap), unit: 'pt 차' },
+          targets: [targetOf(c), targetOf(ahead)],
         });
       }
     }
   });
-  if (ifNow.length >= 2) {
-    events.push({
-      kind: 'lead', weight: 12, title: `${y} 챔피언십 선두`,
-      text: `${name(ifNow[0])}, ${ifNow[0].pts - ifNow[1].pts}pt 차 선두`,
-      target: tgt(ifNow[0]),
-      card: {
-        head: 'CHAMPIONSHIP LEADER',
-        left: { name: name(ifNow[0]), sub: `${ifNow[0].pts} PTS`, artist: ifNow[0].artist },
-        right: { name: name(ifNow[1]), sub: `${ifNow[1].pts} PTS`, artist: ifNow[1].artist },
-        mid: { top: 'LEAD', big: String(ifNow[0].pts - ifNow[1].pts), unit: 'PTS' }, foot: { l: 'P1', r: 'P2' },
-      },
-    });
-  }
   return events;
 }
 
@@ -157,8 +196,8 @@ async function milestoneContext(userId, { src, estimate }) {
 }
 
 /**
- * Rewords the events as race-radio lines. Facts stay as given; any failure
- * leaves the plain lines in place.
+ * Rewords each message's line as race radio. Facts stay as given; any
+ * failure leaves the plain lines in place.
  */
 async function polish(events, context) {
   const key = process.env.OPENAI_API_KEY;
@@ -174,10 +213,10 @@ async function polish(events, context) {
       body: JSON.stringify({
         model,
         instructions:
-          '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. 각 항목의 text를 한국어 한 문장(45자 안팎)으로 다시 써라. '
-          + '숫자·순위·이름은 그대로 두고 새로운 사실을 지어내지 마라. 과장된 감탄사나 이모지는 쓰지 말고 담백하고 긴장감 있게. '
-          + 'title은 바꾸지 마라.',
-        input: JSON.stringify({ context, items: events.map((e, i) => ({ id: i, title: e.title, text: e.text })) }),
+          '너는 음악 재생 순위를 F1 중계처럼 전하는 캐스터다. 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. '
+          + 'detail과 title을 참고하되 숫자·순위·이름은 그대로 두고 새로운 사실을 지어내지 마라. '
+          + '과장된 감탄사나 이모지 없이 담백하고 긴장감 있게.',
+        input: JSON.stringify({ context, items: events.map((e, i) => ({ id: i, title: e.title, text: e.text, detail: e.detail })) }),
         text: {
           format: {
             type: 'json_schema', name: 'radio', strict: true,

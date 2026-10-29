@@ -68,7 +68,14 @@ function RadioCard({ it, covers, onOpen }) {
                 <b className="rr-name">{nameOf(o)}</b>
                 <span className="rr-bar"><i style={{ width: `${Math.max(2, o.pct)}%` }} /></span>
               </span>
-              <span className="rr-odd-pct" data-first={i === 0 || undefined}>{o.pct}<small>%</small></span>
+              <span className="rr-odd-pct" data-first={i === 0 || undefined}>
+                {o.move != null && (
+                  <i className="rr-move" data-up={o.move > 0 || undefined} title={it.since ? `${it.since} 대비` : undefined}>
+                    {o.move > 0 ? '▲' : '▼'}{Math.abs(o.move)}
+                  </i>
+                )}
+                {o.pct}<small>%</small>
+              </span>
             </span>
           ))}
         </span>

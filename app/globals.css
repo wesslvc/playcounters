@@ -896,6 +896,9 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-odd-pct { min-width:52px; text-align:right; font-size:20px; font-weight:850; letter-spacing:-.04em; color:var(--ink-2); font-variant-numeric:tabular-nums }
 .rr-odd-pct[data-first] { font-size:28px; color:var(--acc) }
 .rr-odd-pct small { font-size:12px; font-weight:700; margin-left:1px }
+/* how a chance has moved since an earlier day */
+.rr-move { display:block; font-style:normal; font-size:11px; font-weight:800; letter-spacing:0; line-height:1.1; color:var(--neg); text-align:right }
+.rr-move[data-up] { color:var(--pos) }
 
 /* anything else: one picture, the line, its pace, the number large */
 .rr-solo { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:center }

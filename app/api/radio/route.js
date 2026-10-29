@@ -360,6 +360,27 @@ async function astraTitle(key, input) {
   }
 }
 
+/**
+ * How each one's chance has moved since an earlier day: a day's odds are
+ * kept (the last of the day wins), and today's are compared with the latest
+ * day before it. Moves under two points are a simulation's wobble, not news.
+ */
+async function oddsMoves(key, odds) {
+  const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
+  const { data: kept } = await db.from('radio_notes').select('body').eq('key', key).maybeSingle();
+  const days = (kept?.body?.days ?? []).filter((d) => d.date !== today);
+  const before = days[days.length - 1]?.odds ?? null;
+  const now = Object.fromEntries(odds.map((o) => [o.key, o.pct]));
+  await db.from('radio_notes').upsert({ key, body: { days: [...days, { date: today, odds: now }].slice(-14) }, created_at: new Date().toISOString() });
+  if (!before) return { moves: new Map(), since: null };
+  const moves = new Map();
+  for (const o of odds) {
+    const d = o.pct - (before[o.key] ?? 0);
+    if (Math.abs(d) >= 2) moves.set(o.key, Math.round(d));
+  }
+  return { moves, since: days[days.length - 1].date };
+}
+
 /** How far through the current month we are, in Seoul. */
 function monthElapsed() {
   const kst = new Date(Date.now() + KST);
@@ -809,14 +830,21 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       }
       // who could still catch the leader, and what it would take
       events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
+      // since an earlier day: who has gained, who has lost
+      const shown = odds.map(({ c, p }) => ({ key: c.artist_key, pct: pct(p) }));
+      const { moves, since } = await oddsMoves(`odds|cx|${userId}|${y}|${src}|${estimate}`, shown)
+        .catch(() => ({ moves: new Map(), since: null }));
+      const biggest = [...moves].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
       events.push({
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성${astra ? ' · Astra 판단' : ''}`,
-        text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}`,
-        detail: astra
+        text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}${biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''}`,
+        detail: (astra
           ? `${astra.reasoning} — ${astra.model}가 올해 기록만 보고 판단`
-          : `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`,
+          : `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`)
+          + (since ? ` · 화살표는 ${Number(since.slice(5, 7))}월 ${Number(since.slice(8))}일 대비` : ''),
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
-        odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
+        odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts, move: moves.get(c.artist_key) ?? null })),
+        ...(since ? { since } : {}),
         targets: odds.map(({ c }) => targetOf(c)),
       });
     }

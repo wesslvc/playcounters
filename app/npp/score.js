@@ -27,7 +27,7 @@ export const IMPORTANCE = [
   { key: 'design', label: '디자인', sub: '마감·외관' },
   { key: 'software', label: '업데이트', sub: 'OS 지원 연수' },
   { key: 'opinion', label: '평판', sub: '커뮤니티·리뷰' },
-  { key: 'certainty', label: '확정 정보 선호', sub: '켜면 루머·추정이 불리해져요' },
+  { key: 'certainty', label: '확정 정보 선호', sub: '루머보다 확정' },
 ];
 
 /** The brand/chip/OS/form leanings take part in the ordering as one element of their own. */
@@ -106,7 +106,7 @@ const val = (e) => (e && typeof e.value === 'number' ? e.value : null);
  * card; it only affects the ranking if the reader turns on "확정 정보 선호".
  */
 const strict = (s) => clamp(Math.pow(clamp((s - 50) / 50, 0, 1), 1.4) * 100);
-const given = (d, raw) => (raw == null ? null : (d.score_version ?? 1) >= 2 ? clamp(raw) : strict(raw));
+const given = (d, raw) => (raw == null || raw <= 0 ? null : (d.score_version ?? 1) >= 2 ? clamp(raw) : strict(raw));
 const round = (v) => (v == null ? null : Math.round(v));
 
 /** Every axis on 0–100; null where nothing is known. */
@@ -116,10 +116,12 @@ export function axesOf(d) {
   const c = val(d.charge_w);
   const u = val(d.update_years);
   const price = val(d.price_krw);
-  const perf = given(d, d.chipset?.perf_score ?? s.performance);
-  const cam = given(d, s.camera);
-  const bat = given(d, s.battery);
-  const disp = given(d, s.display);
+  // the judge's scores, which weigh every phone against the others, win over the per-phone editor's
+  const pick = (k, raw) => (d.cal?.[k] > 0 ? clamp(d.cal[k]) : given(d, raw));
+  const perf = pick('performance', d.chipset?.perf_score ?? s.performance);
+  const cam = pick('camera', s.camera);
+  const bat = pick('battery', s.battery);
+  const disp = pick('display', s.display);
   const known = [perf, cam, bat, disp].filter((x) => x != null);
   const avg = known.length ? known.reduce((x, y) => x + y, 0) / known.length : null;
   const priceScore = price == null ? null : clamp(100 - ((price - 500000) / 2000000) * 100);
@@ -133,7 +135,7 @@ export function axesOf(d) {
     lightness: w == null ? null : clamp(((240 - w) / 80) * 100),
     software: u == null ? null : clamp(((u - 2) / 6) * 100),
     value,
-    design: given(d, s.design),
+    design: pick('design', s.design),
     opinion: given(d, d.opinion?.score),
   };
   for (const k of Object.keys(a)) a[k] = round(a[k]);
@@ -333,4 +335,69 @@ export function deltaOf(prev, cur, model) {
     }
   }
   return { fit: cf - pf, from: pf, to: cf, scores, specs };
+}
+
+/** The axes compared across phones, with the words for them. */
+export const COMPARE_AXES = [
+  ['performance', '성능'], ['camera', '카메라'], ['battery', '배터리'], ['display', '화면'], ['design', '디자인'],
+  ['lightness', '가벼움'], ['value', '가성비'], ['software', '업데이트'], ['opinion', '여론'],
+];
+
+/**
+ * Where each phone stands on each axis among `list`: rank (1 = best, ties share
+ * a place), the field size, and the value. Phones with no value on an axis have no rank there.
+ */
+export function axisRanks(list, axesOfPhone) {
+  const out = {};
+  for (const [k] of COMPARE_AXES) {
+    const vals = list.map((p) => ({ id: p.id, v: axesOfPhone(p)[k] })).filter((x) => x.v != null);
+    for (const x of vals) {
+      const sorted = vals.map((y) => y.v).sort((a, b) => a - b);
+      (out[x.id] ??= {})[k] = {
+        rank: 1 + vals.filter((y) => y.v > x.v).length, of: vals.length, v: x.v,
+        tie: vals.filter((y) => y.v === x.v).length, median: sorted[Math.floor(sorted.length / 2)],
+      };
+    }
+  }
+  return out;
+}
+
+/**
+ * Axes a phone clearly leads on, and axes it clearly trails on. A place shared
+ * by several phones, or a lead of a few points over the middle of the field,
+ * isn't an advantage worth naming — and with too few phones there is nothing to compare.
+ */
+export function edgeChips(ranks) {
+  if (!ranks) return { up: [], down: [] };
+  const rows = COMPARE_AXES.map(([k, label]) => ({ k, label, ...(ranks[k] ?? {}) })).filter((x) => x.rank);
+  const n = rows[0]?.of ?? 0;
+  if (n < 3) return { up: [], down: [] };
+  const top = Math.max(1, Math.round(n * 0.2));
+  const up = rows.filter((x) => x.rank <= top && x.tie <= 2 && x.v >= 55 && x.v - x.median >= 6)
+    .sort((a, b) => a.rank - b.rank || b.v - b.median - (a.v - a.median)).slice(0, 3);
+  const down = n >= 5 ? rows.filter((x) => x.rank > n - top && x.tie <= 2 && x.v < 50 && x.median - x.v >= 6).sort((a, b) => b.rank - a.rank).slice(0, 2) : [];
+  return { up, down };
+}
+
+/** "2026 4분기" / "2027 상반기" … from the free-text release line; 'out' when already released. */
+export function periodOf(p, now = new Date()) {
+  const text = String(p.release ?? '');
+  const y = /(20\d\d)/.exec(text)?.[1];
+  const m = /20\d\d[-.년 ]+\s*(\d{1,2})(?!\s*분기|\d)/.exec(text)?.[1];
+  const quarter = /([1-4])\s*분기/.exec(text)?.[1];
+  let year = y ? +y : null;
+  let q = null;
+  if (m) q = Math.ceil(+m / 3);
+  else if (quarter) q = +quarter;
+  else if (/상반기/.test(text)) q = 1.5;
+  else if (/하반기/.test(text)) q = 3.5;
+  if (p.status === 'released' && year) {
+    const when = new Date(year, m ? +m - 1 : 0, 1);
+    if (when <= now) return { key: 'out', label: '이미 출시', order: -1 };
+  }
+  if (!year) return { key: 'tbd', label: '시기 미정', order: 99 };
+  if (q === 1.5) return { key: `${year}H1`, label: `${year} 상반기`, order: year * 10 + 1 };
+  if (q === 3.5) return { key: `${year}H2`, label: `${year} 하반기`, order: year * 10 + 3 };
+  if (q) return { key: `${year}Q${q}`, label: `${year} ${q}분기`, order: year * 10 + q };
+  return { key: `${year}`, label: `${year}년`, order: year * 10 + 2 };
 }

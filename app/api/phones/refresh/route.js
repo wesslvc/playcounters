@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createJob, ipHash, refreshWatched, runSearch, getJob } from '@/lib/phones';
+import { createJob, ipHash, refreshWatched, runSearch, runCalibrate, getJob } from '@/lib/phones';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -11,7 +11,9 @@ export const maxDuration = 300;
  * ?secret=<CRON_SECRET or PHONES_REFRESH_SECRET>:
  *   (nothing)            refresh followed phones
  *   &brands=Samsung,Apple  run a search for those brands now (seeds the library)
+ *   ?models=A,B            research those named phones now
  *   &force=1               with brands: research again even if fresh
+ *   ?calibrate=1           have the judge re-score every researched phone against the others
  */
 export async function GET(req) {
   const url = new URL(req.url);
@@ -19,9 +21,15 @@ export async function GET(req) {
   const allowed = [process.env.CRON_SECRET, process.env.PHONES_REFRESH_SECRET].filter(Boolean);
   if (!given || !allowed.includes(given)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   try {
+    if (url.searchParams.get('calibrate') === '1') {
+      const id = await createJob({ kind: 'calibrate' }, ipHash('owner'));
+      await runCalibrate(id);
+      return NextResponse.json({ ok: true, job: await getJob(id) });
+    }
+    const models = (url.searchParams.get('models') ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 8);
     const brands = (url.searchParams.get('brands') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (brands.length) {
-      const plan = { brands, models: [], os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '' };
+    if (brands.length || models.length) {
+      const plan = { brands, models, os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '' };
       const id = await createJob(plan, ipHash('owner'));
       await runSearch(id, plan, { force: url.searchParams.get('force') === '1' });
       return NextResponse.json({ ok: true, job: await getJob(id) });

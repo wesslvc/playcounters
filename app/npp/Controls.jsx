@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ELEMENTS, TRAITS, leanWord, netLeans, EMPTY_PREFS, OTHERS } from './score';
-import { Spectrum, DuelEditor } from './Spectrum';
-import PriorityList from './Priority';
+import { ELEMENTS, IMPORTANCE, TRAITS, importanceWord, leanWord, netLeans, EMPTY_PREFS, OTHERS } from './score';
+import { Spectrum, Importance, DuelEditor } from './Spectrum';
+import Priority from './Priority';
 
 const CHIPS = [
   ['snapdragon', '스냅드래곤'], ['exynos', '엑시노스'], ['apple', 'Apple A/M'], ['tensor', '텐서'], ['dimensity', '디멘시티'],
@@ -42,7 +42,7 @@ export default function Controls({ prefs, setPrefs, filters, setFilters, brandOp
     return n.length ? n.slice(0, 3).map(([k, v]) => `${label(opts)(k)} ${v > 0 ? '+' : '−'}${Math.round(Math.abs(v))}`).join(' · ') : '선호 없음';
   };
   const byKey = Object.fromEntries(ELEMENTS.map((e) => [e.key, e.label]));
-  const orderText = prefs.order.length ? prefs.order.slice(0, 3).map((k, i) => `${i + 1} ${byKey[k]}`).join(' · ') : '순서 미지정';
+  const orderText = prefs.order.length ? prefs.order.slice(0, 4).map((k, i) => `${i + 1} ${byKey[k]}`).join(' · ') : '정하지 않음 — 모두 같은 비중';
   const traitText = TRAITS.filter((t) => Math.abs(prefs.tr[t.key]) >= 8).map((t) => (prefs.tr[t.key] < 0 ? t.l[0] : t.r[0])).slice(0, 3).join(' · ') || '균형';
   const limits = [filters.maxMan && `${filters.maxMan}만원↓`, filters.maxWeight && `${filters.maxWeight}g↓`, filters.minBattery && `${filters.minBattery}mAh↑`, !filters.upcoming && '출시된 폰만', filters.onlyConfirmed && '확실한 정보만'].filter(Boolean);
 
@@ -54,8 +54,16 @@ export default function Controls({ prefs, setPrefs, filters, setFilters, brandOp
       </div>
       <p className="ctl-sub">슬라이더를 움직이면 오른쪽 순위가 바로 바뀌어요. 접힌 줄에는 지금 설정이 요약돼요.</p>
 
-      <Acc id="priority" title="우선순위와 중요도" summary={orderText} defaultOpen>
-        <PriorityList prefs={prefs} setPrefs={setPrefs} />
+      <Acc id="priority" title="우선순위" summary={orderText} defaultOpen>
+        <Priority prefs={prefs} setPrefs={setPrefs} />
+      </Acc>
+
+      <Acc id="importance" title="세부 중요도" summary="항목마다 얼마나 중요한지 (선택)">
+        <p className="ctl-sub">우선순위와 따로, 항목 하나하나를 얼마나 중요하게 볼지 미세 조정해요.</p>
+        {IMPORTANCE.map((it) => (
+          <Importance key={it.key} label={it.label} sub={it.sub} value={prefs.imp[it.key]} word={importanceWord(prefs.imp[it.key])}
+            onChange={(v) => setPrefs({ ...prefs, imp: { ...prefs.imp, [it.key]: v } })} />
+        ))}
       </Acc>
 
       <Acc id="traits" title="어느 쪽이 더 끌리나" summary={traitText}>

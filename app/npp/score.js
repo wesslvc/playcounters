@@ -48,7 +48,7 @@ export const DEFAULT_IMPORTANCE = {
 };
 export const EMPTY_PREFS = {
   imp: { ...DEFAULT_IMPORTANCE },
-  order: [], // empty = no element ranked above another
+  order: [], // elements ranked by the reader, most important first; empty = no ranking
   tr: Object.fromEntries(TRAITS.map((t) => [t.key, 0])),
   duels: { brand: [{ id: 'b0', a: 'Samsung', b: 'Apple', v: 0 }], chip: [] },
 };
@@ -60,8 +60,7 @@ export function normalizePrefs(p) {
   const given = [...new Set((Array.isArray(p?.order) ? p.order : []).filter((k) => valid.has(k)))];
   return {
     imp: { ...base.imp, ...(p?.imp ?? {}) },
-    // a ranking is always whole: anything left out follows in the usual order
-    order: given.length ? [...given, ...ELEMENTS.map((e) => e.key).filter((k) => !given.includes(k))] : [],
+    order: given, // the elements the reader ranked, first = most important; the rest are unranked
     tr: { ...base.tr, ...(p?.tr ?? {}) },
     duels: {
       brand: Array.isArray(p?.duels?.brand) ? p.duels.brand : base.duels.brand,
@@ -156,14 +155,17 @@ export function penaltiesOf(d) {
 }
 
 /**
- * How far up the reader's ordering an element sits, as a multiplier: first
- * place counts ×1.5, last ×0.6, evenly between. With no ordering, ×1.
+ * What a place in the reader's ranking is worth, as a multiplier: first ×1.7,
+ * then 1.5, 1.35, 1.2, and 1.1 for the rest of the ranked. Anything not ranked
+ * counts ×0.7 once there is a ranking at all; with none, everything ×1.
  */
+const RANK_MULT = [1.7, 1.5, 1.35, 1.2];
 export function rankMult(prefs, key) {
-  const n = prefs.order?.length ?? 0;
-  const r = n ? prefs.order.indexOf(key) : -1;
-  if (r < 0) return 1;
-  return 1.5 - 0.9 * (r / Math.max(1, n - 1));
+  const order = prefs.order ?? [];
+  if (!order.length) return 1;
+  const r = order.indexOf(key);
+  if (r < 0) return 0.7;
+  return RANK_MULT[r] ?? 1.1;
 }
 
 /** Importance and traits → weights. */

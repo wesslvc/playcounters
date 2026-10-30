@@ -524,3 +524,24 @@ span.np-bar i.lead { background: var(--a); }
 .np-feed > li > div > small { margin-bottom: 2px; }
 
 @media (max-width: 1080px) { .np-aside .ctl-head h2 { display: none; } .np-aside .ctl-head { justify-content: flex-end; } }
+
+/* ---- priority: tap to rank ---- */
+.pr2 { display: grid; gap: 14px; }
+.pr2-zone h5 { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; font-weight: 700; }
+.pr2-zone h5 small { font-weight: 400; color: var(--ink-3); margin-left: 6px; }
+.pr2-ranked { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.pr2-ranked li { display: inline-flex; align-items: center; gap: 4px; border-radius: 99px; background: var(--a-soft); cursor: grab; }
+.pr2-ranked li.on { background: color-mix(in srgb, var(--a) 22%, transparent); box-shadow: 0 0 0 1.5px var(--a); }
+.pr2-ranked li.drag { opacity: .4; }
+.pr2 .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.pr2 .pill b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; background: var(--a); color: #fff; }
+.pr2-ranked li:nth-child(n+4) .pill b { background: color-mix(in srgb, var(--a) 55%, var(--ink-3)); }
+.pr2 .act { display: inline-flex; gap: 2px; padding-right: 6px; }
+.pr2 .act button { width: 26px; height: 26px; border-radius: 50%; background: var(--surface); font-size: 10px; color: var(--ink-2); }
+.pr2 .act button:hover:not(:disabled) { background: var(--a); color: #fff; }
+.pr2 .act button:disabled { opacity: .3; }
+.pr2-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pr2-chips button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; border-radius: 99px; background: var(--sunk); font-size: 13.5px; font-weight: 600; color: var(--ink-2); border: 1px solid transparent; }
+.pr2-chips button i { font-style: normal; font-size: 11px; color: var(--a); }
+.pr2-chips button:hover { border-color: var(--a); color: var(--ink); }
+.pr2-empty { font-size: 12.5px; color: var(--ink-3); padding: 10px 12px; border-radius: 10px; background: var(--sunk); }

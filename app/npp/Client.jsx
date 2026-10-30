@@ -360,7 +360,7 @@ export default function Client() {
                 {topD.map((p, i) => (
                   <Tile key={p.id} p={p} rank={i + 1} move={moves[p.id]} ranks={ranks[p.id]} chips={edgeChips(ranks[p.id])}
                     watched={watched.includes(p.id)} onWatch={() => toggleWatch(p.id)} picked={compareIds.includes(p.id)} onPick={() => toggle(p.id)}
-                    onOpen={() => setOpenId(p.id)} />
+                    onOpen={() => setOpenId(p.id)} order={prefs.order} />
                 ))}
               </ol>
               {ranked.length > 5 && <p className="np-more"><button type="button" onClick={() => setTab('matrix')}>나머지 {ranked.length - 5}개는 전체 표에서 보기 →</button></p>}
@@ -368,7 +368,7 @@ export default function Client() {
           ) : <p className="np-note">조사된 폰이 생기면 여기에 추천이 나와요.</p>)}
 
           {tab === 'compare' && (
-            <CompareView phones={scored} all={ranked} ids={compareIds} setIds={(ids) => setPicked(ids.slice(0, 5))} onOpen={(p) => setOpenId(p.id)} />
+            <CompareView phones={scored} all={ranked} ids={compareIds} setIds={(ids) => setPicked(ids.slice(0, 5))} onOpen={(p) => setOpenId(p.id)} order={prefs.order} />
           )}
           {tab === 'matrix' && <MatrixView rows={ranked} ranks={ranks} ids={compareIds} toggle={toggle} onOpen={(p) => setOpenId(p.id)} />}
           {tab === 'timeline' && <TimelineView phones={[...scored, ...stubs]} onOpen={(p) => setOpenId(p.id)} />}

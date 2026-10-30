@@ -4,7 +4,7 @@ import Radar from './Radar';
 import { Bar, CAT, Pic, STATUS, V, mah, when } from './parts';
 
 /** The comparison: who leads on each axis, by how much, and why — the leader in the accent, the rest in grey. */
-export default function CompareView({ phones, all, ids, setIds, onOpen }) {
+export default function CompareView({ phones, all, ids, setIds, onOpen, order }) {
   const [mode, setMode] = useState('lead'); // lead: emphasis on the leader · color: one colour per phone
   const slots = useRef(new Map()); // the colour follows the phone, whatever else is added or removed
   const slotOf = (id) => {
@@ -15,7 +15,8 @@ export default function CompareView({ phones, all, ids, setIds, onOpen }) {
   const free = all.filter((p) => !ids.includes(p.id));
   const color = (p) => CAT[slotOf(p.id)];
 
-  const rows = COMPARE_AXES.map(([k, label]) => {
+  const at = (k) => { const i = (order ?? []).indexOf(k); return i < 0 ? 99 : i; };
+  const rows = [...COMPARE_AXES].sort((a, b) => at(a[0]) - at(b[0])).map(([k, label]) => {
     const entries = sel.map((p) => ({ p, v: p.fit.axes[k] })).filter((x) => x.v != null).sort((a, b) => b.v - a.v);
     const gap = entries.length > 1 && entries[0].v > entries[1].v ? entries[0].v - entries[1].v : 0;
     return { k, label, entries, gap, leader: gap > 0 ? entries[0].p : null };
@@ -59,7 +60,7 @@ export default function CompareView({ phones, all, ids, setIds, onOpen }) {
       {sel.length >= 2 && (
         <>
           <section className="np-card">
-            <h2>항목별 비교우위 <small>막대는 0~100점, 맨 오른쪽 숫자는 1위와 2위의 차이</small></h2>
+            <h2>항목별 비교우위 <small>내 우선순위 항목이 위에 · 막대는 0~100점 · 오른쪽 글자는 1위와 2위의 차이</small></h2>
             <div className="np-axes">
               {rows.map((r) => (
                 <div className="np-axis" key={r.k}>

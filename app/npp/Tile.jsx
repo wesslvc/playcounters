@@ -1,10 +1,13 @@
 import { Bar, FAMILY, LIKELY, Move, Pic, Ring, STATUS, Sev, V, mah, when } from './parts';
 import { won } from './score';
 
+/** Where a criterion sits in the reader's ranking; unranked ones keep their usual place after the ranked. */
+export const rankIdx = (order, k) => { const i = (order ?? []).indexOf(k); return i < 0 ? 99 : i; };
+
 const BARS = [['performance', '성능'], ['camera', '카메라'], ['battery', '배터리'], ['display', '화면'], ['design', '디자인'], ['opinion', '여론']];
 
 /** The headline of a phone: who, how well it fits, where it leads, and the few numbers that matter. */
-export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, picked, onPick, onOpen }) {
+export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, picked, onPick, onOpen, order }) {
   const f = p.fit;
   const my = ranks ?? {};
   const concerns = p.concerns ?? [];
@@ -37,7 +40,7 @@ export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, pi
         )}
 
         <ul className="np-bars">
-          {BARS.map(([k, label]) => {
+          {[...BARS].sort((a, b) => rankIdx(order, a[0]) - rankIdx(order, b[0])).map(([k, label]) => {
             const r = my[k];
             const v = f.axes[k];
             return (

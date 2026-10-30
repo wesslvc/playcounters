@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createJob, ipHash, refreshWatched, runSearch, runCalibrate, getJob } from '@/lib/phones';
+import { createJob, ipHash, refreshWatched, runSearch, runCalibrate, runSpecs, getJob } from '@/lib/phones';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -13,6 +13,7 @@ export const maxDuration = 300;
  *   &brands=Samsung,Apple  run a search for those brands now (seeds the library)
  *   ?models=A,B            research those named phones now
  *   &force=1               with brands: research again even if fresh
+ *   ?specs=1[&ids=a,b]     read every researched phone's detailed specs again (no full re-research)
  *   ?calibrate=1           have the judge re-score every researched phone against the others
  */
 export async function GET(req) {
@@ -21,6 +22,12 @@ export async function GET(req) {
   const allowed = [process.env.CRON_SECRET, process.env.PHONES_REFRESH_SECRET].filter(Boolean);
   if (!given || !allowed.includes(given)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   try {
+    if (url.searchParams.get('specs') === '1') {
+      const ids = (url.searchParams.get('ids') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      const id = await createJob({ kind: 'specs' }, ipHash('owner'));
+      await runSpecs(id, ids.length ? ids : null);
+      return NextResponse.json({ ok: true, job: await getJob(id) });
+    }
     if (url.searchParams.get('calibrate') === '1') {
       const id = await createJob({ kind: 'calibrate' }, ipHash('owner'));
       await runCalibrate(id);

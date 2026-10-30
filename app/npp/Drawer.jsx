@@ -4,6 +4,35 @@ import { Bar, FAMILY, KIND, LIKELY, OpinionPanel, Pic, Ring, STATUS, Sev, V, day
 
 const TABS = [['overview', '개요'], ['leaks', '유출'], ['opinion', '여론'], ['risks', '우려'], ['scores', '점수·변동'], ['photos', '사진']];
 const CERT_ICON = { 확정: '✓', 유력: '◐', 루머: '?' };
+const GROUP_ORDER = ['크기·무게', '화면', '성능', '배터리·충전', '카메라', '소프트웨어', '연결·기타', '가격·출시'];
+
+/** The detailed spec sheet, by group; anything not confirmed carries its badge and where it came from. */
+function SpecSheet({ rows }) {
+  const groups = new Map();
+  for (const r of rows) { if (!groups.has(r.group)) groups.set(r.group, []); groups.get(r.group).push(r); }
+  const names = [...groups.keys()].sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
+  return (
+    <div className="np-sheet">
+      {names.map((g) => (
+        <div key={g}>
+          <h5>{g}</h5>
+          <dl>
+            {groups.get(g).map((r, i) => (
+              <div key={i}>
+                <dt>{r.label}</dt>
+                <dd>
+                  <span className={r.certainty === '확정' ? '' : 'guess'}>{r.value}</span>
+                  {r.certainty !== '확정' && <i className="np-i">{r.certainty}</i>}
+                  {r.source && <small>{/^https?:/.test(r.source) ? <a href={r.source} target="_blank" rel="noreferrer noopener">출처</a> : r.source}</small>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Fit over the research runs, as one thin line. */
 function Spark({ points }) {
@@ -123,6 +152,13 @@ export default function Drawer({ p, ranks, history, model, watched, onWatch, pic
                   <div><dt>가격</dt><dd><V e={p.price_krw} fmt={won} stack /></dd></div>
                 </dl>
               </section>
+
+              {p.spec_sheet?.length > 0 && (
+                <section>
+                  <h4>상세 사양 <small>{p.spec_sheet.length}개 항목 · 확정이 아닌 값은 배지로 표시</small></h4>
+                  <SpecSheet rows={p.spec_sheet} />
+                </section>
+              )}
 
               {(p.highlights?.length > 0 || p.cautions?.length > 0) && (
                 <section className="np-two">

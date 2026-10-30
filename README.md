@@ -163,6 +163,20 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 
 비용 보호: 같은 IP 동시 1건, 전체 동시 3건, 하루 `PHONES_DAILY_JOBS`건(기본 30).
 
+**비용 조절 (환경변수, 코드 수정 없이)**
+
+| 변수 | 기본값 | 뜻 |
+|---|---|---|
+| `OPENAI_MODEL_PHONES_AGENTS` | `OPENAI_MODEL_FAST`(Luna) | 웹검색 조사원·정찰·사진·사양 담당 모델 (호출의 대부분) |
+| `OPENAI_MODEL_PHONES_HEAD` | `OPENAI_MODEL_PHONES` → `OPENAI_MODEL`(Terra) | 편집장·비교 심판 모델 |
+| `PHONES_EFFORT_AGENTS` | `low` | 조사원 생각 깊이 (low/medium/high/xhigh) |
+| `PHONES_EFFORT_EDITOR` | `low` | 편집장 생각 깊이 |
+| `PHONES_EFFORT_JUDGE` | `medium` | 비교 심판 생각 깊이 |
+| `PHONES_SEARCH_CONTEXT` | `medium` | 검색마다 읽는 양 (low/medium/high) |
+| `PHONES_TTL_HOURS` | `24` | 같은 폰을 다시 조사하지 않는 시간 |
+
+작업이 끝나면 그 작업이 쓴 호출 수와 토큰이 결과의 `usage`에 남습니다.
+
 **주인용 수동 실행** (`secret`은 `CRON_SECRET` 또는 `PHONES_REFRESH_SECRET`)
 - `/api/phones/refresh?secret=…&brands=Samsung,Apple[&force=1]` 브랜드 검색
 - `/api/phones/refresh?secret=…&models=Galaxy S27 Ultra,…&force=1` 이름 지정 조사

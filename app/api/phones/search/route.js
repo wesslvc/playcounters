@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { admit, createJob, getJob, ipHash, runSearch } from '@/lib/phones';
+import { admit, cancelJob, createJob, getJob, ipHash, runSearch } from '@/lib/phones';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -46,6 +46,17 @@ export async function POST(req) {
     const id = await createJob(plan, ip);
     waitUntil(runSearch(id, plan, { force: plan.force }));
     return NextResponse.json({ id }, { status: 202 });
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+/** Stops a running job: /api/phones/search?id=... (the id is only ever given to whoever started it). */
+export async function DELETE(req) {
+  const id = new URL(req.url).searchParams.get('id') ?? '';
+  if (!/^[0-9a-f]{16}$/.test(id)) return NextResponse.json({ error: 'bad id' }, { status: 400 });
+  try {
+    return NextResponse.json({ ok: await cancelJob(id) });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

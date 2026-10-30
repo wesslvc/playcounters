@@ -88,6 +88,7 @@ export default function Client() {
   const [panel, setPanel] = useState(false);
   const [moves, setMoves] = useState({});
   const [sync, setSync] = useState({ signedIn: null, status: '' });
+  const [jobId, setJobId] = useState(null);
   const hydrated = useRef(false);
   const alive = useRef(true);
   const prevOrder = useRef([]);
@@ -237,6 +238,14 @@ export default function Client() {
     setShared(true); setTimeout(() => setShared(false), 2500);
   };
 
+  /** Stops a running job (this page's, or one this browser started elsewhere). */
+  async function cancel(id) {
+    if (!id) return;
+    setProg((x) => (x ? { ...x, step: '취소하는 중…' } : x));
+    await fetch(`/api/phones/search?id=${id}`, { method: 'DELETE' }).catch(() => {});
+    if (id === active?.id) { setActive(null); setNote('조사를 취소했어요.'); setTimeout(loadLibrary, 3000); }
+  }
+
   /** Looks in on a server job until it's done; returns the finished job. */
   async function follow(id) {
     const until = Date.now() + 6 * 60e3;
@@ -245,7 +254,7 @@ export default function Client() {
       const jr = await fetch(`/api/phones/search?id=${id}`).then((r) => r.json()).catch(() => null);
       if (!jr) continue;
       if (jr.progress) setProg(jr.progress);
-      if (jr.status === 'done' || jr.status === 'error') return jr;
+      if (jr.status === 'done' || jr.status === 'error' || jr.status === 'cancelled') return jr;
     }
     return null;
   }
@@ -257,9 +266,10 @@ export default function Client() {
       const j = await r.json();
       if (!r.ok || j.skipped || !j.id) return;
       setProg({ step: '폰들을 서로 비교해 점수를 맞추는 중', done: 0, total: 1 });
+      setJobId(j.id);
       await follow(j.id);
       await loadLibrary();
-    } catch { /* the page works without it */ } finally { if (alive.current) setProg(null); }
+    } catch { /* the page works without it */ } finally { if (alive.current) { setProg(null); setJobId(null); } }
   }
 
   /** Starts a search on the server and looks in on it until it's done. */
@@ -267,8 +277,11 @@ export default function Client() {
     const sr = await fetch('/api/phones/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: payload }) });
     const sj = await sr.json();
     if (!sr.ok) { setNote(`${reason ? `${reason} ` : ''}${ERR[sj.error] ?? `(${sj.error})`}`.trim()); return; }
+    setJobId(sj.id);
     const jr = await follow(sj.id);
+    setJobId(null);
     if (!jr) return;
+    if (jr.status === 'cancelled') { await loadLibrary(); setNote('조사를 취소했어요. 취소 전에 끝난 폰만 저장됐어요.'); return; }
     if (jr.status === 'error') { setNote(/no-credits/.test(jr.error ?? '') ? NO_CREDITS : `조사에 실패했어요 (${jr.error}).`); return; }
     await loadLibrary();
     const r = jr.result ?? {};
@@ -364,6 +377,7 @@ export default function Client() {
           <div className="np-prog" role="status">
             <div className="np-prog-bar"><i style={{ width: `${Math.max(6, pct)}%` }} /></div>
             <span>{prog.step}{prog.total && prog.total > 1 ? ` · 조사원 ${prog.done}/${prog.total}` : ''}{prog.pool ? ` · 후보 ${prog.pool}개` : ''} — AI 여러 마리가 동시에 분업 중이에요. 몇 분 걸리고 닫아도 계속돼요.</span>
+            {jobId && <button type="button" className="np-cancel" onClick={() => cancel(jobId)}>조사 취소</button>}
           </div>
         )}
       </header>
@@ -371,7 +385,8 @@ export default function Client() {
       {note && <p className="np-note-bar">{note}</p>}
       {library === undefined && <p className="np-note">불러오는 중…</p>}
       {active && !busy && !prog && (
-        <p className="np-banner">지금 AI 조사원들이 조사 중이에요{active.progress?.total ? ` (${active.progress.done}/${active.progress.total})` : ''}. 끝나면 이 화면에 자동으로 나타나요.</p>
+        <p className="np-banner">지금 AI 조사원들이 조사 중이에요{active.progress?.total ? ` (${active.progress.done}/${active.progress.total})` : ''}. 끝나면 이 화면에 자동으로 나타나요.
+          {active.id && <> <button type="button" className="np-cancel" onClick={() => cancel(active.id)}>이 조사 취소</button></>}</p>
       )}
       {library?.length === 0 && !active && <p className="np-note">아직 조사된 폰이 없어요{error ? ` (${error})` : ''}. 위에 원하는 걸 쓰고 "찾아서 알려줘"를 눌러보세요.</p>}
 

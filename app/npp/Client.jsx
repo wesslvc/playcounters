@@ -83,7 +83,7 @@ export default function Client() {
     alive.current = true;
     setWatched(read('npp.watch', []));
     setPresets(read('npp.presets', []));
-    const saved = read('npp.prefs2', null);
+    const saved = read('npp.prefs3', null);
     if (saved) setPrefs(normalizePrefs(saved));
     const sf = read('npp.filters', null);
     if (sf) setFilters({ ...DEFAULT_FILTERS, ...sf });
@@ -100,7 +100,7 @@ export default function Client() {
     loadLibrary();
     return () => { alive.current = false; };
   }, []);
-  useEffect(() => { write('npp.prefs2', prefs); }, [prefs]);
+  useEffect(() => { write('npp.prefs3', prefs); }, [prefs]);
   useEffect(() => { write('npp.filters', filters); }, [filters]);
 
   // a search is running somewhere (this page, an earlier visit, the owner's refresh): look in until it lands

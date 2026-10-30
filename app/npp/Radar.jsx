@@ -21,7 +21,7 @@ export default function Radar({ series, size = 220, mini = false }) {
       {RADAR.map((_, i) => { const [x, y] = pt(i, 100); return <line key={i} x1={c} y1={c} x2={x} y2={y} className="np-ring" />; })}
       {series.map((s) => (
         <polygon key={s.label} className="np-shape" style={{ '--c': s.color }}
-          points={RADAR.map(([k], i) => pt(i, s.values[k] ?? 50).join(',')).join(' ')} />
+          points={RADAR.map(([k], i) => pt(i, s.values[k] ?? 0).join(',')).join(' ')} />
       ))}
       {!mini && RADAR.map(([, label], i) => {
         const [x, y] = pt(i, 100);

@@ -91,6 +91,51 @@ function Delta({ delta }) {
   );
 }
 
+
+const MOOD_CLASS = { 긍정: 'pos', 혼재: 'mix', 부정: 'neg', '정보 부족': 'none' };
+const REGION = { kr: '한국', global: '해외' };
+
+/** One community's mood: a gauge, a line on what they say, and what they argue about. */
+function Mood({ title, m }) {
+  if (!m) return null;
+  const none = m.sentiment === '정보 부족';
+  return (
+    <div className={`mood ${MOOD_CLASS[m.sentiment]}`}>
+      <div className="mood-top"><b>{title}</b><em>{m.sentiment}{none ? '' : ` · ${m.score}`}</em></div>
+      {!none && <div className="np-meter" role="img" aria-label={`${title} 여론 ${m.score}점`}><i style={{ width: `${Math.max(3, m.score)}%` }} /></div>}
+      <p>{m.summary}</p>
+      {!!m.topics?.length && <ul className="topics">{m.topics.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+    </div>
+  );
+}
+
+/** Community opinion, in full view — unreleased phones included (the reaction to their leaks). */
+export function OpinionPanel({ p }) {
+  const o = p.opinion;
+  if (!o) return null;
+  const pros = (o.points ?? []).filter((x) => x.stance === 'pro').slice(0, 4);
+  const cons = (o.points ?? []).filter((x) => x.stance === 'con').slice(0, 4);
+  const split = o.kr || o.global;
+  return (
+    <div className="op-panel">
+      <div className="op-head">
+        <h4>커뮤니티 여론</h4>
+        {o.basis && <span className="op-basis">{o.basis}</span>}
+        <span className={`op-all ${MOOD_CLASS[o.sentiment]}`}>{o.sentiment}{o.sentiment === '정보 부족' ? '' : ` · ${o.score}점`}</span>
+      </div>
+      {split ? (
+        <div className="moods"><Mood title="한국 커뮤니티" m={o.kr} /><Mood title="해외 커뮤니티" m={o.global} /></div>
+      ) : <p className="op-sum">{o.summary}</p>}
+      {(pros.length > 0 || cons.length > 0) && (
+        <div className="op-points">
+          <ul className="pro">{pros.map((x, i) => <li key={i}>{x.text}<small>{x.region ? ` · ${REGION[x.region]}` : ''} · {x.source}</small></li>)}</ul>
+          <ul className="con">{cons.map((x, i) => <li key={i}>{x.text}<small>{x.region ? ` · ${REGION[x.region]}` : ''} · {x.source}</small></li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const sevOrder = { high: 0, medium: 1, low: 2 };
 
 export function TopCard({ p, rank, move, watched, onWatch, picked, onPick, open, onOpen }) {
@@ -111,6 +156,7 @@ export function TopCard({ p, rank, move, watched, onWatch, picked, onPick, open,
             <span className={`np-tag ${p.status}`}>{STATUS[p.status]}</span>
             {p.status !== 'released' && p.release_likelihood && <span className="np-tag">{LIKELY[p.release_likelihood]}</span>}
             {p.chipset?.family && <span className="np-tag">{FAMILY[p.chipset.family]}</span>}
+            {p.confidence !== 'high' && <span className="np-tag sure" title="정보가 덜 확실하다는 표시예요. 점수는 깎지 않아요.">정보 {p.confidence === 'low' ? '불확실' : '일부 불확실'}</span>}
           </div>
         </div>
         <p className="top-why">
@@ -145,9 +191,7 @@ export function TopCard({ p, rank, move, watched, onWatch, picked, onPick, open,
           </div>
         </div>
 
-        {p.opinion && p.opinion.sentiment !== '정보 부족' && (
-          <p className="top-op"><em className={SENT[p.opinion.sentiment]}>{p.opinion.sentiment} {p.opinion.score}</em>{p.opinion.summary}</p>
-        )}
+        <OpinionPanel p={p} />
         <div className="top-actions">
           <label className="np-check"><input type="checkbox" checked={picked} onChange={onPick} /> 비교에 담기</label>
           <button type="button" className={`np-star${watched ? ' on' : ''}`} onClick={onWatch}>{watched ? '★ 관심 폰' : '☆ 관심 폰'}</button>
@@ -156,7 +200,7 @@ export function TopCard({ p, rank, move, watched, onWatch, picked, onPick, open,
         </div>
         {open && <Detail p={p} concerns={concerns} />}
       </div>
-      <div className="top-side">
+      <div className="np-top-side">
         <Ring value={f.match} />
         <Delta delta={p.delta} />
         <Radar mini size={104} series={[{ label: p.name, color: COLORS[0], values: f.axes }]} />
@@ -246,7 +290,7 @@ export function Detail({ p, concerns }) {
 
       <div className="d-two">
         <div><h4>장점</h4><ul className="d-pos">{[...(p.highlights ?? []), ...pros.map((x) => `${x.text} (${x.source})`)].map((h, i) => <li key={i}>{h}</li>)}</ul></div>
-        <div><h4>여론에서 나온 아쉬움</h4><ul className="d-neg">{cons.map((x, i) => <li key={i}>{x.text} <small>({x.source})</small></li>)}</ul></div>
+        <div><h4>여론에서 나온 아쉬움 (전체)</h4><ul className="d-neg">{cons.map((x, i) => <li key={i}>{x.text} <small>({x.source})</small></li>)}</ul></div>
       </div>
 
       <div>
@@ -280,7 +324,7 @@ export function Detail({ p, concerns }) {
 }
 
 export function Compare({ compare }) {
-  const best = (key) => { const m = Math.max(...compare.map((p) => p.fit.axes[key])); return (p) => compare.length > 1 && p.fit.axes[key] === m; };
+  const best = (key) => { const m = Math.max(...compare.map((p) => p.fit.axes[key] ?? -1)); return (p) => compare.length > 1 && m >= 0 && p.fit.axes[key] === m; };
   const row = (label, f, hl) => (
     <tr key={label}><th>{label}</th>{compare.map((p) => <td key={p.id} className={hl?.(p) ? 'best' : ''}>{f(p)}</td>)}</tr>
   );
@@ -308,7 +352,9 @@ export function Compare({ compare }) {
             {row('카메라', (p) => p.camera, best('camera'))}
             {row('업데이트', (p) => <V e={p.update_years} unit="년" />, best('software'))}
             {row('가격', (p) => <V e={p.price_krw} fmt={won} />, best('value'))}
-            {row('여론', (p) => <>{p.opinion?.sentiment} · {p.opinion?.score}점</>, best('opinion'))}
+            {row('여론 (전체)', (p) => <>{p.opinion?.sentiment} · {p.opinion?.score}점</>, best('opinion'))}
+            {row('한국 커뮤니티', (p) => (p.opinion?.kr ? `${p.opinion.kr.sentiment} · ${p.opinion.kr.score}점` : '—'))}
+            {row('해외 커뮤니티', (p) => (p.opinion?.global ? `${p.opinion.global.sentiment} · ${p.opinion.global.score}점` : '—'))}
             {row('주요 우려', (p) => ((p.concerns ?? []).filter((c) => c.severity === 'high').map((c) => c.title).join(', ') || '큰 우려 없음'))}
             {row('출시', (p) => `${STATUS[p.status]} · ${p.release}`)}
             {row('정보 확실성', (p) => ({ high: '높음', medium: '보통', low: '낮음' })[p.confidence])}

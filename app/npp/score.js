@@ -27,7 +27,7 @@ export const IMPORTANCE = [
   { key: 'design', label: '디자인', sub: '마감·외관' },
   { key: 'software', label: '업데이트', sub: 'OS 지원 연수' },
   { key: 'opinion', label: '평판', sub: '커뮤니티·리뷰' },
-  { key: 'certainty', label: '정보 확실성', sub: '루머보다 확정' },
+  { key: 'certainty', label: '확정 정보 선호', sub: '켜면 루머·추정이 불리해져요' },
 ];
 
 /** The brand/chip/OS/form leanings take part in the ordering as one element of their own. */
@@ -44,7 +44,7 @@ export const TRAITS = [
 ];
 
 export const DEFAULT_IMPORTANCE = {
-  performance: 60, camera: 60, battery: 60, charging: 25, display: 45, design: 35, software: 45, opinion: 45, certainty: 25,
+  performance: 60, camera: 60, battery: 60, charging: 25, display: 45, design: 35, software: 45, opinion: 45, certainty: 0,
 };
 export const EMPTY_PREFS = {
   imp: { ...DEFAULT_IMPORTANCE },
@@ -93,23 +93,23 @@ export const RADAR = [
 
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 const val = (e) => (e && typeof e.value === 'number' ? e.value : null);
-/** A figure nobody has found yet counts as not-good (40), never as average. */
-const UNKNOWN = 40;
-
 /**
  * Scores are meant to be stingy: 50 is an ordinary phone, 70 a good flagship,
  * 90 the best on the market by a clear margin, and nothing is 100. Dossiers
  * researched under that rubric (score_version 2) are used as given; older ones,
  * which were marked far too generously (nearly everything 75–98), are bent
  * down to the same scale here until they are researched again.
+ *
+ * Not being sure of a figure is NOT held against a phone: an estimate counts
+ * at its best value, and a figure nobody has found at all is left out of the
+ * average rather than scored low. How sure the information is shows on the
+ * card; it only affects the ranking if the reader turns on "확정 정보 선호".
  */
 const strict = (s) => clamp(Math.pow(clamp((s - 50) / 50, 0, 1), 1.4) * 100);
-const given = (d, raw) => (raw == null ? UNKNOWN : (d.score_version ?? 1) >= 2 ? clamp(raw) : strict(raw));
-/** What an unconfirmed picture is worth: good marks are shaved by how unsure the whole dossier is. */
-const SURE = { high: 1, medium: 0.93, low: 0.84 };
-const shave = (v, d) => (v > UNKNOWN ? UNKNOWN + (v - UNKNOWN) * (SURE[d.confidence] ?? 0.9) : v);
+const given = (d, raw) => (raw == null ? null : (d.score_version ?? 1) >= 2 ? clamp(raw) : strict(raw));
+const round = (v) => (v == null ? null : Math.round(v));
 
-/** Every axis on 0–100. */
+/** Every axis on 0–100; null where nothing is known. */
 export function axesOf(d) {
   const s = d.scores ?? {};
   const w = val(d.weight_g);
@@ -120,27 +120,29 @@ export function axesOf(d) {
   const cam = given(d, s.camera);
   const bat = given(d, s.battery);
   const disp = given(d, s.display);
-  const avg = (perf + cam + bat + disp) / 4;
-  const priceScore = price == null ? UNKNOWN : clamp(100 - ((price - 500000) / 2000000) * 100);
+  const known = [perf, cam, bat, disp].filter((x) => x != null);
+  const avg = known.length ? known.reduce((x, y) => x + y, 0) / known.length : null;
+  const priceScore = price == null ? null : clamp(100 - ((price - 500000) / 2000000) * 100);
+  const value = avg == null && priceScore == null ? null : avg == null ? priceScore : priceScore == null ? avg : avg * 0.4 + priceScore * 0.6;
   const a = {
     performance: perf,
     camera: cam,
     battery: bat,
-    charging: c == null ? UNKNOWN : clamp(((c - 20) / 100) * 100),
+    charging: c == null ? null : clamp(((c - 20) / 100) * 100),
     display: disp,
-    lightness: w == null ? UNKNOWN : clamp(((240 - w) / 80) * 100),
-    software: u == null ? UNKNOWN : clamp(((u - 2) / 6) * 100),
-    value: Math.round(avg * 0.4 + priceScore * 0.6),
+    lightness: w == null ? null : clamp(((240 - w) / 80) * 100),
+    software: u == null ? null : clamp(((u - 2) / 6) * 100),
+    value,
     design: given(d, s.design),
     opinion: given(d, d.opinion?.score),
   };
-  for (const k of Object.keys(a)) a[k] = Math.round(shave(a[k], d));
+  for (const k of Object.keys(a)) a[k] = round(a[k]);
   a.certainty = { high: 100, medium: 60, low: 25 }[d.confidence] ?? 40;
   a.novelty = { upcoming: 100, rumored: 80, released: 30 }[d.status] ?? 40;
   return a;
 }
 
-/** Points taken off for what is worrying and for what isn't pinned down. */
+/** Points taken off for real concerns only — never for how sure the information is. */
 export function penaltiesOf(d) {
   const sev = (k) => (d.concerns ?? []).filter((x) => x.severity === k).length;
   const parts = [];
@@ -148,9 +150,6 @@ export function penaltiesOf(d) {
   const mid = Math.min(5, sev('medium') * 1.5);
   if (high) parts.push({ label: `큰 우려 ${sev('high')}건`, v: -high });
   if (mid) parts.push({ label: `주의 사항 ${sev('medium')}건`, v: -mid });
-  const unsure = { low: 5, medium: 2 }[d.confidence] ?? 0;
-  if (unsure) parts.push({ label: d.confidence === 'low' ? '정보가 불확실' : '일부 정보 불확실', v: -unsure });
-  if (d.status === 'rumored') parts.push({ label: '루머 단계', v: -3 });
   return { total: parts.reduce((x, y) => x + y.v, 0), parts };
 }
 
@@ -271,12 +270,16 @@ function bonusOf(d, model) {
 export function fitOf(d, model) {
   const a = axesOf(d);
   const { weights } = model;
+  // an axis nobody has data for counts as that phone's own average: it neither helps nor hurts
+  const knownAxes = ['performance', 'camera', 'battery', 'display', 'design', 'opinion'].map((k) => a[k]).filter((x) => x != null);
+  const own = knownAxes.length ? knownAxes.reduce((x, y) => x + y, 0) / knownAxes.length : 50;
+  const at = (k) => a[k] ?? own;
   const total = Object.values(weights).reduce((x, y) => x + y, 0) || 1;
-  const parts = AXES.map(([k, label]) => ({ k, label, v: (a[k] * (weights[k] ?? 0)) / total, w: weights[k] ?? 0 }));
+  const parts = AXES.map(([k, label]) => ({ k, label, v: (at(k) * (weights[k] ?? 0)) / total, w: weights[k] ?? 0 }));
   const bonus = bonusOf(d, model);
   const pen = penaltiesOf(d);
   const base = parts.reduce((x, y) => x + y.v, 0);
-  const why = parts.filter((x) => x.w > 0.8 && a[x.k] >= 60).sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.label);
+  const why = parts.filter((x) => x.w > 0.8 && (a[x.k] ?? 0) >= 60).sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.label);
   const pulls = bonus.parts.filter((x) => x.v >= 3).map((x) => x.label);
   return { match: Math.round(clamp(base + bonus.total + pen.total, 0, 97)), why, pulls, axes: a, bonus: bonus.parts, penalties: pen.parts };
 }

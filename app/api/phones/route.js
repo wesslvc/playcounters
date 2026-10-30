@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
-import { loadReport } from '@/lib/phones';
+import { loadStatus } from '@/lib/phones';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
-/** The latest collected report, as stored by /api/phones/refresh. */
+/** The latest collected report, and whether a collection is running or on cooldown. */
 export async function GET() {
   try {
-    const report = await loadReport();
-    return NextResponse.json({ report });
+    return NextResponse.json(await loadStatus());
   } catch (e) {
-    return NextResponse.json({ report: null, error: e.message }, { status: 500 });
+    return NextResponse.json({ report: null, running: false, nextAt: 0, error: e.message }, { status: 500 });
   }
 }

@@ -39,11 +39,41 @@ export default function Client() {
   const [picked, setPicked] = useState(null);
   const [open, setOpen] = useState(null);
 
+  const [running, setRunning] = useState(false);
+  const [nextAt, setNextAt] = useState(0);
+  const [msg, setMsg] = useState('');
+
+  const load = () => fetch('/api/phones').then((r) => r.json())
+    .then((j) => {
+      setReport(j.report ?? null); setRunning(Boolean(j.running)); setNextAt(j.nextAt ?? 0);
+      if (j.error) setError(j.error);
+      return j;
+    })
+    .catch((e) => { setReport((r) => r ?? null); setError(e.message); return null; });
+
+  useEffect(() => { load(); }, []);
+
+  // while a collection runs (started here or elsewhere), look for its result
   useEffect(() => {
-    fetch('/api/phones').then((r) => r.json())
-      .then((j) => { setReport(j.report ?? null); if (j.error) setError(j.error); })
-      .catch((e) => { setReport(null); setError(e.message); });
-  }, []);
+    if (!running) return undefined;
+    const t = setInterval(load, 6000);
+    return () => clearInterval(t);
+  }, [running]);
+
+  async function collect() {
+    setMsg(''); setRunning(true);
+    // the run takes minutes; don't hold the answer, the poll above picks the result up
+    fetch('/api/phones/refresh', { method: 'POST' }).then(async (r) => {
+      if (r.ok) return;
+      const j = await r.json().catch(() => ({}));
+      if (j.error === 'running') return;
+      setRunning(false);
+      if (j.error === 'cooldown') {
+        setNextAt(j.nextAt);
+        setMsg(`최근에 수집해서 ${new Date(j.nextAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 이후에 다시 할 수 있어요.`);
+      } else setMsg(`수집에 실패했어요 (${j.error ?? r.status}).`);
+    }).catch(() => { /* connection dropped; the run goes on server-side */ });
+  }
 
   const ranked = useMemo(() => {
     if (!report) return [];
@@ -110,9 +140,18 @@ export default function Client() {
 
       {report === undefined && <p className="np-note">불러오는 중…</p>}
       {report === null && (
-        <p className="np-note">
-          아직 수집된 정보가 없습니다.{error ? ` (${error})` : ''} 서버에서 <code>/api/phones/refresh</code>를 한 번 실행하면 채워져요.
-        </p>
+        <p className="np-note">아직 수집된 정보가 없습니다.{error ? ` (${error})` : ''} 아래 버튼을 눌러 수집하세요.</p>
+      )}
+      {report !== undefined && (
+        <div className="np-collect">
+          <button onClick={collect} disabled={running || Date.now() < nextAt}>
+            {running ? '수집 중… (몇 분 걸려요)' : '최신 정보 수집하기'}
+          </button>
+          {!running && Date.now() < nextAt && (
+            <span className="np-note">최근에 수집됨 · {new Date(nextAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 이후 가능</span>
+          )}
+          {msg && <span className="np-note">{msg}</span>}
+        </div>
       )}
 
       {report && (

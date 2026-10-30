@@ -46,3 +46,4 @@
 .np-src { padding-left: 18px; font-size: 13px; columns: 2; }
 .np-src a { word-break: break-all; }
 @media (max-width: 560px) { .np-top li { grid-template-columns: 26px 1fr; } .np-match { grid-column: 2; text-align: left; } .np-taste { flex-direction: column; } .np-src { columns: 1; } }
+.np-collect { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }

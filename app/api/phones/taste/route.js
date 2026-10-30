@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 export const maxDuration = 30;
 
 const AXES = ['performance', 'camera', 'battery', 'display', 'lightness', 'software', 'value', 'design'];

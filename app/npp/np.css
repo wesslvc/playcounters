@@ -313,16 +313,20 @@ span.np-bar i.lead { background: var(--a); }
 .np-table td.best i { font-style: normal; font-size: 11px; margin-right: 5px; }
 
 /* ---- heatmap ---- */
-.np-matrix { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 860px; font-size: 13px; }
+.np-mx-scroll { overflow-x: auto; border-radius: 12px; }
+.np-matrix { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 820px; font-size: 13px; }
 .np-matrix th, .np-matrix td { padding: 0; }
 .np-matrix thead th { background: var(--surface); padding: 8px 4px; font-size: 12px; font-weight: 700; color: var(--ink-2); text-align: center; border-bottom: 1px solid var(--line); }
 .np-matrix thead th button { font: inherit; display: inline-flex; gap: 3px; align-items: center; color: inherit; }
 .np-matrix thead th[aria-sort="descending"], .np-matrix thead th[aria-sort="ascending"] { color: var(--a); }
-.np-matrix thead th.name { text-align: left; padding-left: 8px; }
+.np-matrix thead th.name { text-align: left; padding-left: 10px; position: sticky; left: 0; z-index: 4; }
 .np-matrix .chk { width: 32px; text-align: center; }
 .np-matrix .chk input { accent-color: var(--a); }
-.np-matrix tbody th.name { text-align: left; padding: 6px 12px 6px 8px; min-width: 190px; position: sticky; left: 0; background: var(--surface); z-index: 2; font-weight: 400; }
-.np-matrix tbody th.name button { display: grid; gap: 1px; text-align: left; font: inherit; }
+.np-matrix tbody th.name { text-align: left; padding: 6px 12px 6px 10px; width: 210px; min-width: 210px; max-width: 210px; position: sticky; left: 0; background: var(--surface); z-index: 3; font-weight: 400; display: table-cell; box-shadow: 1px 0 0 var(--hair); }
+.np-matrix tbody th.name { white-space: normal; }
+.np-matrix tbody th.name input { vertical-align: middle; margin-right: 8px; }
+.np-matrix tbody th.name button { display: inline-grid; vertical-align: middle; max-width: 160px; }
+.np-matrix tbody th.name button { gap: 1px; text-align: left; font: inherit; }
 .np-matrix tbody th.name b { font-size: 13.5px; }
 .np-matrix tbody th.name button:hover b { color: var(--a); }
 .np-matrix td.cell { height: 40px; min-width: 52px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; border: var(--gap) solid var(--surface); border-radius: 6px; }
@@ -545,3 +549,12 @@ span.np-bar i.lead { background: var(--a); }
 .pr2-chips button i { font-style: normal; font-size: 11px; color: var(--a); }
 .pr2-chips button:hover { border-color: var(--a); color: var(--ink); }
 .pr2-empty { font-size: 12.5px; color: var(--ink-3); padding: 10px 12px; border-radius: 10px; background: var(--sunk); }
+
+@media (max-width: 720px) {
+  .np-matrix tbody th.name, .np-matrix thead th.name { width: 132px; min-width: 132px; max-width: 132px; padding-left: 6px; padding-right: 6px; }
+  .np-matrix tbody th.name small { display: none; }
+  .np-matrix tbody th.name button { max-width: 92px; }
+  .np-matrix tbody th.name b { font-size: 12.5px; line-height: 1.25; display: block; overflow-wrap: anywhere; }
+  .np-matrix td.cell { min-width: 46px; font-size: 12.5px; }
+  .np-matrix { min-width: 700px; }
+}

@@ -26,12 +26,11 @@ export default function MatrixView({ rows, ranks, ids, toggle, onOpen }) {
   return (
     <section className="np-card">
       <h2>전체 비교표 <small>{rows.length}개 · 진할수록 높은 점수 · 머리글을 누르면 정렬</small></h2>
-      <div className="np-scroll">
+      <div className="np-mx-scroll">
         <table className="np-matrix">
           <thead>
             <tr>
-              <th className="chk" aria-label="비교" />
-              <th className="name">폰</th>
+              <th className="name" scope="col">폰</th>
               {head('match', '내 취향')}
               {COMPARE_AXES.map(([k, l]) => head(k, l))}
               {head('concerns', '우려')}
@@ -40,8 +39,8 @@ export default function MatrixView({ rows, ranks, ids, toggle, onOpen }) {
           <tbody>
             {sorted.map((p) => (
               <tr key={p.id}>
-                <td className="chk"><input type="checkbox" checked={ids.includes(p.id)} onChange={() => toggle(p.id)} aria-label={`${p.name} 비교`} /></td>
                 <th scope="row" className="name">
+                  <input type="checkbox" checked={ids.includes(p.id)} onChange={() => toggle(p.id)} aria-label={`${p.name} 비교`} />
                   <button type="button" onClick={() => onOpen(p)}>
                     <b>{p.name}</b>
                     <small>{p.brand} · {STATUS[p.status]}{p.chipset?.family ? ` · ${FAMILY[p.chipset.family]}` : ''}</small>

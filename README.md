@@ -140,11 +140,9 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 
 ---
 
-## newphoneprediction (하위 도메인)
+## newphoneprediction (`/npp`)
 
-같은 배포에 얹힌 최신폰 추천 페이지. `newphoneprediction.<내 도메인>`으로 들어오면
-루트(`/`)가 `/newphoneprediction`으로 연결됩니다 (`middleware.js`). 본 주소에서도
-`/newphoneprediction`으로 바로 열려서 도메인 연결 전에 확인할 수 있습니다.
+같은 배포에 얹힌 최신폰 추천 페이지. `https://<배포주소>/npp`에서 열립니다.
 
 - `/api/phones/refresh` — GPT(웹 검색)가 Ice Universe(X), 알뷰(YouTube), 스펙·벤치마크
   자료를 모아 폰 목록(무게·칩셋·배터리·업데이트·가격·유출 신뢰도)으로 정리해
@@ -157,8 +155,7 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 
 1. Supabase SQL Editor에서 `supabase/phones.sql` 실행
 2. Vercel 환경변수 `OPENAI_API_KEY` 추가 (선택: `OPENAI_MODEL_PHONES`)
-3. Vercel → 프로젝트 → Settings → Domains에서 `newphoneprediction.<내 도메인>` 추가
-4. 배포 후 위 수동 실행 URL을 한 번 열어 첫 데이터를 채움
+3. 배포 후 위 수동 실행 URL을 한 번 열어 첫 데이터를 채움
 
 > X 게시물과 유튜브 영상을 직접 긁는 것이 아니라 GPT 웹 검색이 찾을 수 있는 범위
 > (게시물·영상 제목과 이를 인용한 기사)에서 모읍니다. 놓치는 글이 있을 수 있고, 화면에

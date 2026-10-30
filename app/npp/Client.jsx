@@ -51,6 +51,7 @@ function Pic({ p, small }) {
 
 export default function Client() {
   const [library, setLibrary] = useState(undefined);
+  const [active, setActive] = useState(null);
   const [error, setError] = useState('');
   const [text, setText] = useState('');
   const [brandSel, setBrandSel] = useState([]);
@@ -75,7 +76,7 @@ export default function Client() {
   const alive = useRef(true);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
-    .then((j) => { setLibrary(j.phones ?? []); if (j.error) setError(j.error); return j.phones ?? []; })
+    .then((j) => { setLibrary(j.phones ?? []); setActive(j.active ?? null); if (j.error) setError(j.error); return j.phones ?? []; })
     .catch((e) => { setLibrary((l) => l ?? []); setError(e.message); return []; });
 
   useEffect(() => {
@@ -87,6 +88,13 @@ export default function Client() {
     return () => { alive.current = false; };
   }, []);
   useEffect(() => { write('npp.weights', weights); }, [weights]);
+
+  // a search is running somewhere (this page, an earlier visit, the owner's refresh): keep looking in until it lands
+  useEffect(() => {
+    if (!active || busy) return undefined;
+    const t = setInterval(loadLibrary, 6000);
+    return () => clearInterval(t);
+  }, [active, busy]);
 
   // the graph's history, for whatever is followed
   useEffect(() => {
@@ -207,7 +215,7 @@ export default function Client() {
         <div className="np-collect">
           <button className="np-go" disabled={busy || (!text.trim() && !brandSel.length)}>{busy ? '찾는 중…' : '찾아서 알려줘'}</button>
           {busy && prog && (
-            <span className="np-note">{prog.step}{prog.total ? ` ${prog.done}/${prog.total}` : ''} · 몇 분 걸려요, 닫아도 계속돼요</span>
+            <span className="np-note">{prog.step}{prog.total ? ` ${prog.done}/${prog.total}` : ''} · AI 여러 마리가 동시에 분업 중 · 몇 분 걸려요, 닫아도 계속돼요</span>
           )}
         </div>
         {note && <p className="np-note">{note}</p>}
@@ -215,7 +223,10 @@ export default function Client() {
       </form>
 
       {library === undefined && <p className="np-note">불러오는 중…</p>}
-      {library?.length === 0 && <p className="np-note">아직 조사된 폰이 없어요{error ? ` (${error})` : ''}. 위에서 브랜드를 고르고 "찾아서 알려줘"를 눌러보세요.</p>}
+      {active && !busy && (
+        <p className="np-note">지금 AI 조사원들이 조사 중이에요{active.progress?.total ? ` (${active.progress.done}/${active.progress.total})` : ''}. 끝나면 이 화면에 자동으로 나타나요.</p>
+      )}
+      {library?.length === 0 && !active && <p className="np-note">아직 조사된 폰이 없어요{error ? ` (${error})` : ''}. 위에서 브랜드를 고르고 "찾아서 알려줘"를 눌러보세요.</p>}
 
       {!!library?.length && (
         <>

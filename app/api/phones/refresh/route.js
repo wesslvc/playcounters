@@ -11,6 +11,7 @@ export const maxDuration = 300;
  * ?secret=<CRON_SECRET or PHONES_REFRESH_SECRET>:
  *   (nothing)            refresh followed phones
  *   &brands=Samsung,Apple  run a search for those brands now (seeds the library)
+ *   &force=1               with brands: research again even if fresh
  */
 export async function GET(req) {
   const url = new URL(req.url);
@@ -22,7 +23,7 @@ export async function GET(req) {
     if (brands.length) {
       const plan = { brands, models: [], os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '' };
       const id = await createJob(plan, ipHash('owner'));
-      await runSearch(id, plan);
+      await runSearch(id, plan, { force: url.searchParams.get('force') === '1' });
       return NextResponse.json({ ok: true, job: await getJob(id) });
     }
     return NextResponse.json({ ok: true, ...(await refreshWatched()) });

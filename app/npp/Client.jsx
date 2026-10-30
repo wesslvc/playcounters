@@ -361,6 +361,24 @@ export default function Client() {
 
           {tab === 'top' && (hasData ? (
             <section>
+              {(() => {
+                const why = [
+                  prefs.tr.timing <= -8 && "'지금 살 수 있는 확정 모델' 쪽으로 기울어 있어서",
+                  (prefs.imp.certainty >= 10 || prefs.order.includes('certainty')) && "'확정 정보 선호'가 켜져 있어서",
+                  filters.onlyConfirmed && "'확실한 정보만'이 체크돼 있어서",
+                  !filters.upcoming && "'출시 예정·루머 포함'이 꺼져 있어서",
+                ].filter(Boolean);
+                if (!why.length) return null;
+                return (
+                  <p className="np-hold">
+                    {why.join(', ')} 출시 전 폰(후속작)이 불리하거나 빠져 있어요.{' '}
+                    <button type="button" onClick={() => {
+                      setPrefs({ ...prefs, tr: { ...prefs.tr, timing: Math.max(0, prefs.tr.timing) }, imp: { ...prefs.imp, certainty: 0 }, order: prefs.order.filter((k) => k !== 'certainty') });
+                      setFilters({ ...filters, onlyConfirmed: false, upcoming: true });
+                    }}>균형으로 되돌리기</button>
+                  </p>
+                );
+              })()}
               <div className="np-res-head"><h2>나에게 맞는 TOP 5</h2><span>{ranked.length}개 중 · 슬라이더를 움직이면 바로 바뀌어요</span></div>
               {!top.length && <p className="np-note">조건에 맞는 폰이 없어요. 한도나 제외한 항목을 풀어보세요.</p>}
               <ol className="np-tiles">
@@ -375,7 +393,7 @@ export default function Client() {
           ) : <p className="np-note">조사된 폰이 생기면 여기에 추천이 나와요.</p>)}
 
           {tab === 'compare' && (
-            <CompareView phones={scored} all={ranked} ids={compareIds} setIds={(ids) => setPicked(ids.slice(0, 5))} onOpen={(p) => setOpenId(p.id)} order={prefs.order} />
+            <CompareView phones={scored} all={ranked} ids={compareIds} setIds={(ids) => setPicked(ids.slice(0, 5))} onOpen={(p) => setOpenId(p.id)} order={prefs.order} model={model} />
           )}
           {tab === 'matrix' && <MatrixView rows={ranked} ranks={ranks} ids={compareIds} toggle={toggle} onOpen={(p) => setOpenId(p.id)} />}
           {tab === 'timeline' && <TimelineView phones={[...scored, ...stubs]} onOpen={(p) => setOpenId(p.id)} />}

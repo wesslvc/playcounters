@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { COMPARE_AXES, won } from './score';
+import { COMPARE_AXES, explainGap, won } from './score';
 import Radar from './Radar';
 import { Bar, CAT, Pic, STATUS, V, mah, when } from './parts';
 
 /** The comparison: who leads on each axis, by how much, and why — the leader in the accent, the rest in grey. */
-export default function CompareView({ phones, all, ids, setIds, onOpen, order }) {
-  const [mode, setMode] = useState('lead'); // lead: emphasis on the leader · color: one colour per phone
+export default function CompareView({ phones, all, ids, setIds, onOpen, order, model }) {
+  const [mode, setMode] = useState('lead');
+  const [pair, setPair] = useState([null, null]); // lead: emphasis on the leader · color: one colour per phone
   const slots = useRef(new Map()); // the colour follows the phone, whatever else is added or removed
   const slotOf = (id) => {
     if (!slots.current.has(id)) slots.current.set(id, slots.current.size % CAT.length);
@@ -91,6 +92,8 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order })
             )}
           </section>
 
+          <Why sel={sel} pair={pair} setPair={setPair} model={model} />
+
           <section className="np-card">
             <h2>폰별로 어디가 앞서나</h2>
             <div className="np-leadgrid" style={{ '--n': sel.length }}>
@@ -146,5 +149,38 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order })
         </>
       )}
     </div>
+  );
+}
+
+/** Why one phone sits above another: the pieces of the fit that differ, as bars either side of zero. */
+function Why({ sel, pair, setPair, model }) {
+  const byFit = [...sel].sort((a, b) => b.fit.match - a.fit.match);
+  const a = sel.find((p) => p.id === pair[0]) ?? byFit[0];
+  const b = sel.find((p) => p.id === pair[1] && p.id !== a.id) ?? byFit.find((p) => p.id !== a.id);
+  if (!a || !b) return null;
+  const rows = explainGap(a, b, model).slice(0, 7);
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.v)));
+  const pick = (i) => (e) => setPair(i === 0 ? [e.target.value, pair[1]] : [pair[0], e.target.value]);
+  return (
+    <section className="np-card">
+      <h2>왜 이 순서인가 <small>두 폰의 적합도 차이가 어디서 생겼는지</small></h2>
+      <div className="np-why-pick">
+        <select value={a.id} onChange={pick(0)} aria-label="첫 번째 폰">{sel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <b>{a.fit.match}%</b><span>vs</span><b>{b.fit.match}%</b>
+        <select value={b.id} onChange={pick(1)} aria-label="두 번째 폰">{sel.filter((p) => p.id !== a.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      </div>
+      {rows.length ? (
+        <ul className="np-gaps">
+          {rows.map((r) => (
+            <li key={r.key} className={r.v > 0 ? 'pos' : 'neg'}>
+              <span className="l">{r.label}{r.kind !== '항목' && <small> · {r.kind}</small>}</span>
+              <span className="track"><i style={{ width: `${(Math.abs(r.v) / max) * 50}%`, [r.v > 0 ? 'left' : 'right']: '50%' }} /></span>
+              <span className="v">{r.v > 0 ? '+' : '−'}{Math.abs(r.v).toFixed(1)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="np-meta">두 폰의 점수를 가르는 항목이 거의 없어요.</p>}
+      <p className="np-meta">오른쪽(파랑)은 {a.name}가 앞서는 몫, 왼쪽(빨강)은 {b.name}가 앞서는 몫이에요. 숫자는 적합도에서 차지하는 점수예요.</p>
+    </section>
   );
 }

@@ -138,7 +138,8 @@ export function axesOf(d) {
     opinion: given(d, d.opinion?.score),
   };
   for (const k of Object.keys(a)) a[k] = round(a[k]);
-  a.certainty = { high: 100, medium: 60, low: 25 }[d.confidence] ?? 40;
+  // a lean toward confirmed phones should tip a close call, not bury a better phone under a rumour's label
+  a.certainty = { high: 90, medium: 70, low: 45 }[d.confidence] ?? 55;
   a.novelty = { upcoming: 100, rumored: 80, released: 30 }[d.status] ?? 40;
   return a;
 }
@@ -417,4 +418,36 @@ export function periodOf(p, now = new Date()) {
   if (q === 3.5) return { key: `${year}H2`, label: `${year} 하반기`, order: year * 10 + 3 };
   if (q) return { key: `${year}Q${q}`, label: `${year} ${q}분기`, order: year * 10 + q };
   return { key: `${year}`, label: `${year}년`, order: year * 10 + 2 };
+}
+
+/** What each axis, leaning and concern adds to a phone's fit, in points. */
+export function contributions(d, model) {
+  const f = fitOf(d, model);
+  const { weights } = model;
+  const total = Object.values(weights).reduce((x, y) => x + y, 0) || 1;
+  const knownAxes = ['performance', 'camera', 'battery', 'display', 'design', 'opinion'].map((k) => f.axes[k]).filter((x) => x != null);
+  const own = knownAxes.length ? knownAxes.reduce((x, y) => x + y, 0) / knownAxes.length : 50;
+  const parts = AXES.map(([k, label]) => ({ key: k, label, v: ((f.axes[k] ?? model.medians?.[k] ?? own) * (weights[k] ?? 0)) / total }));
+  for (const b of f.bonus) parts.push({ key: `bonus:${b.label}`, label: b.label, v: b.v });
+  for (const p of f.penalties) parts.push({ key: `pen:${p.label}`, label: p.label, v: p.v });
+  return parts;
+}
+
+/** Why `a` sits where it does against `b`: the pieces that differ, biggest first. */
+export function explainGap(a, b, model) {
+  const ca = contributions(a, model);
+  const cb = new Map(contributions(b, model).map((x) => [x.key, x]));
+  const keys = new Set([...ca.map((x) => x.key), ...cb.keys()]);
+  const byKey = new Map(ca.map((x) => [x.key, x]));
+  return [...keys].map((k) => {
+    const x = byKey.get(k); const y = cb.get(k);
+    const label = (x ?? y).label.replace(/^(.*?)( 선호| 비선호)$/, '$1$2');
+    const kind = k.startsWith('pen:') ? '우려 감점' : k.startsWith('bonus:') ? '성향' : '항목';
+    return { key: k, label: kind === '우려 감점' ? `우려 감점` : label, v: (x?.v ?? 0) - (y?.v ?? 0), kind };
+  }).reduce((acc, x) => {
+    // concerns of different counts on each side are one line, not two
+    const same = acc.find((y) => y.label === x.label && x.kind === '우려 감점' && y.kind === '우려 감점');
+    if (same) same.v += x.v; else acc.push(x);
+    return acc;
+  }, []).filter((x) => Math.abs(x.v) >= 0.3).sort((x, y) => Math.abs(y.v) - Math.abs(x.v));
 }

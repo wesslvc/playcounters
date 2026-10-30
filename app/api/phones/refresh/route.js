@@ -6,8 +6,8 @@ export const fetchCache = 'force-no-store';
 export const maxDuration = 300;
 
 /**
- * Owner-only. Vercel's cron calls it daily with `Authorization: Bearer $CRON_SECRET`
- * and it brings the followed phones up to date. By hand, with
+ * Owner-only. Vercel's cron calls it weekly with `Authorization: Bearer $CRON_SECRET`
+ * and it brings the followed phones up to date (and, a little later, ?calibrate=1). By hand, with
  * ?secret=<CRON_SECRET or PHONES_REFRESH_SECRET>:
  *   (nothing)            refresh followed phones
  *   &brands=Samsung,Apple  run a search for those brands now (seeds the library)

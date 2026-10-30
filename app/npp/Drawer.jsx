@@ -50,7 +50,7 @@ function Spark({ points }) {
   );
 }
 
-export default function Drawer({ p, ranks, history, model, watched, onWatch, picked, onPick, onClose }) {
+export default function Drawer({ p, ranks, history, model, watched, onWatch, picked, onPick, onClose, onResearch, busy }) {
   const [tab, setTab] = useState('overview');
   const [cur, setCur] = useState(0);
   const [bad, setBad] = useState({});
@@ -93,6 +93,7 @@ export default function Drawer({ p, ranks, history, model, watched, onWatch, pic
           <label className="np-check"><input type="checkbox" checked={picked} onChange={onPick} /> 비교에 담기</label>
           <button type="button" className={`np-star${watched ? ' on' : ''}`} onClick={onWatch}>{watched ? '★ 관심 폰' : '☆ 관심 폰 추가'}</button>
           <span className="np-meta">조사 {when(p.updated_at)}</span>
+          <button type="button" className="np-redo" onClick={onResearch} disabled={busy} title="자동 조사는 주 1회예요. 지금 최신 유출을 반영하려면 눌러주세요 (AI 비용이 들어요)">지금 다시 조사</button>
         </div>
 
         <nav className="np-d-tabs" role="tablist">

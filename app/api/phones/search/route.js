@@ -36,13 +36,15 @@ export async function POST(req) {
     chip_families: Array.isArray(p.chip_families) ? p.chip_families.filter((x) => typeof x === 'string').slice(0, 6) : [],
     include_upcoming: p.include_upcoming !== false,
     reason: String(p.reason ?? '').slice(0, 300),
+    // only for phones named outright: "research this one again now"
+    force: p.force === true && Array.isArray(p.models) && p.models.length > 0 && p.models.length <= 2,
   };
   const ip = ipHash(req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'anon');
   try {
     const ok = await admit(ip);
     if (!ok.ok) return NextResponse.json({ error: ok.error }, { status: 429 });
     const id = await createJob(plan, ip);
-    waitUntil(runSearch(id, plan));
+    waitUntil(runSearch(id, plan, { force: plan.force }));
     return NextResponse.json({ id }, { status: 202 });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });

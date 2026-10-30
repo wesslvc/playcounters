@@ -91,7 +91,6 @@ export default function Client() {
   const hydrated = useRef(false);
   const alive = useRef(true);
   const prevOrder = useRef([]);
-  const calibrated = useRef(false);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
     .then((j) => { const phones = fillFromPredecessor(tidy(j.phones ?? [])); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
@@ -136,7 +135,8 @@ export default function Client() {
       }
       setSync({ signedIn: true, status: 'saved' });
     }).catch(() => setSync({ signedIn: false, status: '' })).finally(() => { setTimeout(() => { hydrated.current = true; }, 0); });
-    loadLibrary().then((phones) => { if (phones.length && !calibrated.current) { calibrated.current = true; calibrate(); } });
+    // opening the page never spends anything: the judge runs after a reader's own search, and weekly
+    loadLibrary();
     return () => { alive.current = false; };
   }, []);
   useEffect(() => { write('npp.prefs3', prefs); }, [prefs]);
@@ -312,11 +312,11 @@ export default function Client() {
     }
   }
 
-  async function researchStub(p) {
+  async function researchStub(p, force = false) {
     if (busy) return;
-    setBusy(true); setNote(`${p.brand} ${p.name}를 자세히 조사하는 중…`); setProg({ step: '조사 시작', done: 0, total: 0 });
+    setBusy(true); setNote(`${p.brand} ${p.name}를 ${force ? '다시' : '자세히'} 조사하는 중…`); setProg({ step: '조사 시작', done: 0, total: 0 });
     try {
-      await runJob({ brands: [], models: [`${p.brand} ${p.name}`], os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '' }, '');
+      await runJob({ brands: [], models: [`${p.brand} ${p.name}`], os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '', force }, '');
     } catch (err) {
       setNote(`요청을 처리하지 못했어요 (${err.message}).`);
     } finally {
@@ -445,7 +445,7 @@ export default function Client() {
       {openP && (
         <Drawer p={withDelta(openP)} ranks={ranks[openP.id]} history={history[openP.id]} model={model}
           watched={watched.includes(openP.id)} onWatch={() => toggleWatch(openP.id)} picked={compareIds.includes(openP.id)} onPick={() => toggle(openP.id)}
-          onClose={() => setOpenId(null)} />
+          onClose={() => setOpenId(null)} onResearch={() => { setOpenId(null); researchStub(openP, true); }} busy={busy} />
       )}
 
       {panel && !!top.length && (

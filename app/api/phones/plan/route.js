@@ -26,6 +26,6 @@ export async function POST(req) {
   try {
     return NextResponse.json(await planFrom(text));
   } catch (e) {
-    return NextResponse.json({ error: String(e.message).slice(0, 160) }, { status: 502 });
+    return NextResponse.json({ error: e.message === 'no-credits' ? 'no-credits' : String(e.message).slice(0, 160) }, { status: e.message === 'no-credits' ? 503 : 502 });
   }
 }

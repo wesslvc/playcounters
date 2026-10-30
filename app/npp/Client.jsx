@@ -23,6 +23,7 @@ const EXAMPLES = [
   '150만원 이하 가성비, 배터리 오래 가는 걸로',
 ];
 const DEFAULT_FILTERS = { maxMan: 0, maxWeight: 0, minBattery: 0, upcoming: true, onlyConfirmed: false };
+const NO_CREDITS = 'AI 사용 크레딧이 모두 소진돼서 지금은 새로 조사할 수 없어요. 사이트 주인이 OpenAI 크레딧을 충전하면 다시 쓸 수 있어요. 이미 조사된 폰은 그대로 볼 수 있어요.';
 const ERR = {
   'already-running': '이미 조사 중인 요청이 있어요. 끝날 때까지 기다려주세요.',
   busy: '지금 조사 요청이 몰려 있어요. 잠시 후 다시 눌러주세요.',
@@ -232,7 +233,7 @@ export default function Client() {
     if (!sr.ok) { setNote(`${reason ? `${reason} ` : ''}${ERR[sj.error] ?? `(${sj.error})`}`.trim()); return; }
     const jr = await follow(sj.id);
     if (!jr) return;
-    if (jr.status === 'error') { setNote(`조사에 실패했어요 (${jr.error}).`); return; }
+    if (jr.status === 'error') { setNote(/no-credits/.test(jr.error ?? '') ? NO_CREDITS : `조사에 실패했어요 (${jr.error}).`); return; }
     await loadLibrary();
     const r = jr.result ?? {};
     const failed = r.failed?.length ? ` · 조사 못한 폰 ${r.failed.length}개 (${r.failed.map((f) => f.name).join(', ')})` : '';
@@ -269,7 +270,7 @@ export default function Client() {
       }
       await runJob(payloadFrom(nextPrefs, nextFilters, models, reason), reason);
     } catch (err) {
-      setNote(`요청을 처리하지 못했어요 (${err.message}).`);
+      setNote(/no-credits/.test(err.message) ? NO_CREDITS : `요청을 처리하지 못했어요 (${err.message}).`);
     } finally {
       setBusy(false); setProg(null);
     }

@@ -585,3 +585,9 @@ span.np-bar i.lead { background: var(--a); }
 .np-hold { background: color-mix(in srgb, var(--warn) 16%, transparent); border-radius: 12px; padding: 11px 14px; font-size: 13.5px; margin-bottom: 14px; line-height: 1.55; }
 .np-hold button { font-weight: 700; color: var(--a); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 720px) { .np-gaps li { grid-template-columns: 96px minmax(0, 1fr) 40px; font-size: 12.5px; } }
+
+.np-sync { font-size: 12px; padding: 7px 10px; border-radius: 9px; margin: 8px 0 4px; background: color-mix(in srgb, var(--good) 12%, transparent); color: var(--good); font-weight: 600; }
+.np-sync.saving { background: var(--sunk); color: var(--ink-2); }
+.np-sync.error { background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
+.np-sync.off { background: var(--sunk); color: var(--ink-2); font-weight: 400; }
+.np-sync a { color: var(--a); font-weight: 700; }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EMPTY_PREFS, OTHERS, axesOf, axisRanks, buildModel, deltaOf, edgeChips, fitOf, normalizePrefs, passes } from './score';
+import { EMPTY_PREFS, OTHERS, axesOf, axisRanks, buildModel, deltaOf, edgeChips, fillFromPredecessor, fitOf, normalizePrefs, passes } from './score';
 import Controls from './Controls';
 import Tile from './Tile';
 import Drawer from './Drawer';
@@ -87,12 +87,14 @@ export default function Client() {
   const [note, setNote] = useState('');
   const [panel, setPanel] = useState(false);
   const [moves, setMoves] = useState({});
+  const [sync, setSync] = useState({ signedIn: null, status: '' });
+  const hydrated = useRef(false);
   const alive = useRef(true);
   const prevOrder = useRef([]);
   const calibrated = useRef(false);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
-    .then((j) => { setLibrary(tidy(j.phones ?? [])); setActive(j.active ?? null); if (j.error) setError(j.error); return tidy(j.phones ?? []); })
+    .then((j) => { const phones = fillFromPredecessor(tidy(j.phones ?? [])); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
     .catch((e) => { setLibrary((l) => l ?? []); setError(e.message); return []; });
 
   useEffect(() => {
@@ -115,12 +117,46 @@ export default function Client() {
         setNote('공유된 설정을 불러왔어요.');
       }
     } catch { /* a broken link just doesn't apply */ }
+    // the signed-in reader's copy on the server wins if it was saved after this browser's
+    fetch('/api/phones/prefs').then((r) => r.json()).then((j) => {
+      if (!j.signedIn) { setSync({ signedIn: false, status: '' }); return; }
+      const localAt = read('npp.savedAt', 0);
+      if (j.data && j.savedAt > localAt && !/[#&]s=/.test(window.location.hash)) {
+        if (j.data.prefs) setPrefs(normalizePrefs(j.data.prefs));
+        if (j.data.filters) setFilters({ ...DEFAULT_FILTERS, ...j.data.filters });
+        if (j.data.presets) { setPresets(j.data.presets); write('npp.presets', j.data.presets); }
+        if (j.data.watch) { setWatched(j.data.watch); write('npp.watch', j.data.watch); }
+        write('npp.savedAt', j.savedAt);
+      } else if (localAt > (j.savedAt ?? 0)) {
+        // this browser has the newer copy: send it up now rather than at the next change
+        fetch('/api/phones/prefs', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefs: read('npp.prefs3', null), filters: read('npp.filters', null), presets: read('npp.presets', []), watch: read('npp.watch', []), savedAt: localAt }),
+        }).catch(() => {});
+      }
+      setSync({ signedIn: true, status: 'saved' });
+    }).catch(() => setSync({ signedIn: false, status: '' })).finally(() => { setTimeout(() => { hydrated.current = true; }, 0); });
     loadLibrary().then((phones) => { if (phones.length && !calibrated.current) { calibrated.current = true; calibrate(); } });
     return () => { alive.current = false; };
   }, []);
   useEffect(() => { write('npp.prefs3', prefs); }, [prefs]);
   useEffect(() => { write('npp.filters', filters); }, [filters]);
   useEffect(() => { write('npp.tab', tab); }, [tab]);
+
+  // anything worth keeping changed: stamp it here, and (signed in) save it to the server a moment later
+  useEffect(() => {
+    if (!hydrated.current) return undefined;
+    const at = Date.now();
+    write('npp.savedAt', at);
+    if (!sync.signedIn) return undefined;
+    setSync((x) => ({ ...x, status: 'saving' }));
+    const t = setTimeout(() => {
+      fetch('/api/phones/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefs, filters, presets, watch: watched, savedAt: at }) })
+        .then((r) => setSync((x) => ({ ...x, status: r.ok ? 'saved' : 'error' })))
+        .catch(() => setSync((x) => ({ ...x, status: 'error' })));
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [prefs, filters, presets, watched, sync.signedIn]);
 
   // a search is running somewhere (this page, an earlier visit, the owner's refresh): look in until it lands
   useEffect(() => {
@@ -346,7 +382,7 @@ export default function Client() {
             <button type="button" onClick={() => setPanel(false)}>{top[0] ? `결과 보기 · 1위 ${top[0].name} ${top[0].fit.match}%` : '결과 보기'}</button>
           </div>
           <Controls prefs={prefs} setPrefs={setPrefs} filters={filters} setFilters={setFilters} brandOptions={brandOptions}
-            presets={presets} onSave={savePreset} onLoad={loadPreset} onDelete={deletePreset} onShare={share} shared={shared} />
+            presets={presets} onSave={savePreset} onLoad={loadPreset} onDelete={deletePreset} onShare={share} shared={shared} sync={sync} />
         </aside>
 
         <div className="np-content">

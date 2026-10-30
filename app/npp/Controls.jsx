@@ -29,7 +29,7 @@ function Acc({ id, title, summary, children, defaultOpen = false }) {
 }
 
 /** The left panel: every way of saying what matters. */
-export default function Controls({ prefs, setPrefs, filters, setFilters, brandOptions, presets, onSave, onLoad, onDelete, onShare, shared }) {
+export default function Controls({ prefs, setPrefs, filters, setFilters, brandOptions, presets, onSave, onLoad, onDelete, onShare, shared, sync }) {
   const [name, setName] = useState('');
   const setTr = (k, v) => setPrefs({ ...prefs, tr: { ...prefs.tr, [k]: v } });
   const setDuels = (kind, list) => setPrefs({ ...prefs, duels: { ...prefs.duels, [kind]: list } });
@@ -53,6 +53,12 @@ export default function Controls({ prefs, setPrefs, filters, setFilters, brandOp
         <button type="button" className="np-link" onClick={() => setPrefs(EMPTY_PREFS)}>처음 상태로</button>
       </div>
       <p className="ctl-sub">슬라이더를 움직이면 오른쪽 순위가 바로 바뀌어요. 접힌 줄에는 지금 설정이 요약돼요.</p>
+      {sync?.signedIn === true && (
+        <p className={`np-sync ${sync.status}`}>{sync.status === 'saving' ? '저장 중…' : sync.status === 'error' ? '서버 저장 실패 — 이 브라우저에는 남아 있어요' : '✓ 내 계정에 저장됨 · 다른 기기에서도 같은 설정'}</p>
+      )}
+      {sync?.signedIn === false && (
+        <p className="np-sync off">지금 설정은 이 브라우저에만 저장돼요. <a href="/api/auth/login">playcounters에 로그인</a>하면 다른 기기에서도 이어져요.</p>
+      )}
 
       <Acc id="priority" title="우선순위" summary={orderText} defaultOpen>
         <Priority prefs={prefs} setPrefs={setPrefs} />
@@ -123,7 +129,7 @@ export default function Controls({ prefs, setPrefs, filters, setFilters, brandOp
           <button type="button" className="np-link" onClick={onShare}>{shared ? '링크를 복사했어요' : '지금 설정을 링크로 복사'}</button>
           <small>다른 기기에서 열면 같은 설정이 적용돼요</small>
         </div>
-        <p className="ctl-sub">지금 설정은 이 브라우저에 자동으로 남아요.</p>
+        <p className="ctl-sub">{sync?.signedIn ? '로그인돼 있어서 설정·저장한 옵션·관심 폰이 계정에 저장돼요.' : '지금 설정은 이 브라우저에 자동으로 남아요. 로그인하면 기기 사이에도 이어져요.'}</p>
       </Acc>
     </div>
   );

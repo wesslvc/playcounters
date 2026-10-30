@@ -33,3 +33,11 @@ alter table phone_dossiers enable row level security;   -- the app uses the serv
 alter table phone_snapshots enable row level security;
 alter table phone_watch enable row level security;
 alter table phone_jobs enable row level security;
+
+-- a signed-in reader's taste, presets and followed phones, so they carry across devices
+create table if not exists phone_prefs (
+  user_id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table phone_prefs enable row level security;

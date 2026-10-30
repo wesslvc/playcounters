@@ -451,3 +451,38 @@ export function explainGap(a, b, model) {
     return acc;
   }, []).filter((x) => Math.abs(x.v) >= 0.3).sort((x, y) => Math.abs(y.v) - Math.abs(x.v));
 }
+
+const nameKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+const INHERIT = [
+  ['weight_g', 'g', 0.03], ['thickness_mm', 'mm', 0.05], ['battery_mah', 'mAh', 0.05], ['charge_w', 'W', 0],
+  ['screen_in', '인치', 0.02], ['update_years', '년', 0], ['price_krw', '원', 0.1],
+];
+
+/**
+ * Figures a phone has no value for, filled from its predecessor's — when that
+ * predecessor is in the library and has the figure. Marked 추정 with a range and
+ * a note saying so; nothing the research found is ever replaced.
+ */
+export function fillFromPredecessor(phones) {
+  const byName = new Map();
+  for (const p of phones) { if (!p.stub) { byName.set(nameKey(p.name), p); byName.set(nameKey(`${p.brand}${p.name}`), p); } }
+  return phones.map((p) => {
+    if (p.stub || !p.predecessor) return p;
+    const pred = byName.get(nameKey(p.predecessor)) ?? byName.get(nameKey(`${p.brand}${p.predecessor}`));
+    if (!pred || pred.id === p.id) return p;
+    let out = p;
+    for (const [k, unit, spread] of INHERIT) {
+      if (p[k]?.value != null || pred[k]?.value == null) continue;
+      const v = pred[k].value;
+      const shown = unit === '원' ? `${Math.round(v / 10000).toLocaleString()}만원` : `${v}${unit}`;
+      out = {
+        ...out,
+        [k]: {
+          value: v, low: spread ? Math.round(v * (1 - (k === 'price_krw' ? 0 : spread)) * 10) / 10 : null, high: spread ? Math.round(v * (1 + spread) * 10) / 10 : null,
+          certainty: '추정', note: `전작 ${pred.name}의 ${shown} 기준 추정 (조사에서 이 폰의 값을 찾지 못함)`, inherited: true,
+        },
+      };
+    }
+    return out;
+  });
+}

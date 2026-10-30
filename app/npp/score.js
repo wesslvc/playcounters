@@ -124,7 +124,7 @@ export function axesOf(d) {
   const known = [perf, cam, bat, disp].filter((x) => x != null);
   const avg = known.length ? known.reduce((x, y) => x + y, 0) / known.length : null;
   const priceScore = price == null ? null : clamp(100 - ((price - 500000) / 2000000) * 100);
-  const value = avg == null && priceScore == null ? null : avg == null ? priceScore : priceScore == null ? avg : avg * 0.4 + priceScore * 0.6;
+  const value = priceScore == null ? null : avg == null ? priceScore : avg * 0.4 + priceScore * 0.6;
   const a = {
     performance: perf,
     camera: cam,
@@ -147,8 +147,8 @@ export function axesOf(d) {
 export function penaltiesOf(d) {
   const sev = (k) => (d.concerns ?? []).filter((x) => x.severity === k).length;
   const parts = [];
-  const high = Math.min(12, sev('high') * 4);
-  const mid = Math.min(5, sev('medium') * 1.5);
+  const high = Math.min(9, sev('high') * 3);
+  const mid = Math.min(3, sev('medium') * 1);
   if (high) parts.push({ label: `큰 우려 ${sev('high')}건`, v: -high });
   if (mid) parts.push({ label: `주의 사항 ${sev('medium')}건`, v: -mid });
   return { total: parts.reduce((x, y) => x + y.v, 0), parts };
@@ -217,12 +217,27 @@ function leanFor(net, name) {
   return net.get(OTHERS) ?? 0;
 }
 
-/** Everything the reader said, as something that scores a phone. */
-export function buildModel(prefs) {
+/** The median of each axis across `population`, for filling in what a phone has no data on. */
+function mediansOf(population) {
+  const out = {};
+  for (const [k] of AXES) {
+    const v = population.map((d) => axesOf(d)[k]).filter((x) => x != null).sort((a, b) => a - b);
+    if (v.length) out[k] = v[Math.floor(v.length / 2)];
+  }
+  return out;
+}
+
+/**
+ * Everything the reader said, as something that scores a phone. `population`
+ * (the researched phones) lets an axis a phone has no data on count as the
+ * typical phone's — so not knowing a price neither helps a phone nor hurts it.
+ */
+export function buildModel(prefs, population = []) {
   return {
     weights: weightsFrom(prefs), prefs,
     brands: netLeans(prefs.duels.brand), chips: netLeans(prefs.duels.chip),
     brandDuels: prefs.duels.brand, chipDuels: prefs.duels.chip,
+    medians: population.length >= 3 ? mediansOf(population) : null,
   };
 }
 
@@ -274,10 +289,10 @@ function bonusOf(d, model) {
 export function fitOf(d, model) {
   const a = axesOf(d);
   const { weights } = model;
-  // an axis nobody has data for counts as that phone's own average: it neither helps nor hurts
+  // an axis nobody has data for counts as the typical phone's (or, with no field to compare to, this phone's own average)
   const knownAxes = ['performance', 'camera', 'battery', 'display', 'design', 'opinion'].map((k) => a[k]).filter((x) => x != null);
   const own = knownAxes.length ? knownAxes.reduce((x, y) => x + y, 0) / knownAxes.length : 50;
-  const at = (k) => a[k] ?? own;
+  const at = (k) => a[k] ?? model.medians?.[k] ?? own;
   const total = Object.values(weights).reduce((x, y) => x + y, 0) || 1;
   const parts = AXES.map(([k, label]) => ({ k, label, v: (at(k) * (weights[k] ?? 0)) / total, w: weights[k] ?? 0 }));
   const bonus = bonusOf(d, model);

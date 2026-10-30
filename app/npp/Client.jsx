@@ -35,6 +35,12 @@ const encode = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).repl
 const decode = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))));
 const LIKELY = { high: 0, medium: 1, low: 2 };
 
+/** The search tool leaves "([site](url))" citation markup in its prose; keep the words, drop the markup. */
+const tidy = (v) => (typeof v === 'string'
+  ? v.replace(/\s*\(\[[^\]]*\]\([^)]*\)\)/g, '').replace(/\[([^\]]*)\]\(https?:[^)]*\)/g, '$1').replace(/\s{2,}/g, ' ').trim()
+  : Array.isArray(v) ? v.map(tidy)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === 'url' || k === 'page' ? x : tidy(x)])) : v);
+
 /** Brands worth searching for, from the duels: whoever isn't being beaten outright. */
 function brandsFrom(duels) {
   const out = new Set();
@@ -85,7 +91,7 @@ export default function Client() {
   const calibrated = useRef(false);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
-    .then((j) => { setLibrary(j.phones ?? []); setActive(j.active ?? null); if (j.error) setError(j.error); return j.phones ?? []; })
+    .then((j) => { setLibrary(tidy(j.phones ?? [])); setActive(j.active ?? null); if (j.error) setError(j.error); return tidy(j.phones ?? []); })
     .catch((e) => { setLibrary((l) => l ?? []); setError(e.message); return []; });
 
   useEffect(() => {
@@ -122,8 +128,8 @@ export default function Client() {
     return () => clearInterval(t);
   }, [active, busy]);
 
-  const model = useMemo(() => buildModel(prefs), [prefs]);
   const researched = useMemo(() => (library ?? []).filter((p) => !p.stub), [library]);
+  const model = useMemo(() => buildModel(prefs, researched), [prefs, researched]);
   const stubs = useMemo(() => (library ?? []).filter((p) => p.stub).sort((a, b) => (LIKELY[a.release_likelihood] ?? 3) - (LIKELY[b.release_likelihood] ?? 3)), [library]);
 
   // every researched phone with its fit, and where it stands on each axis among all of them

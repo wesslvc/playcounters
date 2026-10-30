@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EMPTY_PREFS, OTHERS, axesOf, axisRanks, buildModel, deltaOf, edgeChips, fillFromPredecessor, fitOf, normalizePrefs, passes } from './score';
+import { EMPTY_PREFS, OTHERS, axesOf, axisRanks, buildModel, deltaOf, edgeChips, estimateFromPeers, fillFromPredecessor, fitOf, normalizePrefs, passes } from './score';
 import Controls from './Controls';
 import Tile from './Tile';
 import Drawer from './Drawer';
@@ -93,7 +93,7 @@ export default function Client() {
   const prevOrder = useRef([]);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
-    .then((j) => { const phones = fillFromPredecessor(tidy(j.phones ?? [])); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
+    .then((j) => { const phones = estimateFromPeers(fillFromPredecessor(tidy(j.phones ?? []))); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
     .catch((e) => { setLibrary((l) => l ?? []); setError(e.message); return []; });
 
   useEffect(() => {

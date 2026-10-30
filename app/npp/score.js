@@ -486,3 +486,68 @@ export function fillFromPredecessor(phones) {
     return out;
   });
 }
+
+/** Solves a small least-squares fit y ≈ X·b (rows of X start with 1 for the intercept). */
+function leastSquares(X, y) {
+  const n = X[0].length;
+  const A = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => X.reduce((s, r) => s + r[i] * r[j], 0) + (i === j && i > 0 ? 1e-6 : 0)));
+  const v = Array.from({ length: n }, (_, i) => X.reduce((s, r, k) => s + r[i] * y[k], 0));
+  for (let c = 0; c < n; c += 1) { // Gaussian elimination with partial pivoting
+    let piv = c;
+    for (let r = c + 1; r < n; r += 1) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+    [A[c], A[piv]] = [A[piv], A[c]]; [v[c], v[piv]] = [v[piv], v[c]];
+    if (Math.abs(A[c][c]) < 1e-12) return null;
+    for (let r = 0; r < n; r += 1) {
+      if (r === c) continue;
+      const f = A[r][c] / A[c][c];
+      for (let k = c; k < n; k += 1) A[r][k] -= f * A[c][k];
+      v[r] -= f * v[c];
+    }
+  }
+  return v.map((x, i) => x / A[i][i]);
+}
+
+/**
+ * A weight for a phone that has none and no predecessor to borrow from:
+ * worked out from the bar phones whose weight is known, by how weight goes with
+ * screen size, battery and thickness among them. Marked 추정, with the spread
+ * of that fit as its range — a rough figure, said to be one.
+ */
+export function estimateFromPeers(phones) {
+  const sure = (e) => e?.value != null && (e.certainty === '확정' || e.certainty === '유력');
+  const feats = [['screen_in', (x) => x], ['battery_mah', (x) => x / 1000], ['thickness_mm', (x) => x]];
+  const named = { screen_in: '화면 크기', battery_mah: '배터리', thickness_mm: '두께' };
+  return phones.map((p) => {
+    if (p.stub || p.weight_g?.value != null || p.form !== 'bar') return p;
+    const use = feats.filter(([k]) => p[k]?.value != null);
+    if (use.length < 2) return p;
+    const peers = phones.filter((q) => q !== p && !q.stub && q.form === 'bar' && sure(q.weight_g) && use.every(([k]) => q[k]?.value != null));
+    if (peers.length < use.length + 4) return p;
+    // only within what the known phones span: an unusually thin or big phone is not guessed at
+    const inside = use.every(([k]) => {
+      const v = peers.map((q) => q[k].value);
+      const lo = Math.min(...v); const hi = Math.max(...v); const pad = (hi - lo) * 0.1;
+      return p[k].value >= lo - pad && p[k].value <= hi + pad;
+    });
+    if (!inside) return p;
+    const row = (q) => [1, ...use.map(([k, f]) => f(q[k].value))];
+    const fit = (set) => leastSquares(set.map(row), set.map((q) => q.weight_g.value));
+    const b = fit(peers);
+    if (!b) return p;
+    const predict = (q, coef) => row(q).reduce((acc, x, i) => acc + x * coef[i], 0);
+    // how far off this method is, measured by hiding each known phone in turn and predicting it from the rest
+    const misses = peers.map((q) => { const c = fit(peers.filter((x) => x !== q)); return c ? Math.abs(predict(q, c) - q.weight_g.value) : null; }).filter((x) => x != null);
+    const typical = misses.length ? Math.round(misses.sort((x, y) => x - y)[Math.floor(misses.length / 2)] * 1.5) : 10;
+    const spread = Math.max(6, typical);
+    const w = Math.round(predict(p, b));
+    if (!Number.isFinite(w) || w < 100 || w > 320) return p;
+    const mae = misses.length ? Math.round(misses.reduce((x, y) => x + y, 0) / misses.length) : null;
+    return {
+      ...p,
+      weight_g: {
+        value: w, low: w - spread, high: w + spread, certainty: '추정', inherited: true,
+        note: `무게 유출이 없어서, 무게가 알려진 바 타입 폰 ${peers.length}대의 ${use.map(([k]) => named[k]).join('·')}와 무게의 관계로 계산한 대략치예요.${mae != null ? ` 같은 방법으로 알려진 폰들을 맞혀보면 평균 ${mae}g쯤 빗나가요.` : ''}`,
+      },
+    };
+  });
+}

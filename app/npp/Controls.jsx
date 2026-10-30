@@ -1,51 +1,72 @@
-import { SPECTRA, LEANS, affinityWord, leanWord } from './score';
-import { Spectrum, Affinity } from './Spectrum';
+import { useState } from 'react';
+import { TRAITS, leanWord, EMPTY_PREFS } from './score';
+import { Spectrum, DuelEditor } from './Spectrum';
+import PriorityList from './Priority';
 
 const CHIPS = [
   ['snapdragon', '스냅드래곤'], ['exynos', '엑시노스'], ['apple', 'Apple A/M'], ['tensor', '텐서'], ['dimensity', '디멘시티'],
 ];
 
-/** The left panel: every way of saying what matters, all on spectra. */
-export default function Controls({ prefs, setPrefs, filters, setFilters, brandOptions, brandCount, onReset }) {
-  const setSp = (key, v) => setPrefs({ ...prefs, sp: { ...prefs.sp, [key]: v } });
-  const setBrand = (b, v) => setPrefs({ ...prefs, brands: { ...prefs.brands, [b]: v } });
-  const setChip = (c, v) => setPrefs({ ...prefs, chips: { ...prefs.chips, [c]: v } });
+/** The left panel: every way of saying what matters. */
+export default function Controls({ prefs, setPrefs, filters, setFilters, brandOptions, presets, onSave, onLoad, onDelete, onShare, shared }) {
+  const [name, setName] = useState('');
+  const setTr = (k, v) => setPrefs({ ...prefs, tr: { ...prefs.tr, [k]: v } });
+  const setDuels = (kind, list) => setPrefs({ ...prefs, duels: { ...prefs.duels, [kind]: list } });
   const f = (patch) => setFilters({ ...filters, ...patch });
+  const save = (e) => { e.preventDefault(); if (name.trim()) { onSave(name.trim()); setName(''); } };
   return (
     <div className="ctl">
       <div className="ctl-head">
         <h2>내 취향</h2>
-        <button type="button" className="np-link" onClick={onReset}>전부 균형으로</button>
+        <button type="button" className="np-link" onClick={() => setPrefs(EMPTY_PREFS)}>처음 상태로</button>
       </div>
-      <p className="ctl-sub">슬라이더를 어느 쪽으로 얼마나 밀지가 곧 어디에 치중할지예요. 가운데가 균형이고, 끝으로 갈수록 그쪽을 강하게 봐요.</p>
 
       <section className="ctl-sec">
-        <h3>무엇에 치중할까</h3>
-        {SPECTRA.map((s) => (
-          <Spectrum key={s.key} pair={s} value={prefs.sp[s.key]} onChange={(v) => setSp(s.key, v)} hint={leanWord(prefs.sp[s.key], s)} />
+        <h3>저장한 옵션</h3>
+        <form className="pre-form" onSubmit={save}>
+          <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} placeholder="이름 (예: 게임용, 카메라 중심)" />
+          <button disabled={!name.trim()}>저장</button>
+        </form>
+        {!!presets.length && (
+          <ul className="pre-list">
+            {presets.map((p) => (
+              <li key={p.name}>
+                <button type="button" className="pre-load" onClick={() => onLoad(p)}>{p.name}</button>
+                <button type="button" className="np-link" onClick={() => onDelete(p.name)} aria-label={`${p.name} 삭제`}>삭제</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="pre-share">
+          <button type="button" className="np-link" onClick={onShare}>{shared ? '링크를 복사했어요' : '지금 설정을 링크로 복사'}</button>
+          <small>다른 기기에서 열면 같은 설정이 적용돼요</small>
+        </div>
+        <p className="ctl-sub">지금 설정은 이 브라우저에 자동으로 남아요. 이름을 붙여 저장하면 여러 개를 오갈 수 있어요.</p>
+      </section>
+
+      <section className="ctl-sec">
+        <h3>우선순위와 중요도 <small>서로 반대되지 않는 항목들</small></h3>
+        <PriorityList prefs={prefs} setPrefs={setPrefs} />
+      </section>
+
+      <section className="ctl-sec">
+        <h3>어느 쪽이 더 끌리나 <small>정말 서로 반대인 것만</small></h3>
+        {TRAITS.map((t) => (
+          <Spectrum key={t.key} pair={t} value={prefs.tr[t.key]} onChange={(v) => setTr(t.key, v)}
+            hint={Math.abs(prefs.tr[t.key]) >= 95 && (t.key === 'os' || t.key === 'form') ? `${prefs.tr[t.key] < 0 ? t.l[0] : t.r[0]}만 보기` : leanWord(prefs.tr[t.key], t)} />
         ))}
       </section>
 
       <section className="ctl-sec">
-        <h3>종류</h3>
-        {LEANS.map((s) => (
-          <Spectrum key={s.key} pair={s} value={prefs.sp[s.key]} onChange={(v) => setSp(s.key, v)}
-            hint={Math.abs(prefs.sp[s.key]) >= 95 ? `${prefs.sp[s.key] < 0 ? s.l[0] : s.r[0]}만 보기` : leanWord(prefs.sp[s.key], s)} />
-        ))}
+        <h3>브랜드 대결 <small>여러 개 겹쳐도 합산돼요</small></h3>
+        <DuelEditor duels={prefs.duels.brand} onChange={(l) => setDuels('brand', l)} options={brandOptions} title="브랜드"
+          empty="브랜드 선호가 없어요. 아래 버튼으로 삼성 vs 애플처럼 대결을 추가하세요. 한 브랜드만 좋다면 '그 외 전부'와 붙이면 돼요." />
       </section>
 
       <section className="ctl-sec">
-        <h3>브랜드 취향 <small>제외 ← 보통 → 최우선</small></h3>
-        {brandOptions.map(([b, ko]) => (
-          <Affinity key={b} label={ko} count={brandCount(b)} value={prefs.brands[b] ?? 0} onChange={(v) => setBrand(b, v)} word={affinityWord(prefs.brands[b] ?? 0)} />
-        ))}
-      </section>
-
-      <section className="ctl-sec">
-        <h3>칩셋 취향 <small>제외 ← 보통 → 최우선</small></h3>
-        {CHIPS.map(([c, ko]) => (
-          <Affinity key={c} label={ko} value={prefs.chips[c] ?? 0} onChange={(v) => setChip(c, v)} word={affinityWord(prefs.chips[c] ?? 0)} />
-        ))}
+        <h3>칩셋 대결</h3>
+        <DuelEditor duels={prefs.duels.chip} onChange={(l) => setDuels('chip', l)} options={CHIPS} title="칩셋"
+          empty="스냅드래곤 vs 엑시노스처럼 선호하는 칩을 대결로 정해보세요." />
       </section>
 
       <section className="ctl-sec">

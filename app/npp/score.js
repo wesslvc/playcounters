@@ -1,11 +1,14 @@
 /**
  * Fit scoring, shared by the page and the over-time graph. Plain JS so it can be tested on its own.
  *
- * The reader's taste is a set of spectra, not steps. Each SPECTRUM is a pair of
- * poles on a −100…+100 line (negative leans to the left pole): how far the
- * handle sits from the middle is how hard that side is leaned on. Brands and
- * chip families each get an affinity on the same scale, and OS and form factor
- * are leans of their own.
+ * Taste comes in two kinds, because not everything is a trade-off:
+ *  - IMPORTANCE: criteria that don't oppose each other (performance, camera,
+ *    battery …) each get their own 0–100 "how much does this matter".
+ *  - TRAITS and DUELS: things that really are opposites sit on one −100…+100
+ *    line (small & light ↔ big screen & battery, 가성비 ↔ 최고 사양,
+ *    확정 모델 ↔ 신제품, Android ↔ iOS, bar ↔ foldable) and brands and chip
+ *    families are pitted against each other, any number of duels at once.
+ *    Duels that name the same brand add up.
  */
 
 export const AXES = [
@@ -14,31 +17,72 @@ export const AXES = [
   ['design', '디자인'], ['opinion', '여론'], ['certainty', '정보 확실성'], ['novelty', '신제품 기대'],
 ];
 
-export const SPECTRA = [
-  { key: 'perf_battery', l: ['성능', '칩셋·게임'], r: ['배터리', '용량·충전'] },
-  { key: 'camera_value', l: ['카메라', '사진·영상'], r: ['가성비', '가격 대비'] },
-  { key: 'light_display', l: ['가볍고 작게', '무게·두께'], r: ['크고 좋은 화면', '디스플레이'] },
-  { key: 'design_software', l: ['디자인', '마감·외관'], r: ['오래 쓰는 소프트웨어', '업데이트 보장'] },
-  { key: 'spec_opinion', l: ['스펙 수치', '벤치마크·사양'], r: ['사용자 평판', '커뮤니티·리뷰'] },
-  { key: 'novel_proven', l: ['곧 나올 신제품', '유출·기대'], r: ['검증된 확정 모델', '출시·실측'] },
+/** Criteria that don't oppose each other. */
+export const IMPORTANCE = [
+  { key: 'performance', label: '성능', sub: '칩셋·게임' },
+  { key: 'camera', label: '카메라', sub: '사진·영상' },
+  { key: 'battery', label: '배터리', sub: '용량·효율' },
+  { key: 'charging', label: '충전 속도', sub: '유선·무선' },
+  { key: 'display', label: '화면', sub: '밝기·주사율·패널' },
+  { key: 'design', label: '디자인', sub: '마감·외관' },
+  { key: 'software', label: '업데이트', sub: 'OS 지원 연수' },
+  { key: 'opinion', label: '평판', sub: '커뮤니티·리뷰' },
+  { key: 'certainty', label: '정보 확실성', sub: '루머보다 확정' },
 ];
-export const LEANS = [
+
+/** The brand/chip/OS/form leanings take part in the ordering as one element of their own. */
+export const BRAND_ELEMENT = { key: 'brand', label: '브랜드·칩·OS 성향', sub: '아래 대결과 종류 설정', noSlider: true };
+export const ELEMENTS = [...IMPORTANCE, BRAND_ELEMENT];
+
+/** Things that really are opposites. */
+export const TRAITS = [
+  { key: 'size', l: ['작고 가볍게', '무게·두께'], r: ['큰 화면·큰 배터리', '용량 우선'] },
+  { key: 'price_flagship', l: ['가성비', '저렴하게'], r: ['최고 사양', '가격 무관'] },
+  { key: 'timing', l: ['지금 살 수 있는 확정 모델', '출시·실측'], r: ['곧 나올 신제품', '유출·기대'] },
   { key: 'os', l: ['안드로이드', ''], r: ['iOS', ''] },
   { key: 'form', l: ['바 타입', ''], r: ['폴더블·플립', ''] },
 ];
+
+export const DEFAULT_IMPORTANCE = {
+  performance: 60, camera: 60, battery: 60, charging: 25, display: 45, design: 35, software: 45, opinion: 45, certainty: 25,
+};
 export const EMPTY_PREFS = {
-  sp: Object.fromEntries([...SPECTRA, ...LEANS].map((s) => [s.key, 0])),
-  brands: {},
-  chips: {},
+  imp: { ...DEFAULT_IMPORTANCE },
+  order: [], // empty = no element ranked above another
+  tr: Object.fromEntries(TRAITS.map((t) => [t.key, 0])),
+  duels: { brand: [{ id: 'b0', a: 'Samsung', b: 'Apple', v: 0 }], chip: [] },
 };
 
-/** Words for a position on the −100…+100 line. */
-export const affinityWord = (v) => (v <= -95 ? '제외' : v < -30 ? '비선호' : v < 30 ? '보통' : v < 70 ? '선호' : '최우선');
+/** Fill in anything a saved or shared setting lacks. */
+export function normalizePrefs(p) {
+  const base = EMPTY_PREFS;
+  const valid = new Set(ELEMENTS.map((e) => e.key));
+  const given = [...new Set((Array.isArray(p?.order) ? p.order : []).filter((k) => valid.has(k)))];
+  return {
+    imp: { ...base.imp, ...(p?.imp ?? {}) },
+    // a ranking is always whole: anything left out follows in the usual order
+    order: given.length ? [...given, ...ELEMENTS.map((e) => e.key).filter((k) => !given.includes(k))] : [],
+    tr: { ...base.tr, ...(p?.tr ?? {}) },
+    duels: {
+      brand: Array.isArray(p?.duels?.brand) ? p.duels.brand : base.duels.brand,
+      chip: Array.isArray(p?.duels?.chip) ? p.duels.chip : [],
+    },
+  };
+}
+
+export const importanceWord = (v) => (v < 8 ? '상관없음' : v < 35 ? '조금' : v < 65 ? '보통' : v < 88 ? '중요' : '핵심');
 export const leanWord = (v, pair) => {
   const a = Math.abs(v);
   if (a < 8) return '균형';
   const side = v < 0 ? pair.l[0] : pair.r[0];
   return a < 35 ? `${side} 쪽으로 약간` : a < 70 ? `${side} 쪽으로` : `${side}에 크게 치중`;
+};
+export const OTHERS = '*';
+export const duelWord = (d, name) => {
+  const a = Math.abs(d.v);
+  if (a < 8) return '균형';
+  const side = d.v < 0 ? name(d.a) : name(d.b);
+  return a >= 95 ? `${side}만` : a < 35 ? `${side} 약간 선호` : a < 70 ? `${side} 선호` : `${side} 크게 선호`;
 };
 
 /** The six that draw the radar. */
@@ -49,85 +93,177 @@ export const RADAR = [
 
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 const val = (e) => (e && typeof e.value === 'number' ? e.value : null);
-const NEUTRAL = 50;
+/** A figure nobody has found yet counts as not-good (40), never as average. */
+const UNKNOWN = 40;
 
-/** Every axis on 0–100. A figure nobody has found yet counts as neutral, not as bad. */
+/**
+ * Scores are meant to be stingy: 50 is an ordinary phone, 70 a good flagship,
+ * 90 the best on the market by a clear margin, and nothing is 100. Dossiers
+ * researched under that rubric (score_version 2) are used as given; older ones,
+ * which were marked far too generously (nearly everything 75–98), are bent
+ * down to the same scale here until they are researched again.
+ */
+const strict = (s) => clamp(Math.pow(clamp((s - 50) / 50, 0, 1), 1.4) * 100);
+const given = (d, raw) => (raw == null ? UNKNOWN : (d.score_version ?? 1) >= 2 ? clamp(raw) : strict(raw));
+/** What an unconfirmed picture is worth: good marks are shaved by how unsure the whole dossier is. */
+const SURE = { high: 1, medium: 0.93, low: 0.84 };
+const shave = (v, d) => (v > UNKNOWN ? UNKNOWN + (v - UNKNOWN) * (SURE[d.confidence] ?? 0.9) : v);
+
+/** Every axis on 0–100. */
 export function axesOf(d) {
   const s = d.scores ?? {};
   const w = val(d.weight_g);
   const c = val(d.charge_w);
   const u = val(d.update_years);
   const price = val(d.price_krw);
-  const perf = d.chipset?.perf_score ?? s.performance ?? NEUTRAL;
-  const avg = (perf + (s.camera ?? NEUTRAL) + (s.battery ?? NEUTRAL) + (s.display ?? NEUTRAL)) / 4;
-  const priceScore = price == null ? NEUTRAL : clamp(100 - ((price - 600000) / 2000000) * 100);
-  return {
+  const perf = given(d, d.chipset?.perf_score ?? s.performance);
+  const cam = given(d, s.camera);
+  const bat = given(d, s.battery);
+  const disp = given(d, s.display);
+  const avg = (perf + cam + bat + disp) / 4;
+  const priceScore = price == null ? UNKNOWN : clamp(100 - ((price - 500000) / 2000000) * 100);
+  const a = {
     performance: perf,
-    camera: s.camera ?? NEUTRAL,
-    battery: s.battery ?? NEUTRAL,
-    charging: c == null ? NEUTRAL : clamp(((c - 15) / 85) * 100),
-    display: s.display ?? NEUTRAL,
-    lightness: w == null ? NEUTRAL : clamp(((260 - w) / 100) * 100),
-    software: u == null ? NEUTRAL : clamp((u / 7) * 100),
+    camera: cam,
+    battery: bat,
+    charging: c == null ? UNKNOWN : clamp(((c - 20) / 100) * 100),
+    display: disp,
+    lightness: w == null ? UNKNOWN : clamp(((240 - w) / 80) * 100),
+    software: u == null ? UNKNOWN : clamp(((u - 2) / 6) * 100),
     value: Math.round(avg * 0.4 + priceScore * 0.6),
-    design: s.design ?? NEUTRAL,
-    opinion: d.opinion?.score ?? NEUTRAL,
-    certainty: { high: 100, medium: 65, low: 35 }[d.confidence] ?? 50,
-    novelty: { upcoming: 100, rumored: 80, released: 35 }[d.status] ?? 50,
+    design: given(d, s.design),
+    opinion: given(d, d.opinion?.score),
   };
+  for (const k of Object.keys(a)) a[k] = Math.round(shave(a[k], d));
+  a.certainty = { high: 100, medium: 60, low: 25 }[d.confidence] ?? 40;
+  a.novelty = { upcoming: 100, rumored: 80, released: 30 }[d.status] ?? 40;
+  return a;
 }
 
-/** Spectra → weights. A pole's weight runs from 0 (handle all the way the other way) to 4 (all the way here); the middle gives both 2. */
-export function weightsFrom(sp) {
-  const L = (v) => 2 * (1 - v / 100) + 0.4;
-  const R = (v) => 2 * (1 + v / 100) + 0.4;
-  const specBoost = 1 + 0.5 * Math.max(0, -sp.spec_opinion / 100);
+/** Points taken off for what is worrying and for what isn't pinned down. */
+export function penaltiesOf(d) {
+  const sev = (k) => (d.concerns ?? []).filter((x) => x.severity === k).length;
+  const parts = [];
+  const high = Math.min(12, sev('high') * 4);
+  const mid = Math.min(5, sev('medium') * 1.5);
+  if (high) parts.push({ label: `큰 우려 ${sev('high')}건`, v: -high });
+  if (mid) parts.push({ label: `주의 사항 ${sev('medium')}건`, v: -mid });
+  const unsure = { low: 5, medium: 2 }[d.confidence] ?? 0;
+  if (unsure) parts.push({ label: d.confidence === 'low' ? '정보가 불확실' : '일부 정보 불확실', v: -unsure });
+  if (d.status === 'rumored') parts.push({ label: '루머 단계', v: -3 });
+  return { total: parts.reduce((x, y) => x + y.v, 0), parts };
+}
+
+/**
+ * How far up the reader's ordering an element sits, as a multiplier: first
+ * place counts ×1.5, last ×0.6, evenly between. With no ordering, ×1.
+ */
+export function rankMult(prefs, key) {
+  const n = prefs.order?.length ?? 0;
+  const r = n ? prefs.order.indexOf(key) : -1;
+  if (r < 0) return 1;
+  return 1.5 - 0.9 * (r / Math.max(1, n - 1));
+}
+
+/** Importance and traits → weights. */
+export function weightsFrom(prefs) {
+  const { imp, tr } = prefs;
+  const I = (k) => ((imp[k] ?? 0) / 25) * rankMult(prefs, k); // 0 … 4, then moved by its place in the ordering
+  const L = (v) => Math.max(0, -v) / 100;
+  const R = (v) => Math.max(0, v) / 100;
   const w = {
-    performance: L(sp.perf_battery) * specBoost, battery: R(sp.perf_battery) * specBoost,
-    camera: L(sp.camera_value) * specBoost, value: R(sp.camera_value),
-    lightness: L(sp.light_display), display: R(sp.light_display) * specBoost,
-    design: L(sp.design_software), software: R(sp.design_software),
-    opinion: R(sp.spec_opinion),
-    novelty: L(sp.novel_proven) * 0.6, certainty: R(sp.novel_proven) * 0.6,
+    performance: I('performance'), camera: I('camera'), battery: I('battery'), charging: I('charging'),
+    display: I('display'), design: I('design'), software: I('software'), opinion: I('opinion'),
+    lightness: 0.3 + 3 * L(tr.size),
+    value: Math.max(0, 0.5 + 3 * L(tr.price_flagship) - 0.5 * R(tr.price_flagship)),
+    certainty: I('certainty') + 3 * L(tr.timing),
+    novelty: 3 * R(tr.timing),
   };
-  w.charging = w.battery * 0.4;
+  w.display += 1.5 * R(tr.size); w.battery += 1.5 * R(tr.size);
+  w.performance += 1.5 * R(tr.price_flagship); w.camera += R(tr.price_flagship); w.display += R(tr.price_flagship);
   return w;
 }
 
-const brandKey = (b) => String(b ?? '').toLowerCase();
+const key = (b) => String(b ?? '').toLowerCase();
 
-/** The reader's taste as something that scores a phone. */
-export function buildModel(prefs) {
-  const weights = weightsFrom(prefs.sp);
-  const brands = Object.fromEntries(Object.entries(prefs.brands).map(([k, v]) => [brandKey(k), v]));
-  return { weights, prefs, brands };
+/**
+ * Duels → a net lean per name, −100…+100 (the "*" entry is everyone not named).
+ * In a duel a→b with score v (negative favours a, positive favours b) the
+ * favoured side gains |v| and the other loses |v|; duels naming the same
+ * brand add up, capped at ±100. A duel against "*" spreads its loss over all
+ * the others.
+ */
+export function netLeans(duels) {
+  const net = new Map();
+  const bump = (name, v) => net.set(key(name), clamp((net.get(key(name)) ?? 0) + v, -100, 100));
+  for (const d of duels) {
+    if (!d.a || !d.b || !d.v) continue;
+    const win = d.v < 0 ? d.a : d.b;
+    const lose = d.v < 0 ? d.b : d.a;
+    const m = Math.abs(d.v);
+    bump(win, m);
+    bump(lose, -m);
+  }
+  return net;
 }
 
-/** Hard exclusions: a brand or chip at "제외", or OS / form pushed all the way to one side. */
+/** What the net leans mean for one brand: its own entry, else whatever was set against "everyone else". */
+function leanFor(net, name) {
+  const own = net.get(key(name));
+  if (own != null) return own;
+  return net.get(OTHERS) ?? 0;
+}
+
+/** Everything the reader said, as something that scores a phone. */
+export function buildModel(prefs) {
+  return {
+    weights: weightsFrom(prefs), prefs,
+    brands: netLeans(prefs.duels.brand), chips: netLeans(prefs.duels.chip),
+    brandDuels: prefs.duels.brand, chipDuels: prefs.duels.chip,
+  };
+}
+
+/** A duel at (nearly) full push shuts out the side it was pushed away from. */
+function shutOut(duels, name) {
+  const n = key(name);
+  return duels.some((d) => {
+    if (Math.abs(d.v) < 95 || !d.a || !d.b) return false;
+    const win = d.v < 0 ? d.a : d.b;
+    const lose = d.v < 0 ? d.b : d.a;
+    if (key(lose) === n) return true;
+    // against "everyone else": whoever isn't the winner is out
+    if (lose === OTHERS) return key(win) !== n;
+    return false;
+  });
+}
+
+/** Hard exclusions: a brand or chip beaten all the way, OS or form pushed all the way to one side. */
 export function excluded(d, model) {
-  const { prefs, brands } = model;
-  if ((brands[brandKey(d.brand)] ?? 0) <= -95) return true;
-  if ((prefs.chips[d.chipset?.family] ?? 0) <= -95) return true;
-  if (prefs.sp.os >= 95 && d.os !== 'ios') return true;
-  if (prefs.sp.os <= -95 && d.os === 'ios') return true;
+  const { prefs } = model;
+  if (shutOut(model.brandDuels, d.brand)) return true;
+  if (d.chipset?.family && shutOut(model.chipDuels, d.chipset.family)) return true;
+  if (prefs.tr.os >= 95 && d.os !== 'ios') return true;
+  if (prefs.tr.os <= -95 && d.os === 'ios') return true;
   const folds = d.form === 'foldable' || d.form === 'flip';
-  if (prefs.sp.form >= 95 && !folds) return true;
-  if (prefs.sp.form <= -95 && folds) return true;
+  if (prefs.tr.form >= 95 && !folds) return true;
+  if (prefs.tr.form <= -95 && folds) return true;
   return false;
 }
 
 /** Points added or taken for leanings that aren't about specs: OS, form, brand, chip family. */
 function bonusOf(d, model) {
-  const { prefs, brands } = model;
+  const { prefs } = model;
   const parts = [];
   const add = (label, v) => { if (Math.abs(v) >= 1) parts.push({ label, v }); };
-  add(prefs.sp.os >= 0 ? 'iOS 선호' : '안드로이드 선호', (d.os === 'ios' ? 1 : -1) * 14 * (prefs.sp.os / 100));
+  add(prefs.tr.os >= 0 ? 'iOS 선호' : '안드로이드 선호', (d.os === 'ios' ? 1 : -1) * 14 * (prefs.tr.os / 100));
   const folds = d.form === 'foldable' || d.form === 'flip';
-  add(prefs.sp.form >= 0 ? '폴더블 선호' : '바 타입 선호', (folds ? 1 : -1) * 14 * (prefs.sp.form / 100));
-  const b = brands[brandKey(d.brand)] ?? 0;
+  add(prefs.tr.form >= 0 ? '폴더블 선호' : '바 타입 선호', (folds ? 1 : -1) * 14 * (prefs.tr.form / 100));
+  const b = leanFor(model.brands, d.brand);
   add(`${d.brand} ${b >= 0 ? '선호' : '비선호'}`, 16 * (b / 100));
-  const c = prefs.chips[d.chipset?.family] ?? 0;
+  const c = d.chipset?.family ? leanFor(model.chips, d.chipset.family) : 0;
   add(`${d.chipset?.family ?? ''} 칩 ${c >= 0 ? '선호' : '비선호'}`, 10 * (c / 100));
+  const scale = rankMult(prefs, 'brand');
+  for (const p of parts) p.v *= scale;
   return { total: parts.reduce((x, y) => x + y.v, 0), parts };
 }
 
@@ -138,11 +274,11 @@ export function fitOf(d, model) {
   const total = Object.values(weights).reduce((x, y) => x + y, 0) || 1;
   const parts = AXES.map(([k, label]) => ({ k, label, v: (a[k] * (weights[k] ?? 0)) / total, w: weights[k] ?? 0 }));
   const bonus = bonusOf(d, model);
+  const pen = penaltiesOf(d);
   const base = parts.reduce((x, y) => x + y.v, 0);
-  // strongest where the reader cares most and the phone is good
-  const why = parts.filter((x) => x.w > 0.8 && a[x.k] >= 70).sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.label);
+  const why = parts.filter((x) => x.w > 0.8 && a[x.k] >= 60).sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.label);
   const pulls = bonus.parts.filter((x) => x.v >= 3).map((x) => x.label);
-  return { match: Math.round(clamp(base + bonus.total)), why, pulls, axes: a, bonus: bonus.parts };
+  return { match: Math.round(clamp(base + bonus.total + pen.total, 0, 97)), why, pulls, axes: a, bonus: bonus.parts, penalties: pen.parts };
 }
 
 /** Plain numeric filters. */
@@ -168,4 +304,30 @@ export function est(e, fmt, unit = '') {
   const range = e.low != null && e.high != null && e.low !== e.high ? `${f(e.low)} ~ ${f(e.high)}` : null;
   const sure = e.certainty === '확정';
   return { text: sure ? f(e.value) : `약 ${f(e.value)}`, range: sure ? null : range, sure, certainty: e.certainty, note: e.note ?? '' };
+}
+
+const SCORE_LABELS = { performance: '성능', camera: '카메라', battery: '배터리', display: '화면', design: '디자인' };
+const SPEC_LABELS = [['weight_g', '무게', 'g'], ['battery_mah', '배터리', 'mAh'], ['charge_w', '충전', 'W'], ['price_krw', '가격', '원'], ['update_years', '업데이트', '년']];
+
+/** What moved between two research runs of the same phone, under the reader's current taste. */
+export function deltaOf(prev, cur, model) {
+  const pf = fitOf(prev, model).match;
+  const cf = fitOf(cur, model).match;
+  const scores = [];
+  for (const [k, label] of Object.entries(SCORE_LABELS)) {
+    const a = prev.scores?.[k]; const b = cur.scores?.[k];
+    if (a != null && b != null && a !== b) scores.push({ label, from: a, to: b });
+  }
+  const po = prev.opinion?.score; const co = cur.opinion?.score;
+  if (po != null && co != null && po !== co) scores.push({ label: '여론', from: po, to: co });
+  const specs = [];
+  for (const [k, label, unit] of SPEC_LABELS) {
+    const a = prev[k]; const b = cur[k];
+    if (!a || !b) continue;
+    if (a.value !== b.value || a.certainty !== b.certainty) {
+      const f = (x) => (x.value == null ? '미정' : unit === '원' ? won(x.value) : `${Math.round(x.value * 10) / 10}${unit}`);
+      specs.push({ label, from: `${f(a)}${a.certainty && a.certainty !== '확정' ? ` (${a.certainty})` : ''}`, to: `${f(b)}${b.certainty && b.certainty !== '확정' ? ` (${b.certainty})` : ''}` });
+    }
+  }
+  return { fit: cf - pf, from: pf, to: cf, scores, specs };
 }

@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EMPTY_PREFS, buildModel, fitOf, passes } from './score';
+import { EMPTY_PREFS, OTHERS, buildModel, deltaOf, fitOf, normalizePrefs, passes } from './score';
 import Controls from './Controls';
-import { COLORS, Compare, RowItem, TopCard, WatchPanel, when } from './Cards';
+import { COLORS, Candidates, Compare, RowItem, TopCard, WatchPanel, when } from './Cards';
 
 const BRANDS = [
   ['Samsung', '삼성'], ['Apple', '애플'], ['Google', '구글'], ['Xiaomi', '샤오미'], ['OnePlus', '원플러스'],
@@ -24,18 +24,34 @@ const ERR = {
 
 const read = (k, fb) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
+const encode = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const decode = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))));
 
-/** What to search for, from the taste as it stands. */
+/** Brands worth searching for, from the duels: whoever isn't being beaten outright. */
+function brandsFrom(duels) {
+  const out = new Set();
+  for (const d of duels) {
+    if (d.a !== OTHERS && d.v <= 30) out.add(d.a);
+    if (d.b !== OTHERS && d.v >= -30) out.add(d.b);
+  }
+  return [...out];
+}
+
 function payloadFrom(prefs, filters, models = [], reason = '') {
-  const lean = (o, min) => Object.entries(o).filter(([, v]) => v >= min).map(([k]) => k);
-  const os = prefs.sp.os > 40 ? 'ios' : prefs.sp.os < -40 ? 'android' : 'any';
-  const form = prefs.sp.form > 40 ? 'foldable' : prefs.sp.form < -40 ? 'bar' : 'any';
+  const os = prefs.tr.os > 40 ? 'ios' : prefs.tr.os < -40 ? 'android' : 'any';
+  const form = prefs.tr.form > 40 ? 'foldable' : prefs.tr.form < -40 ? 'bar' : 'any';
   return {
-    brands: lean(prefs.brands, 25), models, os, form,
+    brands: brandsFrom(prefs.duels.brand), models, os, form,
     budget_min_man: null, budget_max_man: filters.maxMan || null,
-    chip_families: lean(prefs.chips, 25), include_upcoming: filters.upcoming, reason,
+    chip_families: [], include_upcoming: filters.upcoming, reason,
   };
 }
+
+let duelSeq = 0;
+const duelsFrom = (list, known) => (list ?? []).slice(0, 8).map((d) => {
+  const canon = (x) => known.find((k) => k.toLowerCase() === String(x).toLowerCase()) ?? x;
+  return { id: `p${Date.now().toString(36)}${duelSeq++}`, a: canon(d.a), b: canon(d.b), v: Math.max(-100, Math.min(100, d.score)) };
+});
 
 export default function Client() {
   const [library, setLibrary] = useState(undefined);
@@ -44,6 +60,8 @@ export default function Client() {
   const [text, setText] = useState('');
   const [prefs, setPrefs] = useState(EMPTY_PREFS);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [presets, setPresets] = useState([]);
+  const [shared, setShared] = useState(false);
   const [picked, setPicked] = useState(null);
   const [open, setOpen] = useState(null);
   const [watched, setWatched] = useState([]);
@@ -64,14 +82,25 @@ export default function Client() {
   useEffect(() => {
     alive.current = true;
     setWatched(read('npp.watch', []));
-    const saved = read('npp.prefs', null);
-    if (saved) setPrefs({ sp: { ...EMPTY_PREFS.sp, ...saved.sp }, brands: saved.brands ?? {}, chips: saved.chips ?? {} });
+    setPresets(read('npp.presets', []));
+    const saved = read('npp.prefs2', null);
+    if (saved) setPrefs(normalizePrefs(saved));
     const sf = read('npp.filters', null);
     if (sf) setFilters({ ...DEFAULT_FILTERS, ...sf });
+    // a settings link someone shared
+    try {
+      const m = /[#&]s=([^&]+)/.exec(window.location.hash);
+      if (m) {
+        const s = decode(m[1]);
+        setPrefs(normalizePrefs(s.prefs)); setFilters({ ...DEFAULT_FILTERS, ...s.filters });
+        window.history.replaceState(null, '', window.location.pathname);
+        setNote('공유된 설정을 불러왔어요.');
+      }
+    } catch { /* a broken link just doesn't apply */ }
     loadLibrary();
     return () => { alive.current = false; };
   }, []);
-  useEffect(() => { write('npp.prefs', prefs); }, [prefs]);
+  useEffect(() => { write('npp.prefs2', prefs); }, [prefs]);
   useEffect(() => { write('npp.filters', filters); }, [filters]);
 
   // a search is running somewhere (this page, an earlier visit, the owner's refresh): look in until it lands
@@ -81,22 +110,36 @@ export default function Client() {
     return () => clearInterval(t);
   }, [active, busy]);
 
-  useEffect(() => {
-    if (!watched.length) return;
-    fetch(`/api/phones/history?ids=${encodeURIComponent(watched.join(','))}`).then((r) => r.json())
-      .then((j) => setHistory(j.history ?? {})).catch(() => {});
-  }, [watched, library]);
-
   const model = useMemo(() => buildModel(prefs), [prefs]);
-  const ranked = useMemo(() => (library ?? [])
+  const researched = useMemo(() => (library ?? []).filter((p) => !p.stub), [library]);
+  const stubs = useMemo(() => (library ?? []).filter((p) => p.stub)
+    .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.release_likelihood] ?? 3) - ({ high: 0, medium: 1, low: 2 }[b.release_likelihood] ?? 3)), [library]);
+
+  const ranked = useMemo(() => researched
     .filter((p) => passes(p, filters, model))
     .map((p) => ({ ...p, fit: fitOf(p, model) }))
-    .sort((a, b) => b.fit.match - a.fit.match), [library, filters, model]);
+    .sort((a, b) => b.fit.match - a.fit.match), [researched, filters, model]);
   const top = ranked.slice(0, 5);
   const rest = ranked.slice(5);
   const compareIds = picked ?? top.map((p) => p.id);
-  const compare = ranked.filter((p) => compareIds.includes(p.id));
-  const lastUpdated = (library ?? []).reduce((m, p) => Math.max(m, Date.parse(p.updated_at) || 0), 0);
+  const lastUpdated = researched.reduce((m, p) => Math.max(m, Date.parse(p.updated_at) || 0), 0);
+
+  // snapshots for what's on screen, to say how scores moved since the last research
+  const wantIds = [...new Set([...top.map((p) => p.id), ...watched, ...compareIds])].slice(0, 20).join(',');
+  useEffect(() => {
+    if (!wantIds) return;
+    fetch(`/api/phones/history?ids=${encodeURIComponent(wantIds)}`).then((r) => r.json())
+      .then((j) => setHistory(j.history ?? {})).catch(() => {});
+  }, [wantIds, library]);
+
+  const withDelta = (p) => {
+    const snaps = history[p.id] ?? [];
+    const delta = snaps.length >= 2 ? deltaOf(snaps[snaps.length - 2].data, snaps[snaps.length - 1].data, model) : null;
+    return { ...p, delta };
+  };
+  const topD = top.map(withDelta);
+  const restD = rest.map(withDelta);
+  const compare = ranked.filter((p) => compareIds.includes(p.id)).map(withDelta);
 
   // who moved up or down as the handles move
   const order = top.map((p) => p.id).join(',');
@@ -118,7 +161,6 @@ export default function Client() {
     const extra = [...new Set((library ?? []).map((p) => p.brand))].filter((b) => b && !known.has(b.toLowerCase()));
     return [...BRANDS, ...extra.map((b) => [b, b])];
   }, [library]);
-  const brandCount = (b) => (library ?? []).filter((p) => String(p.brand).toLowerCase() === b.toLowerCase()).length || null;
 
   const toggle = (id) => {
     const cur = new Set(compareIds);
@@ -130,12 +172,45 @@ export default function Client() {
     setWatched(next); write('npp.watch', next);
     if (next.includes(id)) fetch('/api/phones/watch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: next }) }).catch(() => {});
   };
-  const reset = () => { setPrefs(EMPTY_PREFS); setFilters(DEFAULT_FILTERS); setPicked(null); };
+
+  const savePreset = (name) => {
+    const next = [{ name, prefs, filters }, ...presets.filter((p) => p.name !== name)].slice(0, 12);
+    setPresets(next); write('npp.presets', next);
+  };
+  const loadPreset = (p) => { setPrefs(normalizePrefs(p.prefs)); setFilters({ ...DEFAULT_FILTERS, ...p.filters }); setPicked(null); };
+  const deletePreset = (name) => { const next = presets.filter((p) => p.name !== name); setPresets(next); write('npp.presets', next); };
+  const share = async () => {
+    const url = `${window.location.origin}${window.location.pathname}#s=${encode({ prefs, filters })}`;
+    try { await navigator.clipboard.writeText(url); } catch { window.prompt('이 링크를 복사하세요', url); }
+    setShared(true); setTimeout(() => setShared(false), 2500);
+  };
+
+  /** Starts a search on the server and looks in on it until it's done. */
+  async function runJob(payload, reason) {
+    const sr = await fetch('/api/phones/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: payload }) });
+    const sj = await sr.json();
+    if (!sr.ok) { setNote(`${reason ? `${reason} ` : ''}${ERR[sj.error] ?? `(${sj.error})`}`.trim()); return; }
+    const until = Date.now() + 6 * 60e3;
+    while (alive.current && Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const jr = await fetch(`/api/phones/search?id=${sj.id}`).then((r) => r.json()).catch(() => null);
+      if (!jr) continue;
+      if (jr.progress) setProg(jr.progress);
+      if (jr.status === 'done') {
+        await loadLibrary();
+        const r = jr.result ?? {};
+        const failed = r.failed?.length ? ` · 조사 못한 폰 ${r.failed.length}개 (${r.failed.map((f) => f.name).join(', ')})` : '';
+        const cand = r.stubs ? ` · 후보군 ${r.stubs}개 추가` : '';
+        setNote(`${reason ? `${reason} ` : ''}조사 완료: ${r.ids?.length ?? 0}개${cand}${failed}`);
+        return;
+      }
+      if (jr.status === 'error') { setNote(`조사에 실패했어요 (${jr.error}).`); return; }
+    }
+  }
 
   async function find(e) {
     e?.preventDefault();
-    const leaning = Object.values(prefs.brands).some((v) => v >= 25);
-    if (busy || (!text.trim() && !leaning)) { if (!busy && !text.trim()) setNote('원하는 걸 글로 쓰거나, 브랜드 취향을 "선호" 쪽으로 밀어주세요.'); return; }
+    if (busy) return;
     setBusy(true); setNote(''); setProg({ step: '요청을 읽는 중', done: 0, total: 0 });
     try {
       let nextPrefs = prefs;
@@ -143,17 +218,14 @@ export default function Client() {
       let models = [];
       let reason = '';
       if (text.trim()) {
-        const pr = await fetch('/api/phones/plan', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, brands: Object.entries(prefs.brands).filter(([, v]) => v >= 25).map(([k]) => k) }),
-        });
+        const pr = await fetch('/api/phones/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
         const plan = await pr.json();
         if (!pr.ok) throw new Error(plan.error || pr.status);
-        nextPrefs = {
-          sp: { ...EMPTY_PREFS.sp, ...plan.spectra },
-          brands: Object.fromEntries(plan.brand_affinity.map((b) => [b.brand, b.score])),
-          chips: Object.fromEntries(plan.chip_affinity.map((c) => [c.family, c.score])),
-        };
+        const names = brandOptions.map(([b]) => b);
+        nextPrefs = normalizePrefs({
+          imp: plan.importance, tr: plan.traits, order: plan.priority,
+          duels: { brand: duelsFrom(plan.brand_duels, names), chip: duelsFrom(plan.chip_duels, ['snapdragon', 'exynos', 'apple', 'tensor', 'dimensity', 'other']) },
+        });
         nextFilters = {
           ...filters, maxMan: plan.budget_max_man ?? 0, maxWeight: plan.max_weight_g ?? 0, minBattery: plan.min_battery_mah ?? 0,
           onlyConfirmed: plan.only_confirmed, upcoming: plan.include_upcoming,
@@ -162,27 +234,7 @@ export default function Client() {
         models = plan.models; reason = plan.reason;
         setNote(reason);
       }
-      const sr = await fetch('/api/phones/search', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: payloadFrom(nextPrefs, nextFilters, models, reason) }),
-      });
-      const sj = await sr.json();
-      if (!sr.ok) { setNote(`${reason} ${ERR[sj.error] ?? `(${sj.error})`}`.trim()); setBusy(false); setProg(null); return; }
-      // the search runs for a few minutes on the server; look in on it
-      const until = Date.now() + 6 * 60e3;
-      while (alive.current && Date.now() < until) {
-        await new Promise((r) => setTimeout(r, 4000));
-        const jr = await fetch(`/api/phones/search?id=${sj.id}`).then((r) => r.json()).catch(() => null);
-        if (!jr) continue;
-        if (jr.progress) setProg(jr.progress);
-        if (jr.status === 'done') {
-          await loadLibrary();
-          const failed = jr.result?.failed?.length ? ` · 조사 못한 폰 ${jr.result.failed.length}개 (${jr.result.failed.map((f) => f.name).join(', ')})` : '';
-          setNote(`${reason ? `${reason} ` : ''}조사 완료: ${jr.result?.ids?.length ?? 0}개${failed}`);
-          break;
-        }
-        if (jr.status === 'error') { setNote(`조사에 실패했어요 (${jr.error}).`); break; }
-      }
+      await runJob(payloadFrom(nextPrefs, nextFilters, models, reason), reason);
     } catch (err) {
       setNote(`요청을 처리하지 못했어요 (${err.message}).`);
     } finally {
@@ -190,9 +242,19 @@ export default function Client() {
     }
   }
 
-  const watchedPhones = ranked.length || library?.length
-    ? (library ?? []).filter((p) => watched.includes(p.id)).map((p) => ({ ...p, fit: fitOf(p, model) }))
-    : [];
+  async function researchStub(p) {
+    if (busy) return;
+    setBusy(true); setNote(`${p.brand} ${p.name}를 자세히 조사하는 중…`); setProg({ step: '조사 시작', done: 0, total: 0 });
+    try {
+      await runJob({ brands: [], models: [`${p.brand} ${p.name}`], os: 'any', form: 'any', budget_min_man: null, budget_max_man: null, chip_families: [], include_upcoming: true, reason: '' }, '');
+    } catch (err) {
+      setNote(`요청을 처리하지 못했어요 (${err.message}).`);
+    } finally {
+      setBusy(false); setProg(null);
+    }
+  }
+
+  const watchedPhones = researched.filter((p) => watched.includes(p.id)).map((p) => ({ ...p, fit: fitOf(p, model) }));
   const series = watchedPhones.map((p, i) => {
     const snaps = history[p.id] ?? [];
     const pts = (snaps.length ? snaps : [{ at: p.updated_at, data: p }])
@@ -206,16 +268,16 @@ export default function Client() {
       <header className="hd">
         <div>
           <h1>newphoneprediction</h1>
-          <p>유출 정보·스펙·여론을 AI가 찾아오고, 내 취향이 어느 쪽으로 치우쳤는지에 맞춰 순위를 매겨요.</p>
+          <p>유출 정보·스펙·여론을 AI가 찾아오고, 내 취향에 맞춰 순위를 매겨요. 나올 가능성이 조금이라도 있는 폰까지 후보에 넣어요.</p>
         </div>
-        {!!lastUpdated && <div className="hd-meta"><span>마지막 조사</span><b>{when(lastUpdated)}</b><span>조사된 폰 {library.length}개</span></div>}
+        {!!lastUpdated && <div className="hd-meta"><span>마지막 조사</span><b>{when(lastUpdated)}</b><span>조사된 폰 {researched.length}개{stubs.length ? ` · 후보군 ${stubs.length}개` : ''}</span></div>}
       </header>
 
       <form className="card ask" onSubmit={find}>
         <label htmlFor="ask" className="ask-label">무엇을 찾아볼까요?</label>
         <textarea id="ask" value={text} maxLength={400} rows={2} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) find(e); }}
-          placeholder="원하는 폰을 편하게 말해보세요. 이름을 쓰면 그 폰을 찾아와요." />
+          placeholder="원하는 폰을 편하게 말해보세요. 이름을 쓰면 그 폰을 찾아오고, 비워두면 지금 취향 설정으로 새 후보를 찾아요." />
         <div className="ask-row">
           <div className="ex">
             {EXAMPLES.map((x) => <button type="button" key={x} className="ex-chip" onClick={() => setText(x)}>{x}</button>)}
@@ -225,7 +287,7 @@ export default function Client() {
         {busy && prog && (
           <div className="prog" role="status">
             <div className="prog-bar"><i style={{ width: `${Math.max(6, pct)}%` }} /></div>
-            <span>{prog.step}{prog.total ? ` · 조사원 ${prog.done}/${prog.total}` : ''} — AI 여러 마리가 동시에 분업 중이에요. 몇 분 걸리고 닫아도 계속돼요.</span>
+            <span>{prog.step}{prog.total ? ` · 조사원 ${prog.done}/${prog.total}` : ''}{prog.pool ? ` · 후보 ${prog.pool}개` : ''} — AI 여러 마리가 동시에 분업 중이에요. 몇 분 걸리고 닫아도 계속돼요.</span>
           </div>
         )}
         {note && <p className="ask-note">{note}</p>}
@@ -235,7 +297,7 @@ export default function Client() {
       {active && !busy && (
         <p className="banner">지금 AI 조사원들이 조사 중이에요{active.progress?.total ? ` (${active.progress.done}/${active.progress.total})` : ''}. 끝나면 이 화면에 자동으로 나타나요.</p>
       )}
-      {library?.length === 0 && !active && <p className="np-note">아직 조사된 폰이 없어요{error ? ` (${error})` : ''}. 위에 원하는 걸 쓰거나 브랜드 취향을 "선호"로 밀고 "찾아서 알려줘"를 눌러보세요.</p>}
+      {library?.length === 0 && !active && <p className="np-note">아직 조사된 폰이 없어요{error ? ` (${error})` : ''}. 위에 원하는 걸 쓰고 "찾아서 알려줘"를 눌러보세요.</p>}
 
       <button type="button" className="panel-toggle" onClick={() => setPanel(!panel)} aria-expanded={panel}>
         {panel ? '취향 조정 닫기' : '내 취향 조정하기'}
@@ -243,20 +305,20 @@ export default function Client() {
 
       <div className="grid">
         <aside className={`aside${panel ? ' open' : ''}`}>
-          <Controls prefs={prefs} setPrefs={setPrefs} filters={filters} setFilters={setFilters}
-            brandOptions={brandOptions} brandCount={brandCount} onReset={reset} />
+          <Controls prefs={prefs} setPrefs={setPrefs} filters={filters} setFilters={setFilters} brandOptions={brandOptions}
+            presets={presets} onSave={savePreset} onLoad={loadPreset} onDelete={deletePreset} onShare={share} shared={shared} />
         </aside>
 
         <div className="np-results" ref={resultsRef}>
-          {!!library?.length && (
+          {!!researched.length && (
             <>
               <div className="res-head">
                 <h2>나에게 맞는 TOP 5</h2>
                 <span>{ranked.length}개 중 · 슬라이더를 움직이면 바로 바뀌어요</span>
               </div>
               {!top.length && <p className="np-note">조건에 맞는 폰이 없어요. 한도나 제외한 항목을 풀어보세요.</p>}
-              <ol className="tops">
-                {top.map((p, i) => (
+              <ol className="np-tops">
+                {topD.map((p, i) => (
                   <TopCard key={p.id} p={p} rank={i + 1} move={moves[p.id]} watched={watched.includes(p.id)} onWatch={() => toggleWatch(p.id)}
                     picked={compareIds.includes(p.id)} onPick={() => toggle(p.id)} open={open === p.id} onOpen={() => setOpen(open === p.id ? null : p.id)} />
                 ))}
@@ -266,19 +328,22 @@ export default function Client() {
               {!!compare.length && <Compare compare={compare} />}
               {picked && <p className="np-note">비교 대상을 직접 골랐어요. <button className="np-link" onClick={() => setPicked(null)}>TOP 5로 되돌리기</button></p>}
 
-              {!!rest.length && (
+              {!!restD.length && (
                 <section>
-                  <div className="res-head"><h2>나머지 {rest.length}개</h2><span>체크하면 비교에 추가 (최대 5개)</span></div>
-                  <ul className="rows">
-                    {rest.map((p) => (
+                  <div className="res-head"><h2>나머지 {restD.length}개</h2><span>체크하면 비교에 추가 (최대 5개)</span></div>
+                  <ul className="np-rows">
+                    {restD.map((p) => (
                       <RowItem key={p.id} p={p} picked={compareIds.includes(p.id)} onPick={() => toggle(p.id)}
                         watched={watched.includes(p.id)} onWatch={() => toggleWatch(p.id)} />
                     ))}
                   </ul>
                 </section>
               )}
-              <p className="np-meta np-foot">GPT가 웹 검색으로 모은 정보를 정리한 것이라 틀릴 수 있어요. 점선 밑줄과 "유력·추정" 표시는 확정이 아닌 예상치이고, 루머는 말 그대로 루머입니다. 이미지는 위키백과에서 가져오며 출시 전 폰은 전작·시리즈 이미지로 대신해요.</p>
             </>
+          )}
+          <Candidates stubs={stubs} onResearch={researchStub} busy={busy} />
+          {!!researched.length && (
+            <p className="np-meta np-foot">GPT가 웹 검색으로 모은 정보를 정리한 것이라 틀릴 수 있어요. 점선 밑줄과 "유력·추정" 표시는 확정이 아닌 예상치이고, 루머는 말 그대로 루머입니다. 사진은 서버가 실제로 열리는 것만 골라 보여주며, 출시 전 폰의 이미지는 유출 렌더링이거나 전작 이미지일 수 있어요(이미지 위 라벨에 표시).</p>
           )}
         </div>
       </div>

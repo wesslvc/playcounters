@@ -18,8 +18,10 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order })
   const at = (k) => { const i = (order ?? []).indexOf(k); return i < 0 ? 99 : i; };
   const rows = [...COMPARE_AXES].sort((a, b) => at(a[0]) - at(b[0])).map(([k, label]) => {
     const entries = sel.map((p) => ({ p, v: p.fit.axes[k] })).filter((x) => x.v != null).sort((a, b) => b.v - a.v);
-    const gap = entries.length > 1 && entries[0].v > entries[1].v ? entries[0].v - entries[1].v : 0;
-    return { k, label, entries, gap, leader: gap > 0 ? entries[0].p : null };
+    const diff = entries.length > 1 ? entries[0].v - entries[1].v : 0;
+    // under 3 points apart is a tie in practice: naming a winner would overstate it
+    const gap = diff >= 3 ? diff : 0;
+    return { k, label, entries, gap, diff, leader: gap > 0 ? entries[0].p : null };
   });
   const lead = (p) => rows.filter((r) => r.leader?.id === p.id).sort((a, b) => b.gap - a.gap);
 
@@ -68,7 +70,7 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order })
                     <b>{r.label}</b>
                     {r.leader
                       ? <span className="np-gap" style={mode === 'color' ? { '--bc': color(r.leader) } : undefined}><i aria-hidden="true">▲</i>{r.leader.name} +{r.gap}</span>
-                      : <span className="np-gap tie">{r.entries.length ? '비슷함' : '정보 없음'}</span>}
+                      : <span className="np-gap tie">{r.entries.length ? `비슷함 (${r.diff}점 차)` : '정보 없음'}</span>}
                   </div>
                   <ul>
                     {r.entries.map((e, i) => (

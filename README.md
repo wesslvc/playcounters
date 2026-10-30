@@ -142,29 +142,35 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 
 ## newphoneprediction (`/npp`)
 
-같은 배포에 얹힌 최신폰 추천 페이지. `https://<배포주소>/npp`.
-사람이 고르는 게 아니라 **고르면 찾아오는** 방식입니다.
+같은 배포에 얹힌 최신폰 추천 페이지: `https://<배포주소>/npp`. 고르는 게 아니라 **말하면 찾아오는** 방식입니다.
 
-1. 글로 원하는 폰을 말하거나(`가벼운 삼성폰, 150만원 이하`), 브랜드를 고르고 **찾아서 알려줘**
-2. `/api/phones/plan` — 말을 슬라이더·필터·브랜드·모델명으로 바꿈 (빠른 모델)
-3. `/api/phones/search` — 후보 폰을 정하고(말한 모델 + 웹 검색으로 보충, 최대 8개) 폰마다
-   따로 조사해 `phone_dossiers`에 저장. 응답은 바로 job id만 주고 작업은 뒤에서 몇 분 돌며
-   화면이 진행 상황을 확인합니다. 12시간 안에 조사한 폰은 다시 찾지 않습니다.
-4. 조사 내용: Ice Universe·Digital Chat Station 등 X 유출자, 알뷰 등 유튜브, 해외·국내 매체,
-   Reddit·클리앙·뽐뿌·디시 여론. 수치는 확정이 아니어도 유력한 값·범위를 채우고
-   `확정/유력/추정/미정`을 붙여 화면에서 점선·배지로 구분합니다. 이미지는 위키백과
-   (출시 전 폰은 전작·시리즈 이미지).
-5. 순위·비교·적합도는 브라우저에서 슬라이더로 바로 다시 계산 (GPT 호출 없음)
-6. ★ 관심 폰은 매일 크론(`/api/phones/refresh`)이 다시 조사해 새 유출을 반영하고, 조사할 때마다
-   스냅샷이 쌓여 **적합도 변화 그래프**가 그려집니다.
+**흐름**
+1. 위 입력창에 원하는 걸 쓰면(`/api/phones/plan`) 우선순위·중요도·성향·브랜드 대결·한도로 바뀌고,
+   비워두면 지금 취향 설정으로 새 후보를 찾습니다.
+2. `/api/phones/search` — 브랜드마다 정찰 AI가 출시 가능성이 조금이라도 있는 폰(루머 포함)을 나열하고,
+   상위 8개를 폰마다 조사원 6~7마리(X 유출, 유튜브, 스펙, 추정, 한국 여론, 해외 여론, 우려)와 이미지 담당이
+   동시에 조사한 뒤 편집 AI가 `phone_dossiers`에 정리합니다. 나머지는 후보군(stub)으로 저장하고,
+   `자세히 조사` 버튼이나 매일 크론이 채웁니다. 12시간 안에 조사한 폰은 다시 찾지 않습니다.
+3. `/api/phones/calibrate` — 폰마다 따로 채점하면 폰끼리 안 맞으니, 심판 AI가 조사된 모든 폰을 한꺼번에
+   비교해(웹 검색으로 직접 비교 확인) 성능·카메라·배터리·화면·디자인 점수와 비교우위를 다시 매깁니다.
+   조사 후 자동으로 돌고, 새로 조사된 폰이 없으면 아무것도 하지 않습니다.
+4. 사진은 AI가 찾은 주소를 서버가 실제로 받아 보고 이미지일 때만 남기며, `/api/phones/img`가 대신 가져와
+   보여줍니다. 폰이 아닌 주소는 서빙하지 않습니다.
+5. 순위·적합도는 브라우저에서 바로 계산합니다. 불확실한 정보는 점수를 깎지 않고 `유력·추정` 표시만 하며,
+   모르는 항목은 조사된 폰 전체의 중앙값으로 채웁니다. 깎는 것은 실제 우려 요소뿐입니다.
+6. ★ 관심 폰은 매일 크론(`/api/phones/refresh`)이 다시 조사하고, 조사할 때마다 스냅샷이 쌓여 점수 변동과
+   적합도 그래프가 그려집니다.
 
 비용 보호: 같은 IP 동시 1건, 전체 동시 3건, 하루 `PHONES_DAILY_JOBS`건(기본 30).
 
-### 설정
+**주인용 수동 실행** (`secret`은 `CRON_SECRET` 또는 `PHONES_REFRESH_SECRET`)
+- `/api/phones/refresh?secret=…&brands=Samsung,Apple[&force=1]` 브랜드 검색
+- `/api/phones/refresh?secret=…&models=Galaxy S27 Ultra,…&force=1` 이름 지정 조사
+- `/api/phones/refresh?secret=…&calibrate=1` 전체 비교 채점
 
+### 설정
 1. Supabase SQL Editor에서 `supabase/phones.sql` 실행
-2. Vercel 환경변수 `OPENAI_API_KEY` (선택: `OPENAI_MODEL_PHONES`, `PHONES_DAILY_JOBS`)
-3. 처음 채우기(주인만): `/api/phones/refresh?secret=<CRON_SECRET 또는 PHONES_REFRESH_SECRET>&brands=Samsung,Apple`
+2. Vercel 환경변수 `OPENAI_API_KEY` (선택: `OPENAI_MODEL_PHONES`, `PHONES_DAILY_JOBS`, `PHONES_REFRESH_SECRET`)
 
 > X 게시물과 유튜브 영상을 직접 긁는 것이 아니라 GPT 웹 검색이 찾을 수 있는 범위에서 모읍니다.
 > 놓치는 글이 있을 수 있고, 화면에 출처와 확정/유력/루머 표시를 함께 보여줍니다.

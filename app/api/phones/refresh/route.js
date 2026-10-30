@@ -7,13 +7,14 @@ export const maxDuration = 300;
 /**
  * Collects and stores a fresh report. Vercel's cron calls it daily with
  * `Authorization: Bearer $CRON_SECRET`; to run it by hand, open
- * /api/phones/refresh?secret=<CRON_SECRET>. Each run costs several web-search
+ * /api/phones/refresh?secret=<PHONES_REFRESH_SECRET>. Each run costs several web-search
  * calls, so it is never open to the public.
  */
 export async function GET(req) {
-  const secret = process.env.CRON_SECRET;
   const given = req.headers.get('authorization')?.replace(/^Bearer /, '') ?? new URL(req.url).searchParams.get('secret');
-  if (!secret || given !== secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // CRON_SECRET is what Vercel's cron sends; PHONES_REFRESH_SECRET is for running it by hand
+  const allowed = [process.env.CRON_SECRET, process.env.PHONES_REFRESH_SECRET].filter(Boolean);
+  if (!given || !allowed.includes(given)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   try {
     const report = await buildReport();
     await saveReport(report);

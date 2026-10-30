@@ -147,7 +147,7 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 - `/api/phones/refresh` — GPT(웹 검색)가 Ice Universe(X), 알뷰(YouTube), 스펙·벤치마크
   자료를 모아 폰 목록(무게·칩셋·배터리·업데이트·가격·유출 신뢰도)으로 정리해
   Supabase `phone_reports`에 저장. `vercel.json`의 크론이 하루 한 번 호출합니다.
-  수동 실행: `/api/phones/refresh?secret=<CRON_SECRET>` (몇 분 걸림)
+  수동 실행: `/api/phones/refresh?secret=<PHONES_REFRESH_SECRET>` (몇 분 걸림)
 - 화면은 저장된 결과를 읽어, 취향 슬라이더·필터로 브라우저에서 바로 순위를 다시 매깁니다
   (GPT 호출 없음). "GPT로 맞추기"만 `/api/phones/taste`를 한 번 부릅니다.
 

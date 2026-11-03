@@ -1,5 +1,5 @@
 import { Bar, FAMILY, LIKELY, Move, Pic, Ring, STATUS, Sev, V, mah, when } from './parts';
-import { won } from './score';
+import { CONCERN_WEIGHT, won } from './score';
 
 /** Where a criterion sits in the reader's ranking; unranked ones keep their usual place after the ranked. */
 export const rankIdx = (order, k) => { const i = (order ?? []).indexOf(k); return i < 0 ? 99 : i; };
@@ -10,7 +10,8 @@ const BARS = [['performance', '성능'], ['camera', '카메라'], ['battery', '�
 export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, picked, onPick, onOpen, order }) {
   const f = p.fit;
   const my = ranks ?? {};
-  const concerns = p.concerns ?? [];
+  // only worries that count: confirmed problems and ones that may carry over, not "not decided yet" or "being fixed"
+  const concerns = (p.concerns ?? []).filter((c) => (CONCERN_WEIGHT[c.kind] ?? 0.5) > 0);
   const worst = ['high', 'medium', 'low'].find((s) => concerns.some((c) => c.severity === s));
   const mood = (m) => (m ? <span className={`np-dot-mood ${m.sentiment === '긍정' ? 'pos' : m.sentiment === '부정' ? 'neg' : m.sentiment === '혼재' ? 'mix' : 'none'}`} /> : null);
   return (

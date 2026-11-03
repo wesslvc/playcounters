@@ -144,14 +144,24 @@ export function axesOf(d) {
   return a;
 }
 
-/** Points taken off for real concerns only — never for how sure the information is. */
+/**
+ * Points taken off for real concerns only — never for how sure the information
+ * is. A problem confirmed on this phone counts in full; one its predecessor had
+ * that may carry over counts half; "not decided yet" and "the leaks say it's
+ * being fixed" cost nothing. (Concerns stored before kinds existed count half.)
+ */
+export const CONCERN_WEIGHT = { '확인된 문제': 1, '전작에서 이어질 수 있음': 0.5, '아직 불확실': 0, '해소 전망': 0 };
 export function penaltiesOf(d) {
-  const sev = (k) => (d.concerns ?? []).filter((x) => x.severity === k).length;
+  const w = (c) => CONCERN_WEIGHT[c.kind] ?? 0.5;
+  const real = (d.concerns ?? []).filter((c) => w(c) > 0);
+  const sum = (sev, each) => real.filter((c) => c.severity === sev).reduce((x, c) => x + each * w(c), 0);
   const parts = [];
-  const high = Math.min(9, sev('high') * 3);
-  const mid = Math.min(3, sev('medium') * 1);
-  if (high) parts.push({ label: `큰 우려 ${sev('high')}건`, v: -high });
-  if (mid) parts.push({ label: `주의 사항 ${sev('medium')}건`, v: -mid });
+  const high = Math.min(9, sum('high', 3));
+  const mid = Math.min(3, sum('medium', 1));
+  const nHigh = real.filter((c) => c.severity === 'high').length;
+  const nMid = real.filter((c) => c.severity === 'medium').length;
+  if (high) parts.push({ label: `큰 우려 ${nHigh}건`, v: -Math.round(high * 10) / 10 });
+  if (mid) parts.push({ label: `주의 사항 ${nMid}건`, v: -Math.round(mid * 10) / 10 });
   return { total: parts.reduce((x, y) => x + y.v, 0), parts };
 }
 

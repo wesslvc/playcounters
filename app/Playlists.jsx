@@ -272,7 +272,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         </>
       )}
 
-      <Section title="구성" sub={counted ? `장르를 아는 ${counted}곡 기준` : '가수별 곡 수'} />
+      <Section title="구성" sub={counted ? `장르를 아는 ${counted}곡 기준` : '장르를 불러오는 중이에요 · 가수별 곡 수'} />
       {gParts.length > 0 && (
         <div className="pl-split">
           <Donut parts={gParts} unit="곡" label="곡" focus={gFocus} onFocus={setGFocus} />

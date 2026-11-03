@@ -144,7 +144,7 @@ export default function Drawer({ p, ranks, history, model, watched, onWatch, pic
               <section>
                 <h4>주요 사양</h4>
                 <dl className="np-specs">
-                  <div><dt>칩셋</dt><dd>{p.chipset?.name ?? '미정'}{p.chipset?.certainty && p.chipset.certainty !== '확정' ? <i className="np-i">{p.chipset.certainty}</i> : null}<small>{p.chipset?.family ? FAMILY[p.chipset.family] : ''}</small></dd></div>
+                  <div><dt>칩셋{p.chipset?.regions && !/동일/.test(p.chipset.regions) ? ' (한국판)' : ''}</dt><dd>{p.chipset?.name ?? '미정'}{p.chipset?.certainty && p.chipset.certainty !== '확정' ? <i className="np-i">{p.chipset.certainty}</i> : null}<small>{p.chipset?.family ? FAMILY[p.chipset.family] : ''}{p.chipset?.regions ? ` · ${p.chipset.regions}` : ''}</small></dd></div>
                   <div><dt>무게</dt><dd><V e={p.weight_g} unit="g" stack /></dd></div>
                   <div><dt>두께</dt><dd><V e={p.thickness_mm} unit="mm" stack /></dd></div>
                   <div><dt>화면</dt><dd>{p.display}<small><V e={p.screen_in} unit="인치" /></small></dd></div>

@@ -56,7 +56,7 @@ export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, pi
         </ul>
 
         <dl className="np-spec-row">
-          <div><dt>칩셋</dt><dd>{p.chipset?.name ?? '미정'}</dd></div>
+          <div><dt>칩셋{p.chipset?.regions && !/동일/.test(p.chipset.regions) ? ' (한국판)' : ''}</dt><dd title={p.chipset?.regions || undefined}>{p.chipset?.name ?? '미정'}</dd></div>
           <div><dt>무게</dt><dd><V e={p.weight_g} unit="g" /></dd></div>
           <div><dt>배터리</dt><dd><V e={p.battery_mah} fmt={mah} /></dd></div>
           <div><dt>가격</dt><dd><V e={p.price_krw} fmt={won} /></dd></div>

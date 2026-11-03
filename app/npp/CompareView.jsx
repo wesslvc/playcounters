@@ -128,7 +128,7 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order, m
                 <thead><tr><th />{sel.map((p) => <th key={p.id} scope="col"><button type="button" onClick={() => onOpen(p)}><Pic p={p} size="sm" />{p.name}<small>{p.brand}</small></button></th>)}</tr></thead>
                 <tbody>
                   {row('내 취향 일치', (p) => `${p.fit.match}%`, (p) => p.fit.match === Math.max(...sel.map((x) => x.fit.match)))}
-                  {row('칩셋', (p) => <>{p.chipset?.name ?? '미정'}{p.chipset?.certainty && p.chipset.certainty !== '확정' ? <i className="np-i">{p.chipset.certainty}</i> : null}</>, best('performance'))}
+                  {row('칩셋 (한국판)', (p) => <>{p.chipset?.name ?? '미정'}{p.chipset?.certainty && p.chipset.certainty !== '확정' ? <i className="np-i">{p.chipset.certainty}</i> : null}</>, best('performance'))}
                   {row('무게', (p) => <V e={p.weight_g} unit="g" />, best('lightness'))}
                   {row('두께', (p) => <V e={p.thickness_mm} unit="mm" />)}
                   {row('화면', (p) => <>{p.display} <V e={p.screen_in} unit="인치" /></>, best('display'))}

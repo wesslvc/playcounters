@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useCovers, coverOf } from './useCovers';
 import { useGenres } from './useGenres';
-import { familyLabel } from '@/lib/genre';
+import { familyLabel, familyColor } from '@/lib/genre';
 import { Seg, Section, Cover, Stat } from './ui';
 
 const DAY = 864e5;
@@ -47,11 +46,104 @@ function SongRow({ n, t, value, unit, note, onSelect }) {
   );
 }
 
+/**
+ * A donut: one whole split into a few parts, the total in the middle. Hovering
+ * a slice (or its legend row) names it in the middle; the rest dim.
+ */
+function Donut({ parts, unit, label, focus, onFocus }) {
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  const r = 52;
+  const C = 2 * Math.PI * r;
+  const gap = parts.length > 1 ? 2.5 : 0;
+  const on = parts.find((p) => p.key === focus);
+  let at = 0;
+  return (
+    <svg className="donut" viewBox="0 0 140 140" role="img"
+         aria-label={parts.map((p) => `${p.label} ${p.value}${unit}`).join(', ')}>
+      <g transform="rotate(-90 70 70)">
+        {parts.map((p) => {
+          const len = (p.value / Math.max(1, total)) * C;
+          const el = (
+            <circle
+              key={p.key} cx="70" cy="70" r={r} fill="none" stroke={p.color} strokeWidth="20"
+              strokeDasharray={`${Math.max(0.5, len - gap)} ${C}`} strokeDashoffset={-at}
+              opacity={focus && focus !== p.key ? 0.3 : 1}
+              onMouseEnter={() => onFocus(p.key)} onMouseLeave={() => onFocus(null)}
+            >
+              <title>{`${p.label} ${p.value}${unit} (${Math.round((p.value / Math.max(1, total)) * 100)}%)`}</title>
+            </circle>
+          );
+          at += len;
+          return el;
+        })}
+      </g>
+      <text x="70" y="68" textAnchor="middle" className="donut-v">{on ? on.value : total}</text>
+      <text x="70" y="86" textAnchor="middle" className="donut-l">{on ? on.label : label}</text>
+    </svg>
+  );
+}
+
+/** The donut's legend: swatch, name, count and share, and a button when the part has a list. */
+function Legend({ parts, unit, focus, onFocus, picked, onPick }) {
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  return (
+    <ul className="legend">
+      {parts.map((p) => (
+        <li key={p.key}>
+          <button
+            aria-pressed={picked === p.key || undefined} disabled={!onPick}
+            onMouseEnter={() => onFocus(p.key)} onMouseLeave={() => onFocus(null)}
+            onClick={() => onPick?.(p.key)} data-dim={(focus && focus !== p.key) || undefined}
+          >
+            <i style={{ background: p.color }} />
+            <span>{p.label}</span>
+            <b>{p.value}{unit}</b>
+            <em>{Math.round((p.value / Math.max(1, total)) * 100)}%</em>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A month-by-month column of how many songs went in. */
+function Months({ months }) {
+  const last = months.slice(-18);
+  const max = Math.max(1, ...last.map((m) => m.n));
+  return (
+    <div className="pl-months" role="img" aria-label={last.map((m) => `${m.month} ${m.n}곡`).join(', ')}>
+      {last.map((m) => (
+        <div key={m.month} className="pl-mo" title={`${Number(m.month.slice(0, 4))}년 ${Number(m.month.slice(5))}월 · ${m.n}곡`}>
+          <span className="pl-mo-n">{m.n === max ? m.n : ''}</span>
+          <i style={{ height: m.n ? `${Math.max(4, (m.n / max) * 100)}%` : 0 }} />
+          <span className="pl-mo-x">{m.month.endsWith('-01') ? `${m.month.slice(2, 4)}.1` : Number(m.month.slice(5))}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A small card for one standout song. */
+function Pick({ label, t, value, onSelect }) {
+  if (!t) return null;
+  return (
+    <button className="pl-pick" onClick={() => t.plays > 0 && onSelect(target(t))}>
+      <Cover src={t.image} size={52} />
+      <span className="pl-pick-k">{label}</span>
+      <b>{t.track}</b>
+      <span>{t.artist}</span>
+      <em>{value}</em>
+    </button>
+  );
+}
+
 /** The analysis of one playlist. */
 function Analysis({ id, source, estimate, onSelect, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [view, setView] = useState('core');
+  const [view, setView] = useState(null);
+  const [focus, setFocus] = useState(null);
+  const [gFocus, setGFocus] = useState(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -68,12 +160,11 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
 
   const names = useMemo(() => (data?.artists ?? []).map((a) => a.artist), [data]);
   const genres = useGenres(names);
-  const missingCovers = useCovers('tracks', data?.missing?.length ? data.missing : null);
 
   if (error) return error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>;
   if (!data) return <p className="note" style={{ padding: '18px 0' }}>플레이리스트를 불러와 재생 기록과 맞춰 보는 중…</p>;
 
-  const { playlist: pl, summary: s, tracks, artists, missing } = data;
+  const { playlist: pl, summary: s, tracks, artists, mvp, added, races, months } = data;
   const by = (st) => tracks.filter((t) => t.status === st);
   const lists = {
     core: [...by('core')].sort((a, b) => b.plays30 - a.plays30),
@@ -83,15 +174,24 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
     asleep: [...by('asleep')].sort((a, b) => Date.parse(a.last_at) - Date.parse(b.last_at)),
     never: [...by('never')],
   };
-  const shown = STATUS.filter(([k]) => lists[k].length);
-  const current = lists[view]?.length ? view : shown[0]?.[0];
-  const familyCount = new Map();
+  const parts = STATUS.filter(([k]) => lists[k].length)
+    .map(([k, label]) => ({ key: k, label, value: lists[k].length, color: `var(--st-${k})` }));
+  const current = lists[view]?.length ? view : parts[0]?.key;
+
+  // genres by songs: each artist's family, the biggest four and the rest together
+  const fam = new Map();
   for (const a of artists) {
-    const f = genres[a.artist]?.family;
-    if (f) familyCount.set(f, (familyCount.get(f) ?? 0) + a.songs);
+    const f = genres[a.artist]?.family ?? null;
+    if (f) fam.set(f, (fam.get(f) ?? 0) + a.songs);
   }
-  const families = [...familyCount].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const counted = [...fam.values()].reduce((x, y) => x + y, 0);
+  const famParts = [...fam].sort((a, b) => b[1] - a[1]);
+  const gParts = [
+    ...famParts.slice(0, 4).map(([f, n]) => ({ key: f, label: familyLabel(f), value: n, color: familyColor(f) })),
+    ...(famParts.length > 4 ? [{ key: 'rest', label: '기타', value: famParts.slice(4).reduce((x, [, n]) => x + n, 0), color: 'var(--ink-3)' }] : []),
+  ];
   const maxSongs = Math.max(1, ...artists.map((a) => a.songs));
+  const firstMet = added.met + added.known ? Math.round((added.met / (added.met + added.known)) * 100) : null;
 
   return (
     <>
@@ -109,19 +209,13 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         <Stat value={`${s.played}/${s.songs}`} label="들어본 곡" sub={`${Math.round((s.played / Math.max(1, s.songs)) * 100)}%`} />
         <Stat value={`${s.active}곡`} label="이번 달 들은 곡" sub={`최근 30일 ${s.plays30.toLocaleString()}회`} />
         <Stat value={`${s.top5Share}%`} label="TOP 5 집중도" sub="이번 달 재생 중 상위 5곡 비중" />
-        <Stat value={s.plays.toLocaleString()} label="통산 재생" />
+        <Stat value={`${s.over300}곡`} label="300회 넘게 들은 곡" sub={s.over500 ? `500회 이상 ${s.over500}곡` : `통산 ${s.plays.toLocaleString()}회`} />
       </div>
 
       <Section title="곡 상태" sub="최근 30일·7일 재생으로 나눴어요" />
-      <div className="pl-bar" role="img" aria-label="곡 상태 비율">
-        {shown.map(([k]) => <i key={k} data-st={k} style={{ flexGrow: lists[k].length }} />)}
-      </div>
-      <div className="pl-legend">
-        {shown.map(([k, label]) => (
-          <button key={k} className="chip" aria-pressed={current === k} onClick={() => setView(k)}>
-            <i data-st={k} />{label} {lists[k].length}
-          </button>
-        ))}
+      <div className="pl-split">
+        <Donut parts={parts} unit="곡" label="곡" focus={focus} onFocus={setFocus} />
+        <Legend parts={parts} unit="곡" focus={focus} onFocus={setFocus} picked={current} onPick={setView} />
       </div>
       <p className="pl-sub">{STATUS.find(([k]) => k === current)?.[2]}</p>
       <ol className="ranks">
@@ -136,7 +230,55 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         ))}
       </ol>
 
-      <Section title="구성" sub={families.length ? families.map(([f, n]) => `${familyLabel(f)} ${n}곡`).join(' · ') : '가수별 곡 수'} />
+      <Section title="이 플리의 MVP" />
+      <div className="pl-picks">
+        <Pick label="통산 최다" t={mvp.allTime} value={`${mvp.allTime?.plays.toLocaleString()}회`} onSelect={onSelect} />
+        <Pick label="이번 달 최다" t={mvp.month?.plays30 ? mvp.month : null} value={`30일 ${mvp.month?.plays30}회`} onSelect={onSelect} />
+        <Pick label="넣은 뒤 최다" t={mvp.sinceAdded} value={`넣고 나서 ${mvp.sinceAdded?.sinceAdded}회`} onSelect={onSelect} />
+      </div>
+
+      <Section
+        title="넣은 뒤"
+        sub={firstMet != null ? `${firstMet}%는 이 플리에 넣으면서 처음 들은 곡 · 나머지는 원래 알던 곡` : '플리에 넣은 뒤의 재생'}
+      />
+      {added.settled > 0 && (
+        <p className="pl-line">
+          넣은 지 2주 넘은 {added.settled}곡 중 <b>{added.untouchedCount}곡</b>은 넣고 나서 한 번도 안 들었어요
+        </p>
+      )}
+      {added.untouched.length > 0 && (
+        <ol className="ranks">
+          {added.untouched.map((t, i) => (
+            <SongRow key={t.track + t.artist} n={i + 1} t={t} value={daysAgo(t.added_at)} unit="일 전 추가" note={t.plays ? `그 전에 ${t.plays}회` : '들은 적 없음'} onSelect={onSelect} />
+          ))}
+        </ol>
+      )}
+
+      {races.songs.length > 0 && (
+        <>
+          <Section title="그랑프리 기록" sub={`월간 그랑프리 우승곡 ${races.winners}곡 · 포디움에 오른 곡 ${races.podiumSongs}곡`} />
+          <ol className="ranks">
+            {races.songs.map((c, i) => (
+              <li key={`${c.artist_key}-${c.track_key}`}>
+                <button className="row" onClick={() => onSelect(target(c))}>
+                  <span className="rk">{i + 1}</span>
+                  <Cover src={c.image} size={44} />
+                  <span className="nm"><b>{c.track}</b><span>{c.artist} · 포디움 {c.podiums}회 · {c.points}pt</span></span>
+                  <span className="val">{c.wins}<small>승</small></span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+
+      <Section title="구성" sub={counted ? `장르를 아는 ${counted}곡 기준` : '가수별 곡 수'} />
+      {gParts.length > 0 && (
+        <div className="pl-split">
+          <Donut parts={gParts} unit="곡" label="곡" focus={gFocus} onFocus={setGFocus} />
+          <Legend parts={gParts} unit="곡" focus={gFocus} onFocus={setGFocus} />
+        </div>
+      )}
       <ol className="pl-artists">
         {artists.map((a) => (
           <li key={a.artist}>
@@ -147,21 +289,10 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         ))}
       </ol>
 
-      {missing.length > 0 && (
+      {months.length > 1 && (
         <>
-          <Section title="자주 듣는데 없는 곡" sub="최근 30일 많이 들었지만 이 플리엔 없어요" />
-          <ol className="ranks">
-            {missing.map((m, i) => (
-              <li key={`${m.artist_key}-${m.track_key}`}>
-                <button className="row" onClick={() => onSelect(target(m))}>
-                  <span className="rk">{i + 1}</span>
-                  <Cover src={coverOf(missingCovers, 'tracks', m)} size={44} />
-                  <span className="nm"><b>{m.track}</b><span>{m.artist}</span></span>
-                  <span className="val">{m.plays30}<small>회/30일</small></span>
-                </button>
-              </li>
-            ))}
-          </ol>
+          <Section title="추가 시기" sub="달마다 넣은 곡 수" />
+          <Months months={months} />
         </>
       )}
     </>
@@ -170,8 +301,9 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
 
 /**
  * Your Spotify playlists, each read against what you actually play: which
- * songs carry it, which are rising or going quiet, which you never play, who
- * it's made of, and what you play a lot that isn't in it.
+ * songs carry it, which are rising or going quiet, which you never play, how
+ * songs fared after going in, its Grand Prix record, who it's made of, and
+ * when it grew.
  */
 export default function Playlists({ source, estimate, onSelect, onContext }) {
   const [lists, setLists] = useState(null);

@@ -3,6 +3,7 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { spotifyFor } from '@/lib/spotifyUser';
 import { pickImage } from '@/lib/spotify';
+import { pointsForRank } from '@/lib/rank';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -67,7 +68,8 @@ async function songsOf(call, id) {
 /**
  * One playlist read against the plays: how much each song is actually
  * played, who it's made of, what's rising or going quiet, what's never been
- * played, and what gets played a lot but isn't in it.
+ * played, how songs fared after going in, its Grand Prix record, and when
+ * it grew.
  */
 export async function GET(req, { params }) {
   const userId = currentUserId();
@@ -94,15 +96,18 @@ export async function GET(req, { params }) {
   const songs = list.songs;
 
   const now = Date.now();
-  const [{ data: counts, error }, recent] = await Promise.all([
-    db.rpc('playlist_plays', {
-      p_user: userId, p_items: songs.map((s) => ({ artist: s.artist, track: s.track })),
+  const kst = new Date(now + 9 * 3600e3);
+  const thisMonth = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), 1) - 9 * 3600e3).toISOString();
+  const [{ data: counts, error }, races] = await Promise.all([
+    db.rpc('playlist_plays_v2', {
+      p_user: userId, p_items: songs.map((s) => ({ artist: s.artist, track: s.track, added: s.added_at ?? '' })),
       p_source: src, p_estimate: estimate,
     }),
-    rpcAll('top_items', {
-      p_user: userId, p_from: new Date(now - 30 * DAY).toISOString(), p_to: new Date(now + 60e3).toISOString(),
-      p_mode: 'tracks', p_tz: 'Asia/Seoul', p_limit: 60, p_source: src, p_estimate: estimate,
-    }, 60),
+    // every finished Grand Prix, for the playlist's race record
+    rpcAll('season_races', {
+      p_user: userId, p_from: new Date(0).toISOString(), p_to: thisMonth,
+      p_mode: 'tracks', p_tz: 'Asia/Seoul', p_source: src, p_estimate: estimate,
+    }, 20000).catch(() => ({ data: [] })),
   ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -117,6 +122,7 @@ export async function GET(req, { params }) {
       plays30: Math.round(Number(c.plays30 ?? 0)),
       plays7: Math.round(Number(c.plays7 ?? 0)),
       plays3: Math.round(Number(c.plays3 ?? 0)),
+      sinceAdded: Math.round(Number(c.since_added ?? 0)),
       first_at: c.first_at ?? null,
       last_at: c.last_at ?? null,
     };
@@ -146,12 +152,40 @@ export async function GET(req, { params }) {
     artists.set(t.artist_key ?? t.artist, a);
   }
 
-  // played a lot this month, not in the playlist
-  const inList = new Set(tracks.map((t) => `${t.artist_key}\u0000${t.track_key}`));
-  const missing = (recent.data ?? [])
-    .filter((r) => !inList.has(`${r.artist_key}\u0000${r.track_key}`))
-    .slice(0, 10)
-    .map((r) => ({ artist: r.artist, track: r.track, album: r.album, artist_key: r.artist_key, track_key: r.track_key, plays30: Number(r.plays) }));
+  // since it went in: never touched after being added (two weeks on), and
+  // songs first heard through this playlist against ones already known
+  const addedAt = (t) => Date.parse(t.added_at);
+  const settled = tracks.filter((t) => Number.isFinite(addedAt(t)) && now - addedAt(t) > 14 * DAY);
+  const untouched = settled.filter((t) => t.sinceAdded === 0)
+    .sort((a, b) => addedAt(a) - addedAt(b));
+  const met = tracks.filter((t) => t.first_at && Number.isFinite(addedAt(t)) && Date.parse(t.first_at) >= addedAt(t) - DAY).length;
+  const known = tracks.filter((t) => t.first_at && Number.isFinite(addedAt(t)) && Date.parse(t.first_at) < addedAt(t) - DAY).length;
+  const bestSince = [...tracks].sort((a, b) => b.sinceAdded - a.sinceAdded)[0];
+
+  // the playlist's race record: Grand Prix wins and podiums of its songs
+  const key = (r) => `${r.artist_key}\u0000${r.track_key}`;
+  const inList = new Map(tracks.map((t) => [key(t), t]));
+  const record = new Map();
+  for (const r of races.data ?? []) {
+    const t = inList.get(key(r));
+    if (!t) continue;
+    const c = record.get(key(r)) ?? { track: t.track, artist: t.artist, image: t.image, artist_key: t.artist_key, track_key: t.track_key, wins: 0, podiums: 0, points: 0, starts: 0 };
+    c.starts += 1;
+    c.points += pointsForRank(r.place);
+    if (r.place === 1) c.wins += 1;
+    if (r.place <= 3) c.podiums += 1;
+    record.set(key(r), c);
+  }
+  const racers = [...record.values()].sort((a, b) => b.wins - a.wins || b.podiums - a.podiums || b.points - a.points);
+
+  // when songs went in, month by month
+  const byMonth = new Map();
+  for (const t of tracks) {
+    if (!Number.isFinite(addedAt(t))) continue;
+    const m = new Date(addedAt(t) + 9 * 3600e3).toISOString().slice(0, 7);
+    byMonth.set(m, (byMonth.get(m) ?? 0) + 1);
+  }
+  const months = [...byMonth].sort((a, b) => a[0].localeCompare(b[0])).map(([month, n]) => ({ month, n }));
 
   const plays30 = tracks.reduce((a, t) => a + t.plays30, 0);
   const top5 = [...tracks].sort((a, b) => b.plays30 - a.plays30).slice(0, 5).reduce((a, t) => a + t.plays30, 0);
@@ -176,9 +210,18 @@ export async function GET(req, { params }) {
       firstAdded: added[0] ? new Date(added[0]).toISOString() : null,
       lastAdded: added.length ? new Date(added[added.length - 1]).toISOString() : null,
       status: statusCount,
+      over300: tracks.filter((t) => t.plays >= 300).length,
+      over500: tracks.filter((t) => t.plays >= 500).length,
     },
+    mvp: {
+      allTime: [...tracks].sort((a, b) => b.plays - a.plays)[0] ?? null,
+      month: [...tracks].sort((a, b) => b.plays30 - a.plays30)[0] ?? null,
+      sinceAdded: bestSince?.sinceAdded ? bestSince : null,
+    },
+    added: { untouched: untouched.slice(0, 20), untouchedCount: untouched.length, settled: settled.length, met, known },
+    races: { songs: racers.slice(0, 10), wins: racers.reduce((a, c) => a + c.wins, 0), winners: racers.filter((c) => c.wins).length, podiumSongs: racers.filter((c) => c.podiums).length },
+    months,
     tracks,
     artists: [...artists.values()].sort((a, b) => b.songs - a.songs || b.plays30 - a.plays30).slice(0, 12),
-    missing,
   });
 }

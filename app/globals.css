@@ -962,6 +962,41 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 
 
 /* ---------- playlists ---------- */
+/* song states: categorical, validated for both surfaces (adjacent pairs in ring order) */
+:root { --st-core:#2a78d6; --st-rising:#1baf7a; --st-steady:#6250d6; --st-fading:#eda100; --st-asleep:#a8a8a2; --st-never:#e34948 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --st-core:#3987e5; --st-rising:#199e70; --st-steady:#9085e9; --st-fading:#c98500; --st-asleep:#6f6f77; --st-never:#e66767 }
+}
+:root[data-theme="dark"] { --st-core:#3987e5; --st-rising:#199e70; --st-steady:#9085e9; --st-fading:#c98500; --st-asleep:#6f6f77; --st-never:#e66767 }
+.pl-split { display:grid; grid-template-columns:180px minmax(0,1fr); gap:20px; align-items:center; margin:4px 0 6px }
+.donut { width:180px; height:180px; display:block }
+.donut circle { transition:opacity .15s; cursor:pointer }
+.donut-v { font-size:26px; font-weight:800; letter-spacing:-.04em; fill:var(--ink) }
+.donut-l { font-size:11px; font-weight:600; fill:var(--ink-3) }
+.legend { list-style:none; display:flex; flex-direction:column; gap:2px }
+.legend button { display:grid; grid-template-columns:10px minmax(0,1fr) auto 40px; gap:10px; align-items:center; width:100%; padding:7px 10px; border-radius:10px; font-size:13.5px; transition:opacity .15s, background .15s }
+.legend button:hover:not(:disabled), .legend button[aria-pressed] { background:var(--sunk) }
+.legend button[aria-pressed] span { font-weight:700 }
+.legend button[data-dim] { opacity:.45 }
+.legend button:disabled { cursor:default; color:var(--ink) }
+.legend i { width:10px; height:10px; border-radius:3px }
+.legend span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.legend b { font-weight:700; font-variant-numeric:tabular-nums }
+.legend em { font-style:normal; font-size:12px; color:var(--ink-3); text-align:right; font-variant-numeric:tabular-nums }
+.pl-picks { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px }
+.pl-pick { display:flex; flex-direction:column; gap:2px; min-width:0; padding:12px; border-radius:16px; background:var(--surface); border:1px solid var(--hair); text-align:left }
+.pl-pick .cover { margin-bottom:8px }
+.pl-pick-k { font-size:11.5px; font-weight:700; color:var(--ink-3) }
+.pl-pick b { font-size:14px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pl-pick > span:not(.pl-pick-k):not(.cover) { font-size:12px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pl-pick em { margin-top:4px; font-style:normal; font-size:13px; font-weight:700 }
+.pl-line { margin:2px 0 8px; font-size:14px; color:var(--ink-2); word-break:keep-all }
+.pl-line b { color:var(--ink) }
+.pl-months { display:flex; align-items:flex-end; gap:4px; height:140px; padding-top:16px }
+.pl-mo { flex:1 1 0; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px }
+.pl-mo i { display:block; width:100%; max-width:22px; border-radius:4px 4px 0 0; background:var(--ink) }
+.pl-mo-n { font-size:11px; font-weight:700; min-height:14px }
+.pl-mo-x { font-size:10.5px; color:var(--ink-3); white-space:nowrap }
 .pl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:4px }
 .pl-card { display:flex; flex-direction:column; gap:4px; min-width:0; padding:10px; border-radius:16px; background:var(--surface); border:1px solid var(--hair); text-align:left }
 .pl-card .cover { width:100% !important; height:auto !important; aspect-ratio:1; border-radius:10px; margin-bottom:6px }
@@ -975,29 +1010,25 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .pl-head h1 { font-size:24px; font-weight:800; letter-spacing:-.03em; line-height:1.2; word-break:keep-all }
 .pl-head p { margin:4px 0 6px; font-size:13px; color:var(--ink-3) }
 .pl-head a { font-size:13px; font-weight:600; color:var(--ink-2) }
-.pl-bar { display:flex; height:10px; border-radius:5px; overflow:hidden; gap:2px; margin:2px 0 10px }
-.pl-bar i { display:block; min-width:4px }
-[data-st="core"] { background:var(--ink) }
-[data-st="rising"] { background:var(--pos) }
-[data-st="steady"] { background:var(--ink-3) }
-[data-st="fading"] { background:var(--gold) }
-[data-st="asleep"] { background:var(--sunk-2) }
-[data-st="never"] { background:var(--neg) }
-.pl-legend { display:flex; flex-wrap:wrap; gap:6px }
-.pl-legend .chip { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px; font-size:12.5px }
-.pl-legend .chip i { width:8px; height:8px; border-radius:50% }
 .pl-sub { margin:10px 0 2px; font-size:12.5px; color:var(--ink-3) }
 .ranks .row:disabled { cursor:default; opacity:.85 }
 .pl-artists { display:flex; flex-direction:column; gap:8px; margin:4px 0 8px }
-.pl-artists li { display:grid; grid-template-columns:minmax(0,9em) minmax(0,1fr) auto; gap:10px; align-items:center }
+.pl-artists li { display:grid; grid-template-columns:minmax(0,9em) minmax(0,1fr) 9.5em; gap:10px; align-items:center }
 .pl-an { font-size:13.5px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .pl-ab { height:8px; border-radius:4px; background:var(--sunk); overflow:hidden }
 .pl-ab i { display:block; height:100%; border-radius:4px; background:var(--ink) }
-.pl-av { font-size:12.5px; font-weight:650; white-space:nowrap }
+.pl-av { font-size:12.5px; font-weight:650; white-space:nowrap; text-align:right }
 .pl-av small { font-weight:500; color:var(--ink-3) }
 @media (max-width:560px) {
+  .pl-split { grid-template-columns:130px minmax(0,1fr); gap:12px }
+  .donut { width:130px; height:130px }
+  .legend button { grid-template-columns:10px minmax(0,1fr) auto 34px; gap:8px; padding:6px 6px; font-size:13px }
+  .pl-picks { grid-template-columns:1fr; gap:8px }
+  .pl-pick { display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-rows:auto auto auto; column-gap:12px; align-items:center }
+  .pl-pick .cover { grid-row:1 / 4; margin:0 }
+  .pl-pick em { grid-column:3; grid-row:1 / 4; margin:0 }
   .pl-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px }
   .pl-head .cover { width:76px !important; height:76px !important }
   .pl-head h1 { font-size:20px }
-  .pl-artists li { grid-template-columns:minmax(0,7em) minmax(0,1fr) auto }
+  .pl-artists li { grid-template-columns:minmax(0,7em) minmax(0,1fr) 8.5em }
 }

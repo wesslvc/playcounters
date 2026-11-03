@@ -1942,3 +1942,55 @@ as $$
   group by q.i, q.ak, q.tk
   order by q.i;
 $$;
+
+-- The same, plus how often each song has been played since it was added to
+-- the playlist (entries carry `added`). A new name rather than a replacement:
+-- the return shape changed, and the old one stays until it's dropped.
+create or replace function playlist_plays_v2(
+  p_user uuid,
+  p_items jsonb,
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (
+  i          int,
+  artist_key text,
+  track_key  text,
+  plays      numeric,
+  plays30    numeric,
+  plays7     numeric,
+  plays3     numeric,
+  since_added numeric,
+  first_at   timestamptz,
+  last_at    timestamptz
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with q as materialized (
+    select (e.ord - 1)::int as i,
+           resolve_artist_key(e.v->>'artist') as ak,
+           resolve_track_key(e.v->>'track', e.v->>'artist') as tk,
+           nullif(e.v->>'added', '')::timestamptz as added
+    from jsonb_array_elements(p_items) with ordinality as e(v, ord)
+  )
+  select q.i, q.ak, q.tk,
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '30 days'), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '7 days'), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '3 days'), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where q.added is not null and p.played_at >= q.added), 0),
+    min(p.played_at),
+    max(p.played_at)
+  from q
+  left join plays p
+    on p.user_id = p_user
+   and p.artist_key = q.ak
+   and p.track_key = q.tk
+   and (p.ms_played >= 30000 or p.source = 'youtube')
+   and (p_source = 'all'
+        or (p_source = 'youtube' and p.source = 'youtube')
+        or (p_source = 'spotify' and p.source <> 'youtube'))
+  group by q.i, q.ak, q.tk, q.added
+  order by q.i;
+$$;

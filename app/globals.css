@@ -971,6 +971,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .pl-split { display:grid; grid-template-columns:180px minmax(0,1fr); gap:20px; align-items:center; margin:4px 0 6px }
 .donut { width:180px; height:180px; display:block }
 .donut circle { transition:opacity .15s; cursor:pointer }
+.donut text { pointer-events:none }
 .donut-v { font-size:26px; font-weight:800; letter-spacing:-.04em; fill:var(--ink) }
 .donut-l { font-size:11px; font-weight:600; fill:var(--ink-3) }
 .legend { list-style:none; display:flex; flex-direction:column; gap:2px }

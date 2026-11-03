@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useGenres } from './useGenres';
-import { familyLabel, familyColor } from '@/lib/genre';
+import { familyLabel, artistColor } from '@/lib/genre';
 import { Seg, Section, Cover, Stat } from './ui';
 
 const DAY = 864e5;
@@ -10,13 +10,13 @@ const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r
 
 /** Where a song stands in the playlist, in the order they're shown. */
 const STATUS = [
-  ['core', '단골', '이번 달 가장 많이 듣는 곡'],
-  ['rising', '뜨는 중', '최근 일주일에 부쩍 많이 들음'],
-  ['steady', '꾸준', '가끔씩 계속 들음'],
-  ['fading', '식는 중', '이번 달엔 들었지만 최근 일주일은 뜸함'],
-  ['asleep', '잠든 곡', '예전엔 들었지만 30일 넘게 안 들음'],
-  ['never', '안 들은 곡', '기록상 한 번도 안 들음'],
-];
+  ['core', '단골', '최근 30일 동안 일주일에 두 번 넘게 들은 곡'],
+  ['rising', '뜨는 중', '최근 7일이 그 전 3주보다 두 배 넘게 잦아진 곡'],
+  ['steady', '가끔', '최근 30일 동안 가끔 들은 곡'],
+  ['fading', '식는 중', '그 전 3주엔 자주 들었는데 최근 7일은 3분의 1 아래로 뜸해진 곡'],
+  ['asleep', '잠든 곡', '예전엔 들었지만 30일 넘게 안 들은 곡'],
+  ['never', '안 들은 곡', '기록상 한 번도 안 들은 곡'],
+]
 
 const daysAgo = (iso) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / DAY)) : null);
 const ymd = (iso) => (iso ? new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -50,7 +50,7 @@ function SongRow({ n, t, value, unit, note, onSelect }) {
  * A donut: one whole split into a few parts, the total in the middle. Hovering
  * a slice (or its legend row) names it in the middle; the rest dim.
  */
-function Donut({ parts, unit, label, focus, onFocus }) {
+function Donut({ parts, unit, label, focus, onFocus, onPick }) {
   const total = parts.reduce((a, p) => a + p.value, 0);
   const r = 52;
   const C = 2 * Math.PI * r;
@@ -69,6 +69,7 @@ function Donut({ parts, unit, label, focus, onFocus }) {
               strokeDasharray={`${Math.max(0.5, len - gap)} ${C}`} strokeDashoffset={-at}
               opacity={focus && focus !== p.key ? 0.3 : 1}
               onMouseEnter={() => onFocus(p.key)} onMouseLeave={() => onFocus(null)}
+              onClick={() => onPick?.(p.key)}
             >
               <title>{`${p.label} ${p.value}${unit} (${Math.round((p.value / Math.max(1, total)) * 100)}%)`}</title>
             </circle>
@@ -170,7 +171,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
     core: [...by('core')].sort((a, b) => b.plays30 - a.plays30),
     rising: [...by('rising')].sort((a, b) => b.plays7 - a.plays7),
     steady: [...by('steady')].sort((a, b) => b.plays30 - a.plays30),
-    fading: [...by('fading')].sort((a, b) => b.plays30 - a.plays30),
+    fading: [...by('fading')].sort((a, b) => (b.plays30 - b.plays7) - (a.plays30 - a.plays7)),
     asleep: [...by('asleep')].sort((a, b) => Date.parse(a.last_at) - Date.parse(b.last_at)),
     never: [...by('never')],
   };
@@ -178,18 +179,20 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
     .map(([k, label]) => ({ key: k, label, value: lists[k].length, color: `var(--st-${k})` }));
   const current = lists[view]?.length ? view : parts[0]?.key;
 
-  // genres by songs: each artist's family, the biggest four and the rest together
+  // who it's made of: the biggest five artists in their own colours, the rest together
+  const songsIn = artists.reduce((x, a) => x + a.songs, 0);
+  const restSongs = s.songs - artists.slice(0, 5).reduce((x, a) => x + a.songs, 0);
+  const gParts = [
+    ...artists.slice(0, 5).map((a) => ({ key: a.artist, label: a.artist, value: a.songs, color: artistColor(a.artist) })),
+    ...(restSongs > 0 ? [{ key: 'rest', label: '그 밖의 가수', value: restSongs, color: 'var(--ink-3)' }] : []),
+  ];
+  // and what they play: each artist's genre family, by songs
   const fam = new Map();
   for (const a of artists) {
-    const f = genres[a.artist]?.family ?? null;
+    const f = genres[a.artist]?.family;
     if (f) fam.set(f, (fam.get(f) ?? 0) + a.songs);
   }
-  const counted = [...fam.values()].reduce((x, y) => x + y, 0);
-  const famParts = [...fam].sort((a, b) => b[1] - a[1]);
-  const gParts = [
-    ...famParts.slice(0, 4).map(([f, n]) => ({ key: f, label: familyLabel(f), value: n, color: familyColor(f) })),
-    ...(famParts.length > 4 ? [{ key: 'rest', label: '기타', value: famParts.slice(4).reduce((x, [, n]) => x + n, 0), color: 'var(--ink-3)' }] : []),
-  ];
+  const famLine = [...fam].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([f, n]) => `${familyLabel(f)} ${n}곡`).join(' · ');
   const maxSongs = Math.max(1, ...artists.map((a) => a.songs));
   const firstMet = added.met + added.known ? Math.round((added.met / (added.met + added.known)) * 100) : null;
 
@@ -214,7 +217,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
 
       <Section title="곡 상태" sub="최근 30일·7일 재생으로 나눴어요" />
       <div className="pl-split">
-        <Donut parts={parts} unit="곡" label="곡" focus={focus} onFocus={setFocus} />
+        <Donut parts={parts} unit="곡" label="곡" focus={focus} onFocus={setFocus} onPick={setView} />
         <Legend parts={parts} unit="곡" focus={focus} onFocus={setFocus} picked={current} onPick={setView} />
       </div>
       <p className="pl-sub">{STATUS.find(([k]) => k === current)?.[2]}</p>
@@ -224,8 +227,8 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
             ? <SongRow key={t.track + t.artist} n={i + 1} t={t} value={daysAgo(t.last_at)} unit="일째" note={`통산 ${t.plays}회`} onSelect={onSelect} />
             : current === 'never'
               ? <SongRow key={t.track + t.artist} n={i + 1} t={t} value="–" unit="" note={t.added_at ? `${ymd(t.added_at)} 추가` : null} onSelect={onSelect} />
-              : current === 'rising'
-                ? <SongRow key={t.track + t.artist} n={i + 1} t={t} value={t.plays7} unit="회/7일" note={`30일 ${t.plays30}회`} onSelect={onSelect} />
+              : current === 'rising' || current === 'fading'
+                ? <SongRow key={t.track + t.artist} n={i + 1} t={t} value={t.plays7} unit="회/7일" note={`그 전 3주 ${t.plays30 - t.plays7}회`} onSelect={onSelect} />
                 : <SongRow key={t.track + t.artist} n={i + 1} t={t} value={t.plays30} unit="회/30일" note={`통산 ${t.plays}회`} onSelect={onSelect} />
         ))}
       </ol>
@@ -272,7 +275,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         </>
       )}
 
-      <Section title="구성" sub={counted ? `장르를 아는 ${counted}곡 기준` : '장르를 불러오는 중이에요 · 가수별 곡 수'} />
+      <Section title="구성" sub={famLine ? `${famLine} (상위 가수 ${songsIn}곡 기준)` : '가수별 곡 수 · 장르를 불러오는 중이에요'} />
       {gParts.length > 0 && (
         <div className="pl-split">
           <Donut parts={gParts} unit="곡" label="곡" focus={gFocus} onFocus={setGFocus} />
@@ -283,7 +286,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
         {artists.map((a) => (
           <li key={a.artist}>
             <span className="pl-an">{a.artist}</span>
-            <span className="pl-ab"><i style={{ width: `${(a.songs / maxSongs) * 100}%` }} /></span>
+            <span className="pl-ab"><i style={{ width: `${(a.songs / maxSongs) * 100}%`, background: artistColor(a.artist) }} /></span>
             <span className="pl-av">{a.songs}곡<small>{a.plays30 ? ` · 30일 ${a.plays30}회` : ''}</small></span>
           </li>
         ))}

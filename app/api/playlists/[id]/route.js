@@ -128,17 +128,18 @@ export async function GET(req, { params }) {
     };
   });
 
-  // where each song stands: rising, going quiet, asleep, never played, or just playing
-  const ranked30 = [...tracks].map((t) => t.plays30).sort((a, b) => b - a);
-  const core = Math.max(3, ranked30[Math.min(ranked30.length - 1, Math.floor(ranked30.length / 5))] ?? 0);
+  // where each song stands. The last 7 days are set against the 23 before
+  // them (not against a month that already contains them): a regular is played
+  // twice a week or more; rising has the week at twice the earlier pace or
+  // better; fading had a real earlier pace and the week fell to a third of it.
   for (const t of tracks) {
-    const day30 = t.plays30 / 30;
-    const day7 = t.plays7 / 7;
+    const week = t.plays7 / 7;
+    const before = (t.plays30 - t.plays7) / 23;
     t.status = t.plays === 0 ? 'never'
       : t.plays30 === 0 ? 'asleep'
-        : t.plays7 >= 3 && day7 > day30 * 1.6 ? 'rising'
-          : t.plays30 >= 4 && day7 < day30 * 0.4 ? 'fading'
-            : t.plays30 >= core ? 'core'
+        : t.plays30 - t.plays7 >= 4 && week <= before / 3 ? 'fading'
+          : t.plays30 >= 8 ? 'core'
+            : t.plays7 >= 3 && week >= before * 2 ? 'rising'
               : 'steady';
   }
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { rememberFamily } from '@/lib/genre';
 
 const BATCH = 24;
 
@@ -9,23 +8,18 @@ const BATCH = 24;
 const known = {};
 
 /**
- * Record genres that arrived with a page's own data, before it renders —
- * artistColor then draws the right color on the first paint, and these
- * names are never asked for again.
+ * Record genres that arrived with a page's own data, before it renders, so
+ * these names are never asked for again.
  */
 export function seedGenres(map) {
-  for (const [artist, g] of Object.entries(map ?? {})) {
-    known[artist] = g;
-    rememberFamily(artist, g?.family, g?.shade);
-  }
+  for (const [artist, g] of Object.entries(map ?? {})) known[artist] = g;
 }
 
 /**
  * Look up genres for the artist names on screen, a batch at a time, the way
  * artwork and credits are fetched: only what the server answers is recorded,
- * and whatever is pending is asked for again shortly. Each answer also
- * teaches artistColor the artist's family, so colors move into their genre's
- * band as genres arrive. Returns every record known so far, by name.
+ * and whatever is pending is asked for again shortly. Returns every record
+ * known so far, by name.
  */
 export function useGenres(names) {
   const [snapshot, setSnapshot] = useState(() => ({ ...known }));
@@ -56,10 +50,7 @@ export function useGenres(names) {
       .then((r) => r.json())
       .then((json) => {
         const got = json?.genres ?? {};
-        for (const [artist, g] of Object.entries(got)) {
-          known[artist] = g;
-          rememberFamily(artist, g?.family, g?.shade);
-        }
+        for (const [artist, g] of Object.entries(got)) known[artist] = g;
         if (Object.keys(got).length) setSnapshot({ ...known });
         if (!cancelled && (json?.retryAfter || json?.pending)) {
           timer = setTimeout(() => setTick((t) => t + 1), json.retryAfter ? json.retryAfter * 1000 : 800);

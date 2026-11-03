@@ -874,15 +874,18 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         const input = {
           season: y,
           today: day(Date.now()),
-          roundsLeft: 12 - lastM,
-          currentMonth: { month: lastM, day: kst.getUTCDate(), daysInMonth: new Date(Date.UTC(y, lastM, 0)).getUTCDate(), provisional: true },
+          // the month under way still has its points to pay out, so it counts as a round to play
+          roundsToPlay: 12 - lastM + 1,
+          roundsToPlayNote: `이번 달(${lastM}월, 진행 중)을 포함해 ${lastM}월~12월 ${12 - lastM + 1}라운드가 남음. 이번 달 기록은 잠정치.`,
+          currentMonth: { month: lastM, day: kst.getUTCDate(), daysInMonth: new Date(Date.UTC(y, lastM, 0)).getUTCDate(), inProgress: true },
           months: [...new Set((data ?? []).map((r) => r.mo))].sort((a, b) => a - b).map((mo) => ({
             month: mo,
             provisional: mo === lastM,
             top10: (data ?? []).filter((r) => r.mo === mo).sort((a, b) => a.place - b.place)
               .map((r) => ({ place: r.place, song: r.track ?? r.artist, artists: names(r), plays: Number(r.plays) })),
           })),
-          standings: field.map((c) => ({ team: c.artist, points: c.pts, beforeThisMonth: before.get(c.artist_key) ?? 0 })),
+          // confirmed points from finished rounds, and with this month as it stands so far
+          standings: field.map((c) => ({ team: c.artist, confirmedPoints: before.get(c.artist_key) ?? 0, withThisMonthSoFar: c.pts })),
           recentSongs: raw.recent.slice(0, 40).map((r) => ({
             song: r.track ?? r.artist,
             artists: names(r),
@@ -892,7 +895,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
             firstPlayed: raw.debut.get(keyOf(r)) ? day(raw.debut.get(keyOf(r))) : null,
           })),
         };
-        astra = await judgeTitle(`cx-title|${userId}|${y}|${src}|${estimate}`, input);
+        // v2: the rounds left now count the month under way (v1 told Astra one round was left in November)
+        astra = await judgeTitle(`cx-title-v2|${userId}|${y}|${src}|${estimate}`, input);
         if (astra) {
           const byName = new Map(field.map((c) => [c.artist, c]));
           odds = astra.odds.slice(0, 3).map((o) => ({ c: byName.get(o.team), p: o.pct / 100 })).filter((o) => o.c);

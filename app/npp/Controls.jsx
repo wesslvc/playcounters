@@ -72,6 +72,20 @@ export default function Controls({ prefs, setPrefs, filters, setFilters, brandOp
         ))}
       </Acc>
 
+      <Acc id="uncertain" title="불확실한 정보" summary={{ ignore: '깎지 않음', some: '조금 반영', strict: '엄격하게' }[prefs.uncertain]}>
+        <div className="np-seg np-seg-full" role="radiogroup" aria-label="불확실한 정보 처리">
+          {[['ignore', '깎지 않음'], ['some', '조금 반영'], ['strict', '엄격하게']].map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={prefs.uncertain === k} className={prefs.uncertain === k ? 'on' : ''}
+              onClick={() => setPrefs({ ...prefs, uncertain: k })}>{l}</button>
+          ))}
+        </div>
+        <p className="ctl-sub">{{
+          ignore: '실제로 확인된 문제만 감점해요. 루머·추정·"아직 미정"·전작에서 이어질지 모르는 우려는 점수에 영향이 없어서, 출시 전 폰도 불리하지 않아요.',
+          some: '전작에서 이어질 수 있는 우려는 절반만 감점하고, 확정된 폰을 약간 우대해요.',
+          strict: '전작에서 이어질 수 있는 우려는 온전히, "아직 미정"인 우려는 절반을 감점하고, 확정된 폰을 확실히 우대해요. 출시 전 폰이 불리해져요.',
+        }[prefs.uncertain]}</p>
+      </Acc>
+
       <Acc id="traits" title="어느 쪽이 더 끌리나" summary={traitText}>
         <p className="ctl-sub">정말 서로 반대인 것만 한 줄에 놓았어요.</p>
         {TRAITS.map((t) => (

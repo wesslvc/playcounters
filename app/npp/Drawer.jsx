@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { COMPARE_AXES, CONCERN_WEIGHT, deltaOf, fitOf, won } from './score';
+import { COMPARE_AXES, concernWeight, deltaOf, fitOf, won } from './score';
 import { Bar, FAMILY, KIND, LIKELY, OpinionPanel, Pic, Ring, STATUS, Sev, V, day, imgSrc, mah, sign, when } from './parts';
 
 const TABS = [['overview', '개요'], ['leaks', '유출'], ['opinion', '여론'], ['risks', '우려'], ['scores', '점수·변동'], ['photos', '사진']];
@@ -63,7 +63,7 @@ export default function Drawer({ p, ranks, history, model, watched, onWatch, pic
   }, [onClose]);
 
   // real problems first, then what may carry over; "not decided yet" and "being fixed" last
-  const weightOf = (c) => CONCERN_WEIGHT[c.kind] ?? 0.5;
+  const weightOf = (c) => concernWeight(c.kind, model.prefs?.uncertain);
   const concerns = [...(p.concerns ?? [])].sort((a, b) => weightOf(b) - weightOf(a) || { high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]);
   const snaps = history ?? [];
   const points = snaps.map((s) => ({ t: Date.parse(s.at), fit: fitOf(s.data, model).match }));
@@ -217,15 +217,15 @@ export default function Drawer({ p, ranks, history, model, watched, onWatch, pic
                   {concerns.map((x, i) => (
                     <li key={i} className={`${x.severity}${weightOf(x) === 0 ? ' free' : ''}`}>
                       <div className="np-risk-tags">
-                        {weightOf(x) > 0 ? <Sev level={x.severity} /> : <span className="np-sev low">{x.kind === '해소 전망' ? '✓ 해소 전망' : '아직 불확실'}</span>}
+                        {weightOf(x) > 0 ? <Sev level={x.severity} /> : <span className="np-sev low">{x.kind === '해소 전망' ? '✓ 해소 전망' : x.kind ?? '참고'}</span>}
                         {x.kind && weightOf(x) > 0 && <small>{x.kind}</small>}
                       </div>
-                      <div><b>{x.title}</b><p>{x.detail}</p><small>{x.source}{weightOf(x) === 0 ? ' · 점수에서 깎지 않아요' : weightOf(x) < 1 ? ' · 절반만 감점' : ''}</small></div>
+                      <div><b>{x.title}</b><p>{x.detail}</p><small>{x.source}{weightOf(x) === 0 ? ' · 지금 설정에선 깎지 않아요' : weightOf(x) < 1 ? ' · 절반만 감점' : ''}</small></div>
                     </li>
                   ))}
                 </ul>
               ) : <p className="np-meta">조사에서 뚜렷한 우려 요소는 나오지 않았어요.</p>}
-              {p.fit.penalties.length > 0 && <p className="np-pen-note">점수에서는 {p.fit.penalties.map((x) => `${x.label} ${x.v}`).join(' · ')}만큼 깎였어요. (확인된 문제는 그대로, 전작에서 이어질 수 있는 건 절반만 깎고, "아직 불확실"·"해소 전망"은 깎지 않아요)</p>}
+              {p.fit.penalties.length > 0 && <p className="np-pen-note">점수에서는 {p.fit.penalties.map((x) => `${x.label} ${x.v}`).join(' · ')}만큼 깎였어요. (내 취향의 '불확실한 정보' 설정에 따라 깎아요)</p>}
             </section>
           )}
 

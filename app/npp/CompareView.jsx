@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { COMPARE_AXES, CONCERN_WEIGHT, explainGap, won } from './score';
+import { COMPARE_AXES, concernWeight, explainGap, won } from './score';
 import Radar from './Radar';
 import { Bar, CAT, Pic, STATUS, V, mah, when } from './parts';
 
@@ -139,7 +139,7 @@ export default function CompareView({ phones, all, ids, setIds, onOpen, order, m
                   {row('가격', (p) => <V e={p.price_krw} fmt={won} />, best('value'))}
                   {row('여론 (한국)', (p) => (p.opinion?.kr ? `${p.opinion.kr.sentiment} · ${p.opinion.kr.score}점` : '—'))}
                   {row('여론 (해외)', (p) => (p.opinion?.global ? `${p.opinion.global.sentiment} · ${p.opinion.global.score}점` : '—'))}
-                  {row('주요 우려', (p) => ((p.concerns ?? []).filter((c) => c.severity === 'high' && (CONCERN_WEIGHT[c.kind] ?? 0.5) > 0).map((c) => c.title).join(', ') || '큰 우려 없음'))}
+                  {row('주요 우려', (p) => ((p.concerns ?? []).filter((c) => c.severity === 'high' && concernWeight(c.kind, model.prefs?.uncertain) > 0).map((c) => c.title).join(', ') || '큰 우려 없음'))}
                   {row('출시', (p) => `${STATUS[p.status]} · ${p.release}`)}
                   {row('조사 시각', (p) => when(p.updated_at))}
                 </tbody>

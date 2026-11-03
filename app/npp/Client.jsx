@@ -36,6 +36,12 @@ const encode = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).repl
 const decode = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))));
 const LIKELY = { high: 0, medium: 1, low: 2 };
 
+/** "Samsung Galaxy S27 Pro" with brand "Samsung" is shown as "Galaxy S27 Pro": the brand is printed beside it anyway. */
+const bareName = (p) => {
+  const b = String(p.brand ?? '');
+  return b && String(p.name ?? '').toLowerCase().startsWith(`${b.toLowerCase()} `) ? { ...p, name: p.name.slice(b.length + 1) } : p;
+};
+
 /** The search tool leaves "([site](url))" citation markup in its prose; keep the words, drop the markup. */
 const tidy = (v) => (typeof v === 'string'
   ? v.replace(/\s*\(\[[^\]]*\]\([^)]*\)\)/g, '').replace(/\[([^\]]*)\]\(https?:[^)]*\)/g, '$1').replace(/\s{2,}/g, ' ').trim()
@@ -94,7 +100,7 @@ export default function Client() {
   const prevOrder = useRef([]);
 
   const loadLibrary = () => fetch('/api/phones').then((r) => r.json())
-    .then((j) => { const phones = estimateFromPeers(fillFromPredecessor(tidy(j.phones ?? []))); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
+    .then((j) => { const phones = estimateFromPeers(fillFromPredecessor(tidy(j.phones ?? []).map(bareName))); setLibrary(phones); setActive(j.active ?? null); if (j.error) setError(j.error); return phones; })
     .catch((e) => { setLibrary((l) => l ?? []); setError(e.message); return []; });
 
   useEffect(() => {
@@ -306,7 +312,7 @@ export default function Client() {
         if (!pr.ok) throw new Error(plan.error || pr.status);
         const names = brandOptions.map(([b]) => b);
         nextPrefs = normalizePrefs({
-          imp: plan.importance, tr: plan.traits, order: plan.priority,
+          imp: plan.importance, tr: plan.traits, order: plan.priority, uncertain: plan.uncertain,
           duels: { brand: duelsFrom(plan.brand_duels, names), chip: duelsFrom(plan.chip_duels, ['snapdragon', 'exynos', 'apple', 'tensor', 'dimensity', 'other']) },
         });
         nextFilters = {
@@ -415,7 +421,7 @@ export default function Client() {
               {(() => {
                 const why = [
                   prefs.tr.timing <= -8 && "'지금 살 수 있는 확정 모델' 쪽으로 기울어 있어서",
-                  (prefs.imp.certainty >= 10 || prefs.order.includes('certainty')) && "'확정 정보 선호'가 켜져 있어서",
+                  prefs.uncertain !== 'ignore' && `불확실한 정보를 '${prefs.uncertain === 'strict' ? '엄격하게' : '조금'}' 반영하도록 돼 있어서`,
                   filters.onlyConfirmed && "'확실한 정보만'이 체크돼 있어서",
                   !filters.upcoming && "'출시 예정·루머 포함'이 꺼져 있어서",
                 ].filter(Boolean);
@@ -424,7 +430,7 @@ export default function Client() {
                   <p className="np-hold">
                     {why.join(', ')} 출시 전 폰(후속작)이 불리하거나 빠져 있어요.{' '}
                     <button type="button" onClick={() => {
-                      setPrefs({ ...prefs, tr: { ...prefs.tr, timing: Math.max(0, prefs.tr.timing) }, imp: { ...prefs.imp, certainty: 0 }, order: prefs.order.filter((k) => k !== 'certainty') });
+                      setPrefs({ ...prefs, tr: { ...prefs.tr, timing: Math.max(0, prefs.tr.timing) }, uncertain: 'ignore' });
                       setFilters({ ...filters, onlyConfirmed: false, upcoming: true });
                     }}>균형으로 되돌리기</button>
                   </p>
@@ -436,7 +442,7 @@ export default function Client() {
                 {topD.map((p, i) => (
                   <Tile key={p.id} p={p} rank={i + 1} move={moves[p.id]} ranks={ranks[p.id]} chips={edgeChips(ranks[p.id])}
                     watched={watched.includes(p.id)} onWatch={() => toggleWatch(p.id)} picked={compareIds.includes(p.id)} onPick={() => toggle(p.id)}
-                    onOpen={() => setOpenId(p.id)} order={prefs.order} />
+                    onOpen={() => setOpenId(p.id)} order={prefs.order} mode={prefs.uncertain} />
                 ))}
               </ol>
               {ranked.length > 5 && <p className="np-more"><button type="button" onClick={() => setTab('matrix')}>나머지 {ranked.length - 5}개는 전체 표에서 보기 →</button></p>}

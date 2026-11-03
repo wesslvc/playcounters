@@ -27,12 +27,27 @@ export const IMPORTANCE = [
   { key: 'design', label: '디자인', sub: '마감·외관' },
   { key: 'software', label: '업데이트', sub: 'OS 지원 연수' },
   { key: 'opinion', label: '평판', sub: '커뮤니티·리뷰' },
-  { key: 'certainty', label: '확정 정보 선호', sub: '루머보다 확정' },
 ];
 
 /** The brand/chip/OS/form leanings take part in the ordering as one element of their own. */
 export const BRAND_ELEMENT = { key: 'brand', label: '브랜드·칩·OS 성향', sub: '아래 대결과 종류 설정', noSlider: true };
 export const ELEMENTS = [...IMPORTANCE, BRAND_ELEMENT];
+
+/**
+ * How uncertain information counts, the reader's choice:
+ *  - ignore (default): only problems confirmed on the phone cost points; rumours, estimates and "not decided yet" cost nothing.
+ *  - some: worries carried over from the predecessor cost half, and confirmed phones get a slight edge.
+ *  - strict: carried-over worries cost in full, "not decided yet" costs half, and confirmed phones get a clear edge.
+ */
+export const UNCERTAIN_MODES = ['ignore', 'some', 'strict'];
+const CONCERN_BY_MODE = {
+  ignore: { '확인된 문제': 1, '전작에서 이어질 수 있음': 0, '아직 불확실': 0, '해소 전망': 0 },
+  some: { '확인된 문제': 1, '전작에서 이어질 수 있음': 0.5, '아직 불확실': 0, '해소 전망': 0 },
+  strict: { '확인된 문제': 1, '전작에서 이어질 수 있음': 1, '아직 불확실': 0.5, '해소 전망': 0 },
+};
+/** How much one worry costs under a mode (worries stored before kinds existed count as "may carry over"). */
+export const concernWeight = (kind, mode = 'ignore') => (CONCERN_BY_MODE[mode] ?? CONCERN_BY_MODE.ignore)[kind] ?? (CONCERN_BY_MODE[mode] ?? CONCERN_BY_MODE.ignore)['전작에서 이어질 수 있음'];
+const CERTAINTY_WEIGHT = { ignore: 0, some: 0.6, strict: 1.6 };
 
 /** Things that really are opposites. */
 export const TRAITS = [
@@ -49,6 +64,7 @@ export const DEFAULT_IMPORTANCE = {
 export const EMPTY_PREFS = {
   imp: { ...DEFAULT_IMPORTANCE },
   order: [], // elements ranked by the reader, most important first; empty = no ranking
+  uncertain: 'ignore', // how uncertain information counts: ignore · some · strict
   tr: Object.fromEntries(TRAITS.map((t) => [t.key, 0])),
   duels: { brand: [{ id: 'b0', a: 'Samsung', b: 'Apple', v: 0 }], chip: [] },
 };
@@ -61,6 +77,7 @@ export function normalizePrefs(p) {
   return {
     imp: { ...base.imp, ...(p?.imp ?? {}) },
     order: given, // the elements the reader ranked, first = most important; the rest are unranked
+    uncertain: UNCERTAIN_MODES.includes(p?.uncertain) ? p.uncertain : 'ignore',
     tr: { ...base.tr, ...(p?.tr ?? {}) },
     duels: {
       brand: Array.isArray(p?.duels?.brand) ? p.duels.brand : base.duels.brand,
@@ -144,15 +161,9 @@ export function axesOf(d) {
   return a;
 }
 
-/**
- * Points taken off for real concerns only — never for how sure the information
- * is. A problem confirmed on this phone counts in full; one its predecessor had
- * that may carry over counts half; "not decided yet" and "the leaks say it's
- * being fixed" cost nothing. (Concerns stored before kinds existed count half.)
- */
-export const CONCERN_WEIGHT = { '확인된 문제': 1, '전작에서 이어질 수 있음': 0.5, '아직 불확실': 0, '해소 전망': 0 };
-export function penaltiesOf(d) {
-  const w = (c) => CONCERN_WEIGHT[c.kind] ?? 0.5;
+/** Points taken off for worries, as the reader's uncertainty setting says (see UNCERTAIN_MODES). */
+export function penaltiesOf(d, mode = 'ignore') {
+  const w = (c) => concernWeight(c.kind, mode);
   const real = (d.concerns ?? []).filter((c) => w(c) > 0);
   const sum = (sev, each) => real.filter((c) => c.severity === sev).reduce((x, c) => x + each * w(c), 0);
   const parts = [];
@@ -190,7 +201,7 @@ export function weightsFrom(prefs) {
     display: I('display'), design: I('design'), software: I('software'), opinion: I('opinion'),
     lightness: 0.3 + 3 * L(tr.size),
     value: Math.max(0, 0.5 + 3 * L(tr.price_flagship) - 0.5 * R(tr.price_flagship)),
-    certainty: I('certainty') + 3 * L(tr.timing),
+    certainty: (CERTAINTY_WEIGHT[prefs.uncertain] ?? 0) + 3 * L(tr.timing),
     novelty: 3 * R(tr.timing),
   };
   w.display += 1.5 * R(tr.size); w.battery += 1.5 * R(tr.size);
@@ -307,7 +318,7 @@ export function fitOf(d, model) {
   const total = Object.values(weights).reduce((x, y) => x + y, 0) || 1;
   const parts = AXES.map(([k, label]) => ({ k, label, v: (at(k) * (weights[k] ?? 0)) / total, w: weights[k] ?? 0 }));
   const bonus = bonusOf(d, model);
-  const pen = penaltiesOf(d);
+  const pen = penaltiesOf(d, model.prefs?.uncertain);
   const base = parts.reduce((x, y) => x + y.v, 0);
   const why = parts.filter((x) => x.w > 0.8 && (a[x.k] ?? 0) >= 60).sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.label);
   const pulls = bonus.parts.filter((x) => x.v >= 3).map((x) => x.label);

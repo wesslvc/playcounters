@@ -1,5 +1,5 @@
 import { Bar, FAMILY, LIKELY, Move, Pic, Ring, STATUS, Sev, V, mah, when } from './parts';
-import { CONCERN_WEIGHT, won } from './score';
+import { concernWeight, won } from './score';
 
 /** Where a criterion sits in the reader's ranking; unranked ones keep their usual place after the ranked. */
 export const rankIdx = (order, k) => { const i = (order ?? []).indexOf(k); return i < 0 ? 99 : i; };
@@ -7,11 +7,11 @@ export const rankIdx = (order, k) => { const i = (order ?? []).indexOf(k); retur
 const BARS = [['performance', '성능'], ['camera', '카메라'], ['battery', '배터리'], ['display', '화면'], ['design', '디자인'], ['opinion', '여론']];
 
 /** The headline of a phone: who, how well it fits, where it leads, and the few numbers that matter. */
-export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, picked, onPick, onOpen, order }) {
+export default function Tile({ p, rank, move, ranks, chips, watched, onWatch, picked, onPick, onOpen, order, mode }) {
   const f = p.fit;
   const my = ranks ?? {};
   // only worries that count: confirmed problems and ones that may carry over, not "not decided yet" or "being fixed"
-  const concerns = (p.concerns ?? []).filter((c) => (CONCERN_WEIGHT[c.kind] ?? 0.5) > 0);
+  const concerns = (p.concerns ?? []).filter((c) => concernWeight(c.kind, mode) > 0);
   const worst = ['high', 'medium', 'low'].find((s) => concerns.some((c) => c.severity === s));
   const mood = (m) => (m ? <span className={`np-dot-mood ${m.sentiment === '긍정' ? 'pos' : m.sentiment === '부정' ? 'neg' : m.sentiment === '혼재' ? 'mix' : 'none'}`} /> : null);
   return (

@@ -604,3 +604,6 @@ span.np-bar i.lead { background: var(--a); }
 .np-risk-tags { display: grid; gap: 4px; justify-items: start; align-content: start; }
 .np-risk-tags small { font-size: 10.5px; color: var(--ink-3); }
 .np-risks li.free { opacity: .78; border-left-color: var(--hair); background: transparent; border: 1px dashed var(--line); border-left-width: 3px; }
+
+.np-seg-full { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; margin-bottom: 8px; }
+.np-seg-full button { text-align: center; }

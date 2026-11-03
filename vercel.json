@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/phones/refresh?weekly=1",
+      "schedule": "17 20 * * 0"
+    },
+    {
+      "path": "/api/phones/refresh?calibrate=1",
+      "schedule": "47 21 * * 0"
+    }
+  ]
+}

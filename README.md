@@ -137,3 +137,56 @@ Takeout 파일을 받아 넣는 것이 유일한 방법입니다.
 `spotistats` 같은 이름은 피하세요. Spotify 개발자 약관이 Spotify에서 파생된
 이름과 로고 사용을 금지하고, stats.fm의 옛 이름이기도 해서 승인 단계에서
 막히거나 나중에 도메인을 잃을 수 있습니다.
+
+---
+
+## newphoneprediction (`/npp`)
+
+같은 배포에 얹힌 최신폰 추천 페이지: `https://<배포주소>/npp`. 고르는 게 아니라 **말하면 찾아오는** 방식입니다.
+
+**흐름**
+1. 위 입력창에 원하는 걸 쓰면(`/api/phones/plan`) 우선순위·중요도·성향·브랜드 대결·한도로 바뀌고,
+   비워두면 지금 취향 설정으로 새 후보를 찾습니다.
+2. `/api/phones/search` — 브랜드마다 정찰 AI가 출시 가능성이 조금이라도 있는 폰(루머 포함)을 나열합니다.
+   **자세히 조사하는 건 사용자가 이름을 말한 폰과 ★관심 폰뿐**(한 번에 최대 3개)이고, 나머지는 후보군(stub)으로만
+   저장합니다. 조사는 폰마다 5명(유출·리뷰 영상, 커뮤니티 여론, 우려, 사양, 사진)이 동시에 하고 편집 AI가
+   `phone_dossiers`에 정리합니다. 7일 안에 조사한 폰은 다시 찾지 않습니다.
+   모든 AI 호출은 OpenAI Flex(Batch 요금, 즉시 응답)로 보내고, Flex가 받지 못하는 경우만 일반 요금으로 보냅니다
+   (`PHONES_SERVICE_TIER`; Batch API 자체는 응답이 최대 24시간 걸리고 웹검색을 받지 않는다고 보고됨).
+3. `/api/phones/calibrate` — 폰마다 따로 채점하면 폰끼리 안 맞으니, 심판 AI가 조사된 모든 폰을 한꺼번에
+   비교해(웹 검색으로 직접 비교 확인) 성능·카메라·배터리·화면·디자인 점수와 비교우위를 다시 매깁니다.
+   조사 후 자동으로 돌고, 새로 조사된 폰이 없으면 아무것도 하지 않습니다.
+4. 사진은 AI가 찾은 주소를 서버가 실제로 받아 보고 이미지일 때만 남기며, `/api/phones/img`가 대신 가져와
+   보여줍니다. 폰이 아닌 주소는 서빙하지 않습니다.
+5. 순위·적합도는 브라우저에서 바로 계산합니다. 불확실한 정보는 점수를 깎지 않고 `유력·추정` 표시만 하며,
+   모르는 항목은 조사된 폰 전체의 중앙값으로 채웁니다. 깎는 것은 실제 우려 요소뿐입니다.
+6. 자동 조사는 **주 1회**(일요일 20:17 UTC = 월요일 새벽): **★ 관심 폰만** 다시 조사하고(`/api/phones/refresh`), 1시간 반 뒤 전체 비교 채점(`?calibrate=1`). 페이지를 여는 것만으로는 AI 비용이 들지 않으며, 그 밖의 조사는 사용자가 검색하거나 "지금 다시 조사"를 누를 때만 돕니다. 조사할 때마다 조사할 때마다 스냅샷이 쌓여 점수 변동과
+   적합도 그래프가 그려집니다.
+
+비용 보호: 같은 IP 동시 1건, 전체 동시 3건, 하루 `PHONES_DAILY_JOBS`건(기본 30).
+
+**비용 조절 (환경변수, 코드 수정 없이)**
+
+| 변수 | 기본값 | 뜻 |
+|---|---|---|
+| `OPENAI_MODEL_PHONES_AGENTS` | `OPENAI_MODEL_FAST`(Luna) | 웹검색 조사원·정찰·사진·사양 담당 모델 (호출의 대부분) |
+| `OPENAI_MODEL_PHONES_HEAD` | `OPENAI_MODEL_PHONES` → `OPENAI_MODEL`(Terra) | 편집장·비교 심판 모델 |
+| `PHONES_EFFORT_AGENTS` | `low` | 조사원 생각 깊이 (low/medium/high/xhigh) |
+| `PHONES_EFFORT_EDITOR` | `low` | 편집장 생각 깊이 |
+| `PHONES_EFFORT_JUDGE` | `medium` | 비교 심판 생각 깊이 |
+| `PHONES_SEARCH_CONTEXT` | `medium` | 검색마다 읽는 양 (low/medium/high) |
+| `PHONES_TTL_HOURS` | `168` | 같은 폰을 다시 조사하지 않는 시간 (상세의 "지금 다시 조사"는 무시) |
+
+작업이 끝나면 그 작업이 쓴 호출 수와 토큰이 결과의 `usage`에 남습니다.
+
+**주인용 수동 실행** (`secret`은 `CRON_SECRET` 또는 `PHONES_REFRESH_SECRET`)
+- `/api/phones/refresh?secret=…&brands=Samsung,Apple[&force=1]` 브랜드 검색
+- `/api/phones/refresh?secret=…&models=Galaxy S27 Ultra,…&force=1` 이름 지정 조사
+- `/api/phones/refresh?secret=…&calibrate=1` 전체 비교 채점
+
+### 설정
+1. Supabase SQL Editor에서 `supabase/phones.sql` 실행
+2. Vercel 환경변수 `OPENAI_API_KEY` (선택: `OPENAI_MODEL_PHONES`, `PHONES_DAILY_JOBS`, `PHONES_REFRESH_SECRET`)
+
+> X 게시물과 유튜브 영상을 직접 긁는 것이 아니라 GPT 웹 검색이 찾을 수 있는 범위에서 모읍니다.
+> 놓치는 글이 있을 수 있고, 화면에 출처와 확정/유력/루머 표시를 함께 보여줍니다.

@@ -5,6 +5,7 @@ import Chart from './Chart';
 import Championship from './Championship';
 import Replay from './Replay';
 import Records from './Records';
+import Playlists from './Playlists';
 import Detail from './Detail';
 import RaceRadio from './RaceRadio';
 import Picker from './Picker';
@@ -16,6 +17,7 @@ const TABS = [
   ['season', '챔피언십', '/championship'],
   ['replay', '리플레이', '/replay'],
   ['records', 'Awards', '/records'],
+  ['playlists', '플리', '/playlists'],
 ];
 const SOURCES = [
   { value: 'all', label: '전체 출처' },
@@ -58,7 +60,7 @@ function Logo() {
 }
 
 /**
- * The one app: chart, championship, replay and records are four readings of
+ * The one app: chart, championship, replay, records and playlists are readings of
  * the same plays, so they share one header, one source and kind, one sync,
  * and one detail sheet — a song opened from any of them shows its counts,
  * its championship career and its records together.
@@ -228,6 +230,7 @@ export default function App({ initialTab = 'chart' }) {
         {tab === 'season' && <Championship {...shared} year={seasonYear} onYear={setSeasonYear} />}
         {tab === 'replay' && <Replay {...shared} />}
         {tab === 'records' && <Records {...shared} />}
+        {tab === 'playlists' && <Playlists {...shared} />}
       </main>
 
       <Detail target={detail} source={src} estimate={estimate && calibrated} onClose={closeDetail} />

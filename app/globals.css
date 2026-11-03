@@ -955,3 +955,44 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .pod.p1 .cover { width:88px !important; height:88px !important }
 }
 
+
+/* ---------- playlists ---------- */
+.pl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:4px }
+.pl-card { display:flex; flex-direction:column; gap:4px; min-width:0; padding:10px; border-radius:16px; background:var(--surface); border:1px solid var(--hair); text-align:left }
+.pl-card .cover { width:100% !important; height:auto !important; aspect-ratio:1; border-radius:10px; margin-bottom:6px }
+.pl-card b { font-size:14px; font-weight:700; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pl-card span { font-size:12px; color:var(--ink-3) }
+.pl-note { margin:18px 0; padding:18px; border-radius:16px; background:var(--surface); border:1px solid var(--hair) }
+.pl-note b { font-size:16px }
+.pl-note p { margin:6px 0 14px; font-size:13.5px; color:var(--ink-2) }
+.pl-back { margin:6px 0 10px; font-size:13.5px; font-weight:600; color:var(--ink-2) }
+.pl-head { display:flex; gap:16px; align-items:center; margin-bottom:18px }
+.pl-head h1 { font-size:24px; font-weight:800; letter-spacing:-.03em; line-height:1.2; word-break:keep-all }
+.pl-head p { margin:4px 0 6px; font-size:13px; color:var(--ink-3) }
+.pl-head a { font-size:13px; font-weight:600; color:var(--ink-2) }
+.pl-bar { display:flex; height:10px; border-radius:5px; overflow:hidden; gap:2px; margin:2px 0 10px }
+.pl-bar i { display:block; min-width:4px }
+[data-st="core"] { background:var(--ink) }
+[data-st="rising"] { background:var(--pos) }
+[data-st="steady"] { background:var(--ink-3) }
+[data-st="fading"] { background:var(--gold) }
+[data-st="asleep"] { background:var(--sunk-2) }
+[data-st="never"] { background:var(--neg) }
+.pl-legend { display:flex; flex-wrap:wrap; gap:6px }
+.pl-legend .chip { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px; font-size:12.5px }
+.pl-legend .chip i { width:8px; height:8px; border-radius:50% }
+.pl-sub { margin:10px 0 2px; font-size:12.5px; color:var(--ink-3) }
+.ranks .row:disabled { cursor:default; opacity:.85 }
+.pl-artists { display:flex; flex-direction:column; gap:8px; margin:4px 0 8px }
+.pl-artists li { display:grid; grid-template-columns:minmax(0,9em) minmax(0,1fr) auto; gap:10px; align-items:center }
+.pl-an { font-size:13.5px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pl-ab { height:8px; border-radius:4px; background:var(--sunk); overflow:hidden }
+.pl-ab i { display:block; height:100%; border-radius:4px; background:var(--ink) }
+.pl-av { font-size:12.5px; font-weight:650; white-space:nowrap }
+.pl-av small { font-weight:500; color:var(--ink-3) }
+@media (max-width:560px) {
+  .pl-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px }
+  .pl-head .cover { width:76px !important; height:76px !important }
+  .pl-head h1 { font-size:20px }
+  .pl-artists li { grid-template-columns:minmax(0,7em) minmax(0,1fr) auto }
+}

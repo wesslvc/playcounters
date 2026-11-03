@@ -1890,3 +1890,53 @@ create table if not exists radio_notes (
   created_at timestamptz not null default now()
 );
 alter table radio_notes enable row level security;
+
+-- ---------- a Spotify playlist against the plays ----------
+-- Each playlist entry ({artist, track}, in order) resolved to the same keys
+-- plays are stored under, with how often it has been played: in all, and in
+-- the last 30, 7 and 3 days, and when first and last.
+create or replace function playlist_plays(
+  p_user uuid,
+  p_items jsonb,
+  p_source text default 'all',
+  p_estimate boolean default false
+)
+returns table (
+  i          int,
+  artist_key text,
+  track_key  text,
+  plays      numeric,
+  plays30    numeric,
+  plays7     numeric,
+  plays3     numeric,
+  first_at   timestamptz,
+  last_at    timestamptz
+)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with q as (
+    select (e.ord - 1)::int as i,
+           resolve_artist_key(e.v->>'artist') as ak,
+           resolve_track_key(e.v->>'track', e.v->>'artist') as tk
+    from jsonb_array_elements(p_items) with ordinality as e(v, ord)
+  )
+  select q.i, q.ak, q.tk,
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '30 days'), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '7 days'), 0),
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '3 days'), 0),
+    min(p.played_at),
+    max(p.played_at)
+  from q
+  left join plays p
+    on p.user_id = p_user
+   and p.artist_key = q.ak
+   and p.track_key = q.tk
+   and (p.ms_played >= 30000 or p.source = 'youtube')
+   and (p_source = 'all'
+        or (p_source = 'youtube' and p.source = 'youtube')
+        or (p_source = 'spotify' and p.source <> 'youtube'))
+  group by q.i, q.ak, q.tk
+  order by q.i;
+$$;

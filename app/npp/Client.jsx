@@ -52,13 +52,13 @@ function brandsFrom(duels) {
   return [...out];
 }
 
-function payloadFrom(prefs, filters, models = [], reason = '') {
+function payloadFrom(prefs, filters, models = [], reason = '', watch = []) {
   const os = prefs.tr.os > 40 ? 'ios' : prefs.tr.os < -40 ? 'android' : 'any';
   const form = prefs.tr.form > 40 ? 'foldable' : prefs.tr.form < -40 ? 'bar' : 'any';
   return {
     brands: brandsFrom(prefs.duels.brand), models, os, form,
     budget_min_man: null, budget_max_man: filters.maxMan || null,
-    chip_families: [], include_upcoming: filters.upcoming, reason,
+    chip_families: [], include_upcoming: filters.upcoming, reason, watch,
   };
 }
 
@@ -286,7 +286,7 @@ export default function Client() {
     await loadLibrary();
     const r = jr.result ?? {};
     const failed = r.failed?.length ? ` · 조사 못한 폰 ${r.failed.length}개 (${r.failed.map((f) => f.name).join(', ')})` : '';
-    const cand = r.stubs ? ` · 후보군 ${r.stubs}개 추가` : '';
+    const cand = r.stubs ? ` · 새 후보 ${r.stubs}개는 후보군에 넣어뒀어요(☆ 관심을 누르거나 '지금 조사'를 눌러야 조사해요)` : '';
     setNote(`${reason ? `${reason} ` : ''}조사 완료: ${r.ids?.length ?? 0}개${cand}${failed}`);
     await calibrate();
   }
@@ -317,7 +317,7 @@ export default function Client() {
         models = plan.models; reason = plan.reason;
         setNote(reason);
       }
-      await runJob(payloadFrom(nextPrefs, nextFilters, models, reason), reason);
+      await runJob(payloadFrom(nextPrefs, nextFilters, models, reason, watched), reason);
     } catch (err) {
       setNote(/no-credits/.test(err.message) ? NO_CREDITS : `요청을 처리하지 못했어요 (${err.message}).`);
     } finally {
@@ -449,7 +449,7 @@ export default function Client() {
           {tab === 'matrix' && <MatrixView rows={ranked} ranks={ranks} ids={compareIds} toggle={toggle} onOpen={(p) => setOpenId(p.id)} />}
           {tab === 'timeline' && <TimelineView phones={[...scored, ...stubs]} onOpen={(p) => setOpenId(p.id)} />}
           {tab === 'watch' && <WatchView phones={watchedPhones} series={series} onOpen={(p) => setOpenId(p.id)} />}
-          {tab === 'cands' && <CandidatesView stubs={stubs} onResearch={researchStub} busy={busy} />}
+          {tab === 'cands' && <CandidatesView stubs={stubs} onResearch={researchStub} busy={busy} watched={watched} onWatch={toggleWatch} />}
 
           {hasData && (
             <p className="np-meta np-foot">GPT가 웹 검색으로 모은 정보를 정리한 것이라 틀릴 수 있어요. 점수는 모든 폰을 한꺼번에 놓고 서로 비교해서 매기고, 점선 밑줄과 "유력·추정" 표시는 확정이 아닌 예상치예요(정보가 불확실하다고 점수를 깎지는 않아요). 사진은 서버가 실제로 열리는 것만 보여주며, 출시 전 폰은 유출 렌더링이거나 전작 이미지일 수 있어요.</p>

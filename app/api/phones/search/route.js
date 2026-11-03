@@ -36,6 +36,8 @@ export async function POST(req) {
     chip_families: Array.isArray(p.chip_families) ? p.chip_families.filter((x) => typeof x === 'string').slice(0, 6) : [],
     include_upcoming: p.include_upcoming !== false,
     reason: String(p.reason ?? '').slice(0, 300),
+    // the reader's followed phones: the only ones (besides those named) a search researches in depth
+    watch: (Array.isArray(p.watch) ? p.watch : []).filter((x) => typeof x === 'string').slice(0, 12),
     // only for phones named outright: "research this one again now"
     force: p.force === true && Array.isArray(p.models) && p.models.length > 0 && p.models.length <= 2,
   };

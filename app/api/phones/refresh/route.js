@@ -9,7 +9,8 @@ export const maxDuration = 300;
  * Owner-only. Vercel's cron calls it weekly with `Authorization: Bearer $CRON_SECRET`
  * and it brings the followed phones up to date (and, a little later, ?calibrate=1). By hand, with
  * ?secret=<CRON_SECRET or PHONES_REFRESH_SECRET>:
- *   (nothing)            refresh followed phones
+ *   ?weekly=1              refresh followed phones (what the weekly cron calls)
+ *   (nothing)            does nothing — a stray call never spends
  *   &brands=Samsung,Apple  run a search for those brands now (seeds the library)
  *   ?models=A,B            research those named phones now
  *   &force=1               with brands: research again even if fresh
@@ -47,7 +48,13 @@ export async function GET(req) {
       await runSearch(id, plan, { force: url.searchParams.get('force') === '1' });
       return NextResponse.json({ ok: true, job: await getJob(id) });
     }
-    return NextResponse.json({ ok: true, ...(await refreshWatched()) });
+    // the weekly run must be asked for by name — a bare call does nothing, so a stray request can't spend
+    if (url.searchParams.get('weekly') === '1') {
+      const id = await createJob({ kind: 'weekly' }, ipHash('owner'));
+      await refreshWatched(id);
+      return NextResponse.json({ ok: true, job: await getJob(id) });
+    }
+    return NextResponse.json({ ok: false, error: 'say what to run: weekly=1, brands=…, models=…, specs=1, concerns=1 or calibrate=1' }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

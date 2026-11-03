@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/phones/refresh",
+      "path": "/api/phones/refresh?weekly=1",
       "schedule": "17 20 * * 0"
     },
     {

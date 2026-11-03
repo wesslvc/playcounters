@@ -331,7 +331,9 @@ const costOf = (u, [pin, pout]) => ({
   input: u?.input_tokens ?? null,
   output: u?.output_tokens ?? null,
   reasoning: u?.output_tokens_details?.reasoning_tokens ?? null,
-  usd: Math.round((((u?.input_tokens ?? 0) * pin + (u?.output_tokens ?? 0) * pout) / 1e6) * 1000) / 1000,
+  tier: u?.tier ?? null,
+  // Flex is billed at Batch rates, half the list price
+  usd: Math.round((((u?.input_tokens ?? 0) * pin + (u?.output_tokens ?? 0) * pout) / 1e6) * (u?.tier === 'flex' ? 0.5 : 1) * 1000) / 1000,
 });
 const cleanOdds = (odds, teams) => (odds ?? []).filter((o) => teams.includes(o.team)).sort((a, b) => b.pct - a.pct);
 
@@ -382,6 +384,7 @@ async function judge(key, input) {
         titleSchema(teams, { confident: { type: 'boolean' }, shifted: { type: 'boolean' } }),
         ctl.signal,
         'medium',
+        'flex',
       );
       terra = { odds: cleanOdds(t.odds, teams), reasoning: String(t.reasoning ?? '').trim(), confident: t.confident, shifted: t.shifted, date: today, model: TERRA(), usage: costOf(t.usage, PRICE.terra) };
       if (!terra.odds.length) terra = null;
@@ -401,12 +404,12 @@ async function judge(key, input) {
     let astra = astraPrev;
     if (why && calls.length < 4) {
       try {
-        const a = await ask(ASTRA(), TITLE_RULES, input, titleSchema(teams), ctl.signal, 'medium');
+        const a = await ask(ASTRA(), TITLE_RULES, input, titleSchema(teams), ctl.signal, 'medium', 'flex');
         const odds = cleanOdds(a.odds, teams);
         if (odds.length) {
           astra = { odds, reasoning: String(a.reasoning ?? '').trim(), date: today, model: ASTRA(), why, usage: costOf(a.usage, PRICE.astra) };
           calls.push(today);
-          console.log(`radio title astra · ${why} · in ${astra.usage.input} / out ${astra.usage.output} tokens · ≈$${astra.usage.usd} · ${calls.length}/4 this month`);
+          console.log(`radio title astra · ${why} · ${astra.usage.tier ?? 'standard'} · in ${astra.usage.input} / out ${astra.usage.output} tokens · ≈$${astra.usage.usd} · ${calls.length}/4 this month`);
         }
       } catch (e) {
         console.error('radio title astra failed', e.message);
@@ -417,7 +420,7 @@ async function judge(key, input) {
     const current = astra && (fresh || !terra?.shifted) ? { ...astra, by: 'astra', checked: terra ? today : null }
       : terra ? { ...terra, by: 'terra' }
         : null;
-    if (terra) console.log(`radio title terra · confident ${terra.confident} · shifted ${terra.shifted} · ≈$${terra.usage.usd}${fresh ? ' · escalated' : ''}`);
+    if (terra) console.log(`radio title terra · ${terra.usage.tier ?? 'standard'} · confident ${terra.confident} · shifted ${terra.shifted} · ≈$${terra.usage.usd}${fresh ? ' · escalated' : ''}`);
     await save({ date: today, current, terra, astra, astraCalls: [...(prev.astraCalls ?? []).filter((d) => !d.startsWith(month)), ...calls] });
     return current;
   } catch (e) {
@@ -1495,28 +1498,46 @@ const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 베테�
   + '문장마다 시작과 리듬을 바꿔 같은 패턴을 반복하지 마라. 이모지와 느낌표 남발은 금지. '
   + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.';
 
-/** One structured call to the Responses API. */
-async function ask(model, instructions, input, schema, signal, effort = 'low') {
-  const res = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model,
-      reasoning: { effort },
-      instructions,
-      input: JSON.stringify(input),
-      text: { format: { type: 'json_schema', name: 'radio', strict: true, schema } },
-    }),
-  });
-  if (!res.ok) throw new Error(`openai ${res.status}`);
-  const json = await res.json();
-  const raw = json.output_text
-    ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
-  const out = JSON.parse(raw);
-  // what the call cost, in tokens — kept off the answer itself
-  Object.defineProperty(out, 'usage', { value: json.usage ?? null });
-  return out;
+/**
+ * One structured call to the Responses API. With `tier` 'flex' it goes on
+ * OpenAI's Flex tier (Batch prices, slower answers); when Flex is out of
+ * capacity it waits and tries again, the last try on the standard tier, and
+ * when the model isn't offered on Flex it goes straight to standard.
+ */
+async function ask(model, instructions, input, schema, signal, effort = 'low', tier = null) {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model,
+        reasoning: { effort },
+        instructions,
+        input: JSON.stringify(input),
+        text: { format: { type: 'json_schema', name: 'radio', strict: true, schema } },
+        ...(tier ? { service_tier: tier } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = (await res.text()).slice(0, 400);
+      if (res.status === 400 && tier === 'flex' && /service[_ ]tier|flex/i.test(body)) { tier = null; continue; }
+      if (res.status === 429 && tier === 'flex' && !/credits|insufficient_quota|billing/i.test(body) && attempt < 2) {
+        if (attempt === 1) tier = null;
+        await wait(3000 * (attempt + 1));
+        continue;
+      }
+      throw new Error(`openai ${res.status}`);
+    }
+    const json = await res.json();
+    const raw = json.output_text
+      ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
+    const out = JSON.parse(raw);
+    // what the call cost, in tokens, and the tier it actually ran on — kept off the answer itself
+    Object.defineProperty(out, 'usage', { value: json.usage ? { ...json.usage, tier: json.service_tier ?? null } : null });
+    return out;
+  }
 }
 
 /** Every figure in a line, so a rewrite that drops or invents one can be refused. */

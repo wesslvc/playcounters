@@ -1915,7 +1915,9 @@ returns table (
 language sql stable
 set search_path = public, pg_temp
 as $$
-  with q as (
+  -- materialized: each entry's keys are resolved once, before the join —
+  -- left to the planner, the lookups ran per play and a 200-song list took 17s
+  with q as materialized (
     select (e.ord - 1)::int as i,
            resolve_artist_key(e.v->>'artist') as ak,
            resolve_track_key(e.v->>'track', e.v->>'artist') as tk

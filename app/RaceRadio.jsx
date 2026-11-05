@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCovers, coverOf } from './useCovers';
 import { Cover } from './ui';
 import { nameOf, span } from '@/lib/radio';
@@ -8,7 +8,7 @@ import { nameOf, span } from '@/lib/radio';
 /** What the viewer can narrow the feed to. */
 const GROUPS = [
   ['all', '전체'], ['lead', '선두'], ['battle', '경쟁'], ['move', '순위 변동'], ['forecast', '예상'],
-  ['milestone', '마일스톤'], ['champ', '챔피언십'], ['cx', '컨스트럭터'], ['rookie', '루키'],
+  ['milestone', '마일스톤'], ['champ', '챔피언십'], ['cx', '컨스트럭터'], ['rookie', '루키'], ['news', '소식'],
 ];
 const seenKey = (k) => `radio-seen|${k}`;
 const isTrack = (t) => Boolean(t?.track);
@@ -71,7 +71,7 @@ function RadioCard({ it, covers, onOpen }) {
         <span className="rr-odds-list">
           {it.odds.map((o, i) => (
             <span className="rr-odd" key={i}>
-              <Cover src={pic(o)} size={i ? 36 : 44} round={!isTrack(o)} />
+              <Cover src={pic(o)} size={40} round={!isTrack(o)} />
               <span className="rr-odd-body">
                 <b className="rr-name">{nameOf(o)}</b>
                 <span className="rr-bar"><i style={{ width: `${Math.max(2, o.pct)}%` }} /></span>
@@ -82,7 +82,8 @@ function RadioCard({ it, covers, onOpen }) {
                     {o.move > 0 ? '▲' : '▼'}{Math.abs(o.move)}
                   </i>
                 )}
-                {o.pct}<small>%</small>
+                {/* a simulation that never saw it win isn't a proof it can't */}
+                {o.pct < 1 ? '<1' : o.pct}<small>%</small>
               </span>
             </span>
           ))}
@@ -135,7 +136,7 @@ function RadioCard({ it, covers, onOpen }) {
               <>
                 <small>{d.label ?? (d.lead ? '선두 격차' : '격차')}</small>
                 <b>{d.gap === 0 ? '동률' : num(d.gap)}</b>
-                {d.gap !== 0 && <small>{unit} 차</small>}
+                {d.gap !== 0 && <small>{unit}</small>}
               </>
             )}
             {d.drift && <span className="rr-drift" data-drift={d.drift}>{DRIFT[d.drift]}</span>}
@@ -227,6 +228,11 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
   }, [ctxKey]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
+  // the release radar is looked up every few days; the first visit of a session asks for it when it's stale
+  useEffect(() => {
+    try { if (sessionStorage.getItem('pc-releases')) return; sessionStorage.setItem('pc-releases', '1'); } catch {}
+    fetch('/api/radio/releases').catch(() => {});
+  }, []);
   useEffect(() => { setOpen(Boolean(pin)); setToast(null); setGroup('all'); }, [ctxKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageKey = page ? JSON.stringify(page) : null;
   useEffect(() => { setPin(null); }, [pageKey]);
@@ -249,12 +255,19 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
   };
 
   useEffect(() => { setAt(0); track.current?.scrollTo({ left: 0 }); }, [group, open]);
-  // the panel is as tall as the card on show, not the tallest one
-  const [height, setHeight] = useState(null);
+  // every card in the set is as tall as the tallest, so the panel holds still while swiping
+  const fit = () => {
+    const el = track.current;
+    if (!el) return;
+    el.style.setProperty('--h', 'auto');
+    const tallest = Math.max(0, ...[...el.children].map((c) => c.firstElementChild?.offsetHeight ?? 0));
+    el.style.setProperty('--h', `${tallest}px`);
+  };
+  useLayoutEffect(fit);
   useEffect(() => {
-    const slide = track.current?.children?.[at];
-    if (slide) setHeight(slide.firstElementChild?.offsetHeight ?? null);
-  }, [at, shown, open, covers]);
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
   const onScroll = () => {
     const el = track.current;
     if (el) setAt(Math.round(el.scrollLeft / el.clientWidth));
@@ -290,7 +303,7 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
             )}
             {shown.length ? (
               <>
-                <div className="rr-track" ref={track} onScroll={onScroll} style={height ? { height } : undefined}>
+                <div className="rr-track" ref={track} onScroll={onScroll}>
                   {shown.map((it, i) => (
                     <div className="rr-slide" key={`${group}-${i}`}>
                       <RadioCard it={it} covers={covers} onOpen={openItem} />

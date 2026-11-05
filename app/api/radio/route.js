@@ -3,6 +3,8 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
+import { ask } from '@/lib/openai';
+import { loadReleases, newsEvents, artistKey, releaseAt } from '@/lib/releases';
 import {
   keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span,
   paceModel, expectIn, poisson, gauss,
@@ -220,8 +222,11 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
  * @param pace    { p3, p7, p30 } for them
  * @param base    plays that have taken P1 in recent months
  * @param credits stored credits (tracks mode), or null
+ * @param comebacks announced releases, by round: [{ artist }] — an artist_key
+ *   each. Such a round, most runs, brings that artist a batch of new songs the
+ *   size of a past comeback (tracks), or lifts the artist's month (artists).
  */
-function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, teams, runs = 2000 }) {
+function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, teams, comebacks = [], runs = 2000 }) {
   const model = paceModel(pace, { from });
   const kst = new Date(Date.now() + KST);
   const monthEnd = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 1) - KST;
@@ -243,6 +248,7 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
     return teamPool[0]?.[0];
   };
 
+  const comebackBatches = (drops ?? []).flat().filter((b) => b.returning);
   const dKeys = [...drivers.keys()];
   const tKeys = [...(teams?.keys() ?? [])];
   const dWon = new Map(dKeys.map((k) => [k, 0]));
@@ -259,6 +265,9 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
     for (let k = 0; k < rounds; k++) {
       const month = new Map();
       const now = (artist) => month.get(artist) ?? month.set(artist, swing(artist) * Math.exp(0.25 * gauss() - 0.03)).get(artist);
+      // announced comebacks land four times in five: dates slip, and some flop
+      const landed = (comebacks[k] ?? []).filter(() => Math.random() < 0.8);
+      if (!credits) for (const c of landed) month.set(c.artist, now(c.artist) * Math.exp(0.7 + 0.3 * gauss()));
       const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * now(s.artist) * Math.exp(0.3 * gauss() - 0.045)) }));
       // newcomers, the way they have actually arrived this season: one past
       // month's new entries replayed as they came, album drops and all — each
@@ -276,6 +285,15 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
         for (let n = poisson(0.7); n > 0; n--) {
           field.push({ key: `new-${k}-${n}`, team: null, plays: Math.round(base * Math.exp(0.45 * gauss() - 0.2)) });
         }
+      }
+      if (credits) {
+        landed.forEach((c, b) => {
+          const past = comebackBatches.length ? comebackBatches[Math.floor(Math.random() * comebackBatches.length)].plays : [base * 0.6];
+          const lift = Math.exp(0.3 * gauss() - 0.045);
+          past.forEach((pl, j) => {
+            field.push({ key: `cb-${k}-${b}-${j}`, team: [c.artist], plays: Math.round(pl * lift * Math.exp(0.15 * gauss())) });
+          });
+        });
       }
       field.sort((a, b) => b.plays - a.plays || Math.random() - 0.5);
       field.slice(0, 10).forEach((e, i) => {
@@ -310,6 +328,7 @@ const TITLE_RULES = '너는 음악 감상 기록으로 치르는 F1식 시즌의
   + '컨스트럭터는 곡에 크레딧된 아티스트들이 그 곡의 점수를 나눠 갖는다. '
   + '남은 라운드 동안의 흐름을 스스로 판단해서 컨스트럭터 타이틀을 누가 가져갈지 확률로 답하라. '
   + '기존 강세의 지속, 하락 조짐, 신곡·앨범의 등장 가능성 등 무엇을 어떻게 볼지는 네가 정한다. '
+  + 'announcedReleases는 웹에서 확인한 공식 발매·컴백 일정이다. 이 사람이 그 가수를 얼마나 듣는지와 과거 컴백 때의 기록을 함께 보고 무게를 정하라. '
   + 'reasoning은 한국어 두 문장 이내, 핵심 근거만.';
 const titleSchema = (teams, extra = {}) => ({
   type: 'object', additionalProperties: false, required: ['odds', 'reasoning', ...Object.keys(extra)],
@@ -453,6 +472,14 @@ async function oddsMoves(key, odds) {
   return { moves, since: days[days.length - 1].date };
 }
 
+/** The odds card's line: the story the bars tell, not the bars again. */
+function oddsLine(a, pa, b, pb) {
+  if (pa >= 0.995) return `${a}, 사실상 확정`;
+  if (pa >= 0.9 || !b) return `${a}, 굳히기에 들어간 흐름`;
+  if (pa - pb < 0.15) return `${a}·${b}, 끝까지 가는 접전`;
+  return `${a} 우세 속 ${b} 추격`;
+}
+
 /** How far through the current month we are, in Seoul. */
 function monthElapsed() {
   const kst = new Date(Date.now() + KST);
@@ -526,6 +553,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   const roundsLeft = isNow ? 12 - lastM + 1 : 0;
   const maxLeft = F1_POINTS[0] * roundsLeft;
   const group = 'champ';
+  // already out of reach on finished rounds alone: no odds, no what-ifs, just the champion
+  const decided = isNow && done.length >= 2 && done[0].pts - done[1].pts > maxLeft;
 
   // each finished round's points, by car, oldest first
   const byMonth = new Map();
@@ -580,9 +609,28 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       if (fresh.some((r) => r.place === 1)) freshWins += 1;
       for (const r of rows) seen.add(r.artist_key);
     }
+    // announced releases in the months still to come, matched to the keys plays go by
+    const rel = await loadReleases(userId).catch(() => null);
+    const keyByName = new Map();
+    for (const r of [...recent, ...(data ?? [])]) {
+      keyByName.set(artistKey(r.artist), r.artist_key);
+      if (credits) for (const c of creditList(r, credits)) keyByName.set(artistKey(c.name), c.key);
+    }
+    const comebacks = Array.from({ length: 12 - lastM }, () => []);
+    const upcoming = [];
+    for (const x of rel?.items ?? []) {
+      if (x.kind !== 'upcoming') continue;
+      const at = new Date(releaseAt(x) + KST);
+      const k = (at.getUTCFullYear() - y) * 12 + at.getUTCMonth() + 1 - lastM - 1;
+      const artist = keyByName.get(artistKey(x.artist));
+      if (!artist || k < -1 || k >= comebacks.length) continue;
+      upcoming.push({ artist: x.artist, title: x.title || null, type: x.type, date: x.date, source: x.url });
+      if (k >= 0 && !comebacks[k].some((c) => c.artist === artist)) comebacks[k].push({ artist });
+    }
+    raw.releases = upcoming;
     if (recent.length) {
       sim = songSim({
-        recent, pace, from: since, base, drops: drops.length >= 3 ? drops : null, credits, rounds: 12 - lastM,
+        recent, pace, from: since, base, drops: drops.length >= 3 ? drops : null, credits, rounds: 12 - lastM, comebacks,
         drivers: new Map(ifNow.map((c) => [keyOf(c), c.pts])), teams: teamStart,
       });
       sim.base = base;
@@ -591,7 +639,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   }
 
   // the title odds: this month as it stands, the rest played out
-  if (isNow && ifNow.length >= 2 && (sim || months.length >= 2)) {
+  if (isNow && !decided && ifNow.length >= 2 && (sim || months.length >= 2)) {
     const field = ifNow.slice(0, 10);
     const start = new Map(field.map((c) => [keyOf(c), c.pts]));
     let chances;
@@ -614,9 +662,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     const [f] = odds;
     events.push({
       kind: 'odds', group, weight: 94, title: `${y} 챔피언 가능성`,
-      text: f.p >= 0.995
-        ? `${nameOf(f.c)}, 챔피언 사실상 확정`
-        : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
+      text: oddsLine(nameOf(f.c), f.p, odds[1] && nameOf(odds[1].c), odds[1]?.p),
       detail: `이번 달 포함 ${12 - lastM + 1}라운드 남음 · 이번 달이 이대로 끝나면 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
@@ -665,7 +711,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   }
 
   // what this month does to the gap at the top
-  if (isNow && done.length >= 2 && ifNow.length >= 2) {
+  if (isNow && !decided && done.length >= 2 && ifNow.length >= 2) {
     const before = done[0].pts - done[1].pts;
     const after = ifNow[0].pts - ifNow[1].pts;
     const sameLead = keyOf(done[0]) === keyOf(ifNow[0]);
@@ -807,8 +853,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         text: now
           ? `${lastMo}월 우승 ${nameOf(champ)}, ${lastM}월은 P${now.place}`
           : `${lastMo}월 우승 ${nameOf(champ)}, ${lastM}월은 포인트권 밖`,
-        detail: now ? `${pointsForRank(now.place)}pt 페이스` : '이대로면 0pt',
-        stat: { value: now ? `P${now.place}` : '–' }, targets: [targetOf(champ)],
+        detail: now ? `${pointsForRank(now.place)}pt 페이스` : '이대로 끝나면 이번 라운드 무득점',
+        stat: now ? { value: `P${now.place}` } : { value: '0', unit: 'pt' }, targets: [targetOf(champ)],
       });
     }
   }
@@ -854,7 +900,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         targets: [targetOf(a), targetOf(b)],
       });
     }
-    if (isNow && cNow.length >= 2 && months.length >= 2) {
+    const cDecided = isNow && cDone.length >= 2 && cDone[0].pts - cDone[1].pts > cMaxLeft;
+    if (isNow && !cDecided && cNow.length >= 2 && months.length >= 2) {
       const field = cNow.slice(0, 8);
       const cMonths = doneMos.map((mo) => new Map(teams(doneRows.filter((r) => r.mo === mo)).map((c) => [c.artist_key, c.pts])));
       let chances;
@@ -897,6 +944,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
             last30d: Math.round((raw.pace.p30.get(keyOf(r)) ?? 0) * 30),
             firstPlayed: raw.debut.get(keyOf(r)) ? day(raw.debut.get(keyOf(r))) : null,
           })),
+          // what's been officially announced for the rest of the year, from a web search
+          announcedReleases: raw.releases ?? [],
         };
         // v2: the rounds left now count the month under way (v1 told Astra one round was left in November)
         astra = await judgeTitle(`cx-title-v2|${userId}|${y}|${src}|${estimate}`, input);
@@ -914,7 +963,8 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       const biggest = [...moves].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
       events.push({
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
-        text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}${biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''}`,
+        text: oddsLine(odds[0].c.artist, odds[0].p, odds[1]?.c.artist, odds[1]?.p)
+          + (biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''),
         detail: (astra
           ? `${astra.reasoning} ${Number(astra.date.slice(5, 7))}월 ${Number(astra.date.slice(8))}일 기준`
           : `이번 달 포함 ${12 - lastM + 1}라운드 남음${sim?.history ? ` · ${sim.history}` : ''}`)
@@ -926,7 +976,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       });
     }
     // swap at the top if this month ended now
-    if (isNow && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {
+    if (isNow && !cDecided && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {
       events.push({
         kind: 'cx-swing', group: cx, weight: 82, title: `${lastM}월 GP 반영 시`,
         text: `${cNow[0].artist}, 이번 달 결과대로면 컨스트럭터 선두 탈환`,
@@ -1327,7 +1377,7 @@ async function gpEvents(userId, { year, month, mode, src, estimate }) {
         kind: 'gp-pole', group: 'move', weight: 52, title: `${gp} · 폴 포지션`,
         text: `첫날 선두 ${nameOf(pole.row)}, 최종 ${p ? `P${p}` : '포인트권 밖'}`,
         detail: pole.from === pole.to ? `${pole.from}일 선두` : `${pole.from}~${pole.to}일 선두`,
-        stat: { value: p ? `P${p}` : '–' }, targets: [targetOf(pole.row)],
+        stat: p ? { value: `P${p}` } : { value: 'P10', unit: '밖' }, targets: [targetOf(pole.row)],
       });
     }
   }
@@ -1351,7 +1401,7 @@ async function gpEvents(userId, { year, month, mode, src, estimate }) {
       kind: 'gp-fade', group: 'forecast', weight: 60, title: `${gp} · 후반 페이스 하락`,
       text: `${nameOf(down.r)}, 15일 기준 P${down.was}에서 최종 ${down.pos > 30 ? '30위 밖' : `P${down.pos}`}`,
       detail: '후반 보름 동안 밀려남',
-      stat: { value: down.pos > 30 ? '–' : `P${down.pos}` }, targets: [targetOf(down.r)],
+      stat: down.pos > 30 ? { value: 'P30', unit: '밖' } : { value: `P${down.pos}` }, targets: [targetOf(down.r)],
     });
   }
 
@@ -1484,128 +1534,7 @@ async function milestoneContext(userId, { src, estimate }) {
   ];
 }
 
-// Terra has the better voice and the better head: it takes the lines that have
-// to weigh several things at once — odds, projections, how long a lead lasts, a
-// race's whole story. Luna, quicker and cheaper, takes
-// the plain facts: a climb, a milestone, a record.
 const TERRA = () => process.env.OPENAI_MODEL || 'gpt-6.1-terra';
-const LUNA = () => process.env.OPENAI_MODEL_FAST || 'gpt-6-luna';
-const CASTER = '너는 음악 재생 순위를 F1 중계처럼 전하는 베테랑 캐스터다. '
-  + '숫자·순위·이름은 주어진 그대로 쓰고 새로운 사실을 지어내지 마라. '
-  + '생생하고 맛깔나게: 추격, 방어, 언더컷, 슬립스트림, 체커기, 피트월 같은 레이싱 표현을 상황에 맞게 섞고, '
-  + '문장마다 시작과 리듬을 바꿔 같은 패턴을 반복하지 마라. 이모지와 느낌표 남발은 금지. '
-  + 'context에 다시보기라고 되어 있으면 이미 끝난 레이스의 하이라이트를 돌아보듯 과거형으로.';
-
-/**
- * One structured call to the Responses API. With `tier` 'flex' it goes on
- * OpenAI's Flex tier (Batch prices, slower answers); when Flex is out of
- * capacity it waits and tries again, the last try on the standard tier, and
- * when the model isn't offered on Flex it goes straight to standard.
- */
-async function ask(model, instructions, input, schema, signal, effort = 'low', tier = null) {
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  for (let attempt = 0; ; attempt += 1) {
-    const res = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model,
-        reasoning: { effort },
-        instructions,
-        input: JSON.stringify(input),
-        text: { format: { type: 'json_schema', name: 'radio', strict: true, schema } },
-        ...(tier ? { service_tier: tier } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const body = (await res.text()).slice(0, 400);
-      if (res.status === 400 && tier === 'flex' && /service[_ ]tier|flex/i.test(body)) { tier = null; continue; }
-      if (res.status === 429 && tier === 'flex' && !/credits|insufficient_quota|billing/i.test(body) && attempt < 2) {
-        if (attempt === 1) tier = null;
-        await wait(3000 * (attempt + 1));
-        continue;
-      }
-      throw new Error(`openai ${res.status}`);
-    }
-    const json = await res.json();
-    const raw = json.output_text
-      ?? (json.output ?? []).flatMap((o) => o.content ?? []).find((c) => c.type === 'output_text')?.text;
-    const out = JSON.parse(raw);
-    // what the call cost, in tokens, and the tier it actually ran on — kept off the answer itself
-    Object.defineProperty(out, 'usage', { value: json.usage ? { ...json.usage, tier: json.service_tier ?? null } : null });
-    return out;
-  }
-}
-
-/** Every figure in a line, so a rewrite that drops or invents one can be refused. */
-const figures = (t) => (String(t).match(/\d+(?:[.,]\d+)*/g) ?? []).map((x) => x.replace(/,/g, '')).sort().join('|');
-
-const LINES = {
-  type: 'object', additionalProperties: false, required: ['items'],
-  properties: {
-    items: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false, required: ['id', 'text'],
-        properties: { id: { type: 'integer' }, text: { type: 'string' } },
-      },
-    },
-  },
-};
-/** Lines that weigh several things at once — odds, projections, a lead's lifetime, a race's story. */
-const COMPLEX = new Set([
-  'odds', 'win-odds', 'cx-odds', 'hold', 'career-hold', 'lead', 'eta', 'champion', 'locked', 'swing', 'cx-swing',
-  'cx-lead', 'streak-on', 'first-win', 'chase', 'gp-win', 'gp-changes', 'gp-late', 'gp-standings', 'gp-tally',
-]);
-const complex = (e) => COMPLEX.has(e.kind) || Boolean(e.odds || e.duel?.eta != null || e.duel?.after != null);
-const split = (list, n) => {
-  const out = [];
-  for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n));
-  return out;
-};
-
-/**
- * Rewords the lines as race radio — several casters at once, a few lines
- * each, so a long feed comes back as fast as a short one. A rewrite whose figures
- * don't match the original's is thrown away; any failure leaves the plain
- * lines in place.
- */
-async function polish(events, context) {
-  if (!process.env.OPENAI_API_KEY || !events.length) return { items: events };
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 12000);
-  const tagged = events.map((e, id) => ({ id, e }));
-  const heavy = tagged.filter(({ e }) => complex(e));
-  const light = tagged.filter(({ e }) => !complex(e));
-  const chunks = [
-    ...split(heavy, 3).map((items) => ({ model: TERRA(), items })),
-    ...split(light, 5).map((items) => ({ model: LUNA(), items })),
-  ];
-  try {
-    const parts = await Promise.all(chunks.map((chunk) => ask(
-      chunk.model,
-      `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
-      { context, items: chunk.items.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
-      LINES, ctl.signal,
-    ).catch(() => ({ items: [] }))));
-    const lines = new Map(parts.flatMap((p) => p.items ?? []).map((x) => [x.id, x.text?.trim()]));
-    let kept = 0;
-    const items = events.map((e, i) => {
-      const t = lines.get(i);
-      if (!t || figures(t) !== figures(e.text)) return e;
-      kept += 1;
-      return { ...e, text: t, ai: true };
-    });
-    console.log(`radio polish ok · ${kept}/${events.length} · terra ${heavy.length} / luna ${light.length} lines · ${chunks.length} casters`);
-    return { items };
-  } catch (e) {
-    console.error('radio polish failed', e.message);
-    return { items: events };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /**
  * GET /api/radio?view=chart|season|replay|records&...
@@ -1622,7 +1551,6 @@ export async function GET(req) {
   const mode = q.get('mode') === 'artists' ? 'artists' : 'tracks';
   const src = ['spotify', 'youtube'].includes(q.get('source')) ? q.get('source') : 'all';
   const estimate = q.get('estimate') === '1';
-  const label = q.get('label') || '';
 
   const ck = `${userId}|${q.toString()}`;
   const hit = cache.get(ck);
@@ -1644,11 +1572,18 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const { items: top } = await polish(
-      pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12),
-      `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`,
-    );
-    const body = { items: top.map(({ weight, ai, ...e }) => e), at: new Date().toISOString() };
+    // what the artists on screen (and the rest of the most-played) have put out or announced
+    // — on the live views only, and never more than three, so the race stays the story
+    const thisYear = new Date(Date.now() + KST).getUTCFullYear();
+    const live = view === 'chart' || (view === 'season' && q.get('all') !== '1' && (!Number(q.get('year')) || Number(q.get('year')) === thisYear));
+    if (live) {
+      const onScreen = new Set(events.flatMap((e) => (e.targets ?? []).map((t) => artistKey(t.artist))));
+      const news = newsEvents(await loadReleases(userId).catch(() => null), onScreen).sort((a, b) => b.weight - a.weight);
+      events.push(...news.slice(0, 3));
+    }
+    // no more than two of a kind, so one story doesn't fill the feed
+    const top = pick(events, view === 'season' ? 20 : view === 'gp' ? 16 : 12, 2);
+    const body = { items: top.map(({ weight, ...e }) => e), at: new Date().toISOString() };
     cache.set(ck, { at: Date.now(), body });
     if (cache.size > 200) cache.delete(cache.keys().next().value);
     return NextResponse.json(body);

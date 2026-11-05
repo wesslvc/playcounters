@@ -536,23 +536,27 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar, all time: the picture catches a band of foil, like
-   a holo trading card, wherever it appears and with nothing said. Ice-blue
-   ('sky') for an artist past 1,500 plays or a song past 300; garnet ('ruby')
-   past 2,000 or 500. `.ring` marks a row or card, `.gem` a picture alone. */
+/* gone far past the bar, all time: a small cut gem pinned to the picture's
+   corner, and a thin rim of the same tone around it. Steel blue ('sky') for an
+   artist past 1,500 plays or a song past 300; garnet ('ruby') past 2,000 or
+   500. `.ring` marks a row or card, `.gem` a picture alone. */
+:root { --t-sky:#4F7FB8; --t-ruby:#A8424F }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --t-sky:#7FA6D6; --t-ruby:#D06A76 } }
+:root[data-theme="dark"] { --t-sky:#7FA6D6; --t-ruby:#D06A76 }
+.ring .cover, .cover.gem { --tier:var(--t-sky); --b:clamp(13px, 28%, 22px) }
+.ring.ruby .cover, .cover.gem.ruby { --tier:var(--t-ruby) }
+.ring .cover::after, .cover.gem::after { box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--tier) 60%, transparent) }
 .ring .cover::before, .cover.gem::before {
-  /* three gloss strokes across the bottom-right corner, edge to edge, sized
-     to the picture: a white core over a dark shadow, so they show on any
-     sleeve, in a halo of the tier's colour */
-  content:''; position:absolute; right:0; bottom:0; z-index:1; pointer-events:none;
-  width:clamp(20px, 44%, 72px); aspect-ratio:1;
-  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cdefs%3E%3Cfilter id='g' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.85'/%3E%3C/filter%3E%3Cfilter id='w' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.35'/%3E%3C/filter%3E%3Cfilter id='s' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.6'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M3.5 21 L21 3.5' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M8 21 L21 8' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M8 21 L21 8' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M8 21 L21 8' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M8 21 L21 8' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%23fff' stroke-width='1.25'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  content:''; position:absolute; z-index:1; pointer-events:none;
+  width:var(--b); height:var(--b); right:max(3px, 5%); bottom:max(3px, 5%); border-radius:50%;
+  background:var(--tier) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7.5 5.5h9l4 4.6L12 19.5 3.5 10.1z' fill='%23fff'/%3E%3Cpath d='M3.5 10.1h17M9.6 10.1 12 5.5l2.4 4.6M9.6 10.1 12 19.5l2.4-9.4' fill='none' stroke='rgba(0,0,0,.26)' stroke-width='1' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 72%;
+  box-shadow:0 0 0 1.5px var(--surface), 0 2px 6px rgba(0,0,0,.25);
 }
-.ring.ruby .cover::before, .cover.gem.ruby::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cdefs%3E%3Cfilter id='g' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.85'/%3E%3C/filter%3E%3Cfilter id='w' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.35'/%3E%3C/filter%3E%3Cfilter id='s' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.6'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M3.5 21 L21 3.5' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M3.5 21 L21 3.5' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M8 21 L21 8' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M8 21 L21 8' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M8 21 L21 8' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M8 21 L21 8' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M12.3 21 L21 12.3' stroke='%23fff' stroke-width='1.25'/%3E%3C/svg%3E") }
-/* a circle has no corner: the strokes start nearer its middle and run on
-   until its edge cuts them, shortening towards the rim */
-.ring .cover.round::before, .cover.gem.round::before { width:50%; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cdefs%3E%3Cfilter id='g' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.85'/%3E%3C/filter%3E%3Cfilter id='w' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.35'/%3E%3C/filter%3E%3Cfilter id='s' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.6'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M1 21 L21 1' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M1 21 L21 1' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M1 21 L21 1' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M1 21 L21 1' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M4 21 L21 4' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M4 21 L21 4' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M4 21 L21 4' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M4 21 L21 4' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M7 21 L21 7' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M7 21 L21 7' stroke='%235EB4FF' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M7 21 L21 7' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M7 21 L21 7' stroke='%23fff' stroke-width='1.25'/%3E%3C/svg%3E") }
-.ring.ruby .cover.round::before, .cover.gem.ruby.round::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cdefs%3E%3Cfilter id='g' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.85'/%3E%3C/filter%3E%3Cfilter id='w' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.35'/%3E%3C/filter%3E%3Cfilter id='s' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeGaussianBlur stdDeviation='.6'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M1 21 L21 1' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M1 21 L21 1' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M1 21 L21 1' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M1 21 L21 1' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M4 21 L21 4' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M4 21 L21 4' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M4 21 L21 4' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M4 21 L21 4' stroke='%23fff' stroke-width='1.25'/%3E%3Cpath d='M7 21 L21 7' stroke='rgba(0%2C0%2C0%2C.45)' stroke-width='2.8' filter='url(%23s)'/%3E%3Cpath d='M7 21 L21 7' stroke='%23E8102C' stroke-width='3.2' filter='url(%23g)'/%3E%3Cpath d='M7 21 L21 7' stroke='%23fff' stroke-width='1.9' stroke-opacity='.6' filter='url(%23w)'/%3E%3Cpath d='M7 21 L21 7' stroke='%23fff' stroke-width='1.25'/%3E%3C/svg%3E") }
+/* a circle has no corner: the gem sits on its rim at the lower right, just inside */
+.ring .cover.round::before, .cover.gem.round::before {
+  right:calc(50% - (50% - var(--b) / 2 - 2px) * .7071 - var(--b) / 2);
+  bottom:calc(50% - (50% - var(--b) / 2 - 2px) * .7071 - var(--b) / 2);
+}
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }
@@ -837,7 +841,8 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); text-align:left; animation:rr-up .25s ease-out;
 }
 .rr-peek-body { display:flex; flex-direction:column; min-width:0 }
-.rr-peek-text { font-size:13.5px; font-weight:600; letter-spacing:-.01em; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.rr-peek-text { font-size:13.5px; font-weight:600; line-height:1.4; letter-spacing:-.01em; color:var(--ink); word-break:keep-all; overflow-wrap:anywhere;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden }
 /* the feed: a panel at the foot of the screen, one card at a time */
 .rr-dock { position:fixed; z-index:46; left:50%; transform:translateX(-50%);
   bottom:calc(max(16px, env(safe-area-inset-bottom)) + 48px); width:min(520px, calc(100vw - 24px)); animation:rr-in .25s ease-out }
@@ -845,20 +850,21 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-top { display:flex; align-items:baseline; gap:8px; padding:0 2px 12px }
 .rr-top b { font-size:16px; font-weight:750; letter-spacing:-.02em }
 .rr-top span { font-size:13px; color:var(--ink-3) }
-.rr-groups { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin:0 -16px 12px; padding:0 16px }
+.rr-groups { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin:0 -16px 12px; padding:0 16px;
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent); mask-image:linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent) }
 .rr-groups::-webkit-scrollbar { display:none }
 .rr-groups .chip { height:30px; padding:0 11px; font-size:12.5px }
-.rr-track { display:flex; align-items:flex-start; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scrollbar-width:none; transition:height .2s ease }
+.rr-track { display:flex; align-items:flex-start; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scrollbar-width:none }
 .rr-track::-webkit-scrollbar { display:none }
 .rr-slide { flex:0 0 100%; display:flex; scroll-snap-align:center; scroll-snap-stop:always }
-.rr-card { width:100%; padding:16px; border-radius:16px; background:var(--surface); border:1px solid var(--hair); text-align:left }
+.rr-card { width:100%; min-height:var(--h, auto); padding:16px; border-radius:16px; background:var(--surface); border:1px solid var(--hair); text-align:left }
 .rr-card:disabled { cursor:default }
 .rr-tag { font-size:12px; font-weight:600; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .rr-text { font-size:15px; font-weight:650; line-height:1.45; letter-spacing:-.015em; color:var(--ink); word-break:keep-all; overflow-wrap:anywhere }
 .rr-detail { font-size:12.5px; line-height:1.5; color:var(--ink-2); word-break:keep-all; overflow-wrap:anywhere }
 
 /* a fight: the higher place left, the pass (or the gap) between */
-.rr-duel { display:flex; flex-direction:column; gap:14px }
+.rr-duel { display:flex; flex-direction:column; justify-content:center; gap:14px }
 .rr-vs { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:start; gap:12px }
 .rr-side { display:flex; flex-direction:column; gap:2px; min-width:0 }
 .rr-side.r { align-items:flex-end; text-align:right }
@@ -886,7 +892,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-mid .rr-after { margin-top:2px }
 
 /* the title odds: a bar each */
-.rr-odds { display:flex; flex-direction:column; gap:14px }
+.rr-odds { display:flex; flex-direction:column; justify-content:center; gap:14px }
 .rr-odds-list { display:flex; flex-direction:column; gap:10px }
 .rr-odd { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12px }
 .rr-odd-body { display:flex; flex-direction:column; min-width:0 }

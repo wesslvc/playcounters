@@ -7,6 +7,10 @@
     {
       "path": "/api/phones/refresh?calibrate=1",
       "schedule": "47 21 * * 0"
+    },
+    {
+      "path": "/api/radio/releases",
+      "schedule": "23 18 */3 * *"
     }
   ]
 }

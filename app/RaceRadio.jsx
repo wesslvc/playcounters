@@ -8,7 +8,7 @@ import { nameOf, span } from '@/lib/radio';
 /** What the viewer can narrow the feed to. */
 const GROUPS = [
   ['all', '전체'], ['lead', '선두'], ['battle', '경쟁'], ['move', '순위 변동'], ['forecast', '예상'],
-  ['milestone', '마일스톤'], ['champ', '챔피언십'], ['cx', '컨스트럭터'], ['rookie', '루키'], ['news', '소식'],
+  ['milestone', '마일스톤'], ['champ', '챔피언십'], ['cx', '컨스트럭터'], ['rookie', '루키'],
 ];
 const seenKey = (k) => `radio-seen|${k}`;
 const isTrack = (t) => Boolean(t?.track);
@@ -228,11 +228,6 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
   }, [ctxKey]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
-  // the release radar is looked up every few days; the first visit of a session asks for it when it's stale
-  useEffect(() => {
-    try { if (sessionStorage.getItem('pc-releases')) return; sessionStorage.setItem('pc-releases', '1'); } catch {}
-    fetch('/api/radio/releases').catch(() => {});
-  }, []);
   useEffect(() => { setOpen(Boolean(pin)); setToast(null); setGroup('all'); }, [ctxKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageKey = page ? JSON.stringify(page) : null;
   useEffect(() => { setPin(null); }, [pageKey]);

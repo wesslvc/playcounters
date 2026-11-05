@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { AWARD_GROUPS, gpRecords, formatValue } from '@/lib/awards';
 import { artistLine, useCredits } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
-import { useElite } from './useElite';
 import { loadCareer, loadRecords } from './data';
 import { Cover, Stat, dayLabel } from './ui';
 
@@ -89,7 +88,7 @@ function SongShare({ artistKey, source, estimate }) {
  * lists everyone who got there, each with their picture and the minute they
  * entered.
  */
-function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
+function Award({ def, list, covers, onSelect, club, source, estimate }) {
   const [first, ...rest] = list ?? [];
   const mode = (h) => (h.track ? 'tracks' : 'artists');
   // A split record's figure opens the holder's breakdown instead of the sheet.
@@ -117,7 +116,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
       {first ? (
         <>
           <div className={def.split ? 'award-split' : undefined}>
-            <button className={`award-holder${elite(first) ? ` ring ${elite(first)}` : ''}`} onClick={() => onSelect(target(first))}>
+            <button className="award-holder" onClick={() => onSelect(target(first))}>
               <Cover src={coverOf(covers[mode(first)], mode(first), first)} size={60} round={!first.track} />
               <span className="award-nm">
                 <b>{first.track ?? first.artist}</b>
@@ -137,7 +136,7 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
             <ol className="award-rest">
               {shownRest.map((h, i) => (
                 <li key={i} className={def.split ? 'rest-split' : undefined}>
-                  <button className={elite(h) ? `ring ${elite(h)}` : undefined} onClick={() => onSelect(target(h))}>
+                  <button onClick={() => onSelect(target(h))}>
                     <span className="award-place">{i + 2}</span>
                     {club && <Cover src={coverOf(covers.artists, 'artists', h)} size={34} round />}
                     <span className="award-rest-nm">
@@ -169,17 +168,16 @@ function Award({ def, list, covers, onSelect, club, source, estimate, elite }) {
 /**
  * A club in the app's own plain vocabulary: its newest member in the card a
  * Replay quarter uses for its song, then every member in the order they got
- * in, as rows of the ranking list. `ring` marks the members who've gone far
- * past the bar, whose pictures then catch a band of foil, and nothing else.
+ * in, as rows of the ranking list.
  */
-function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead, ring, fresh }) {
+function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead, fresh }) {
   const latest = members[members.length - 1];
   const name = (h) => (mode === 'tracks' ? h.track : h.artist);
   const pic = (h) => coverOf(covers[mode], mode, h);
   const round = mode === 'artists';
   return (
     <div className="club">
-      <button className={`replay-no1 club-lead${ring(latest) ? ` ring ${ring(latest)}` : ''}`} onClick={() => onSelect(target(latest))}>
+      <button className="replay-no1 club-lead" onClick={() => onSelect(target(latest))}>
         <Cover src={pic(latest)} size={168} round={round} />
         <span>
           <em>{kicker}</em>
@@ -192,7 +190,7 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
       <ol className="ranks club-ranks">
         {members.map((h, i) => (
           <li key={`${h.artist_key}\u0000${h.track_key ?? ''}`}>
-            <button className={`row${ring(h) ? ` ring ${ring(h)}` : ''}`} onClick={() => onSelect(target(h))}>
+            <button className="row" onClick={() => onSelect(target(h))}>
               <span className="rk">{i + 1}</span>
               <Cover src={pic(h)} size={44} round={round} />
               <span className="nm">
@@ -217,7 +215,7 @@ const shortDay = (d) => {
 };
 
 /** The 1000 Club: every artist past a thousand plays, by when they got there. */
-function ClubBanner({ def, list, covers, onSelect, elite }) {
+function ClubBanner({ def, list, covers, onSelect }) {
   if (!list?.length) return null;
   const members = [...list].sort((a, b) => String(a.reached_at).localeCompare(String(b.reached_at)));
   const took = (h) => { const v = formatValue(def, h.value); return `${v.v}${v.unit} 만에`; };
@@ -227,13 +225,12 @@ function ClubBanner({ def, list, covers, onSelect, elite }) {
           when={(h) => `${dayLabel(h.reached_at)} ${String(h.reached_at).slice(11, 16)}`}
           lead={(h) => `${took(h)}${h.plays != null ? ` · 총 ${Number(h.plays).toLocaleString()}회` : ''}`}
           sub={took}
-          short={(h) => reachedShort(h.reached_at)}
-          ring={elite} />
+          short={(h) => reachedShort(h.reached_at)} />
   );
 }
 
 /** The 100 Club: every song past a hundred plays, by the day it got there. */
-function ClubRoster({ def, list, covers, onSelect, elite }) {
+function ClubRoster({ def, list, covers, onSelect }) {
   if (!list?.length) return <p className="award-none">아직 100회를 넘긴 곡이 없습니다.</p>;
   // the same day goes by who got there faster
   const members = [...list].sort((a, b) => String(a.to).localeCompare(String(b.to)) || a.value - b.value);
@@ -245,7 +242,6 @@ function ClubRoster({ def, list, covers, onSelect, elite }) {
           lead={took}
           sub={(h) => `${artistLine(h)} · ${took(h)}`}
           short={(h) => shortDay(h.to)}
-          ring={elite}
           fresh={(h) => Date.now() - new Date(String(h.to).slice(0, 10)).getTime() < 30 * 864e5} />
   );
 }
@@ -260,7 +256,6 @@ function ClubRoster({ def, list, covers, onSelect, elite }) {
 export default function Records({ source, estimate, version, onSelect, onContext }) {
   // one group at a time, the 1000 Club first, rather than one long scroll
   const [group, setGroup] = useState(AWARD_GROUPS[0].key);
-  const elite = useElite(source, estimate);
   useEffect(() => { onContext?.({ view: 'records', label: 'Awards' }); }, [onContext]);
   const [plays, setPlays] = useState(null);
   const [career, setCareer] = useState(null);
@@ -314,15 +309,15 @@ export default function Records({ source, estimate, version, onSelect, onContext
       {AWARD_GROUPS.filter((g) => g.key === group).map((g) => (
         <div key={g.key} className="award-group">
           {g.items.filter((def) => def.banner).map((def) => (
-            <ClubBanner key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} elite={elite} />
+            <ClubBanner key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
           ))}
           {g.items.filter((def) => def.roster).map((def) => (
-            <ClubRoster key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} elite={elite} />
+            <ClubRoster key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect} />
           ))}
           <div className="awards">
             {g.items.filter((def) => !def.banner && !def.roster).map((def) => (
               <Award key={def.key} def={def} list={records[def.key]} covers={covers} onSelect={onSelect}
-                     club={g.key === 'club'} source={source} estimate={estimate} elite={elite} />
+                     club={g.key === 'club'} source={source} estimate={estimate} />
             ))}
           </div>
         </div>

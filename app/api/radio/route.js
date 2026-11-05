@@ -4,7 +4,6 @@ import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
 import { ask } from '@/lib/openai';
-import { loadReleases, newsEvents, artistKey, releaseAt } from '@/lib/releases';
 import {
   keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span,
   paceModel, expectIn, poisson, gauss,
@@ -222,11 +221,8 @@ function titleOdds(start, months, live, rounds, keys, elapsed, runs = 4000) {
  * @param pace    { p3, p7, p30 } for them
  * @param base    plays that have taken P1 in recent months
  * @param credits stored credits (tracks mode), or null
- * @param comebacks announced releases, by round: [{ artist }] — an artist_key
- *   each. Such a round, most runs, brings that artist a batch of new songs the
- *   size of a past comeback (tracks), or lifts the artist's month (artists).
  */
-function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, teams, comebacks = [], runs = 2000 }) {
+function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, teams, runs = 2000 }) {
   const model = paceModel(pace, { from });
   const kst = new Date(Date.now() + KST);
   const monthEnd = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 1) - KST;
@@ -248,7 +244,6 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
     return teamPool[0]?.[0];
   };
 
-  const comebackBatches = (drops ?? []).flat().filter((b) => b.returning);
   const dKeys = [...drivers.keys()];
   const tKeys = [...(teams?.keys() ?? [])];
   const dWon = new Map(dKeys.map((k) => [k, 0]));
@@ -265,9 +260,6 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
     for (let k = 0; k < rounds; k++) {
       const month = new Map();
       const now = (artist) => month.get(artist) ?? month.set(artist, swing(artist) * Math.exp(0.25 * gauss() - 0.03)).get(artist);
-      // announced comebacks land four times in five: dates slip, and some flop
-      const landed = (comebacks[k] ?? []).filter(() => Math.random() < 0.8);
-      if (!credits) for (const c of landed) month.set(c.artist, now(c.artist) * Math.exp(0.7 + 0.3 * gauss()));
       const field = songs.map((s) => ({ key: s.key, team: s.team, plays: poisson(s.exp[k] * now(s.artist) * Math.exp(0.3 * gauss() - 0.045)) }));
       // newcomers, the way they have actually arrived this season: one past
       // month's new entries replayed as they came, album drops and all — each
@@ -285,15 +277,6 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
         for (let n = poisson(0.7); n > 0; n--) {
           field.push({ key: `new-${k}-${n}`, team: null, plays: Math.round(base * Math.exp(0.45 * gauss() - 0.2)) });
         }
-      }
-      if (credits) {
-        landed.forEach((c, b) => {
-          const past = comebackBatches.length ? comebackBatches[Math.floor(Math.random() * comebackBatches.length)].plays : [base * 0.6];
-          const lift = Math.exp(0.3 * gauss() - 0.045);
-          past.forEach((pl, j) => {
-            field.push({ key: `cb-${k}-${b}-${j}`, team: [c.artist], plays: Math.round(pl * lift * Math.exp(0.15 * gauss())) });
-          });
-        });
       }
       field.sort((a, b) => b.plays - a.plays || Math.random() - 0.5);
       field.slice(0, 10).forEach((e, i) => {
@@ -328,7 +311,6 @@ const TITLE_RULES = '너는 음악 감상 기록으로 치르는 F1식 시즌의
   + '컨스트럭터는 곡에 크레딧된 아티스트들이 그 곡의 점수를 나눠 갖는다. '
   + '남은 라운드 동안의 흐름을 스스로 판단해서 컨스트럭터 타이틀을 누가 가져갈지 확률로 답하라. '
   + '기존 강세의 지속, 하락 조짐, 신곡·앨범의 등장 가능성 등 무엇을 어떻게 볼지는 네가 정한다. '
-  + 'announcedReleases는 웹에서 확인한 공식 발매·컴백 일정이다. 이 사람이 그 가수를 얼마나 듣는지와 과거 컴백 때의 기록을 함께 보고 무게를 정하라. '
   + 'reasoning은 한국어 두 문장 이내, 핵심 근거만.';
 const titleSchema = (teams, extra = {}) => ({
   type: 'object', additionalProperties: false, required: ['odds', 'reasoning', ...Object.keys(extra)],
@@ -609,28 +591,9 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       if (fresh.some((r) => r.place === 1)) freshWins += 1;
       for (const r of rows) seen.add(r.artist_key);
     }
-    // announced releases in the months still to come, matched to the keys plays go by
-    const rel = await loadReleases(userId).catch(() => null);
-    const keyByName = new Map();
-    for (const r of [...recent, ...(data ?? [])]) {
-      keyByName.set(artistKey(r.artist), r.artist_key);
-      if (credits) for (const c of creditList(r, credits)) keyByName.set(artistKey(c.name), c.key);
-    }
-    const comebacks = Array.from({ length: 12 - lastM }, () => []);
-    const upcoming = [];
-    for (const x of rel?.items ?? []) {
-      if (x.kind !== 'upcoming') continue;
-      const at = new Date(releaseAt(x) + KST);
-      const k = (at.getUTCFullYear() - y) * 12 + at.getUTCMonth() + 1 - lastM - 1;
-      const artist = keyByName.get(artistKey(x.artist));
-      if (!artist || k < -1 || k >= comebacks.length) continue;
-      upcoming.push({ artist: x.artist, title: x.title || null, type: x.type, date: x.date, source: x.url });
-      if (k >= 0 && !comebacks[k].some((c) => c.artist === artist)) comebacks[k].push({ artist });
-    }
-    raw.releases = upcoming;
     if (recent.length) {
       sim = songSim({
-        recent, pace, from: since, base, drops: drops.length >= 3 ? drops : null, credits, rounds: 12 - lastM, comebacks,
+        recent, pace, from: since, base, drops: drops.length >= 3 ? drops : null, credits, rounds: 12 - lastM,
         drivers: new Map(ifNow.map((c) => [keyOf(c), c.pts])), teams: teamStart,
       });
       sim.base = base;
@@ -944,8 +907,6 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
             last30d: Math.round((raw.pace.p30.get(keyOf(r)) ?? 0) * 30),
             firstPlayed: raw.debut.get(keyOf(r)) ? day(raw.debut.get(keyOf(r))) : null,
           })),
-          // what's been officially announced for the rest of the year, from a web search
-          announcedReleases: raw.releases ?? [],
         };
         // v2: the rounds left now count the month under way (v1 told Astra one round was left in November)
         astra = await judgeTitle(`cx-title-v2|${userId}|${y}|${src}|${estimate}`, input);
@@ -1571,15 +1532,6 @@ export async function GET(req) {
       const from = Date.parse(q.get('from') || '1970-01-01T00:00:00Z');
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
-    }
-    // what the artists on screen (and the rest of the most-played) have put out or announced
-    // — on the live views only, and never more than three, so the race stays the story
-    const thisYear = new Date(Date.now() + KST).getUTCFullYear();
-    const live = view === 'chart' || (view === 'season' && q.get('all') !== '1' && (!Number(q.get('year')) || Number(q.get('year')) === thisYear));
-    if (live) {
-      const onScreen = new Set(events.flatMap((e) => (e.targets ?? []).map((t) => artistKey(t.artist))));
-      const news = newsEvents(await loadReleases(userId).catch(() => null), onScreen).sort((a, b) => b.weight - a.weight);
-      events.push(...news.slice(0, 3));
     }
     // no more than two of a kind, so one story doesn't fill the feed
     const top = pick(events, view === 'season' ? 20 : view === 'gp' ? 16 : 12, 2);

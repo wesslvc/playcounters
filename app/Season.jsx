@@ -8,7 +8,6 @@ import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
-import { useElite } from './useElite';
 import { Section, Cover, Seg } from './ui';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
@@ -55,7 +54,7 @@ function StandingsHead({ label }) {
  * shows the full sheet — counts, race-by-race record and records — the same
  * one the chart opens.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, cover, round, gem, onOpen }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, cover, round, onOpen }) {
   return (
     <li
       className="season-row" data-leader={rank === 1 || undefined}
@@ -65,7 +64,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, 
     >
       <div className="pos">{rank}</div>
       <div className="nm3" style={edge}>
-        <Cover src={cover} size={36} round={round} className={gem ? `gem ${gem}` : ''} />
+        <Cover src={cover} size={36} round={round} />
         <span>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
@@ -110,7 +109,6 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
   // a finished race opens on its podium, big
   const podium = !live && detail ? detail.items.filter((t) => t.rank <= 3).slice(0, 3) : [];
   const covers = useCovers(mode, podium.length ? podium : null);
-  const elite = useElite(source, estimate);
   if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
   if (!detail) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
   const { items, leaders, days } = detail;
@@ -133,7 +131,7 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
           <div key={rowKey(t)} className={`pod p${t.rank}`}>
             <span className="pod-rk" data-tier={t.rank}>P{t.rank}</span>
             <Cover src={coverOf(covers, mode, t)} size={t.rank === 1 ? 112 : 80} round={mode === 'artists'}
-                   className={elite(t) ? `gem ${elite(t)}` : ''} />
+                   />
             <b>{t.track ?? t.artist}</b>
             {t.track && <span>{artistLine(t)}</span>}
             <em>{t.points}pt · {t.plays.toLocaleString()}회</em>
@@ -246,10 +244,10 @@ function Chequered() {
 }
 
 /** The championship leader (or champion), as a card in that artist's color. */
-function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round, gem, onOpen }) {
+function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round, onOpen }) {
   return (
     <button className="leader" style={{ '--team': color }} onClick={onOpen}>
-      <Cover src={cover} size={56} round={round} className={`leader-cover${gem ? ` gem ${gem}` : ''}`} />
+      <Cover src={cover} size={56} round={round} className="leader-cover" />
       <span className="leader-tag">{tag}</span>
       <span className="leader-wins" aria-label={`${wins}승`}>
         <b>{wins}</b>
@@ -547,7 +545,6 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   const [chartKind, setChartKind] = useState('drivers');
   const [chartView, setChartView] = useState('points');
   const [chartN, setChartN] = useState(5);
-  const elite = useElite(source, estimate);
 
   // The query string of the season on screen, for the quiet reload below.
   const query = useRef('');
@@ -711,7 +708,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
         <div className="leaders">
           {driverChamp && (
             <LeaderCard
-              tag={driverTag} name={driverChamp.track ?? driverChamp.artist} gem={elite(driverChamp)}
+              tag={driverTag} name={driverChamp.track ?? driverChamp.artist}
               sub={driverChamp.track ? artistLine(driverChamp) : null}
               points={driverChamp.points} wins={driverChamp.wins} podiums={driverChamp.podiums}
               color={artistColor(driverChamp.artist)}
@@ -721,7 +718,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
           )}
           {constructorChamp && (
             <LeaderCard
-              tag={constructorTag} name={constructorChamp.artist} sub={null} gem={elite(constructorChamp)}
+              tag={constructorTag} name={constructorChamp.artist} sub={null}
               points={constructorChamp.points} wins={constructorChamp.wins} podiums={constructorChamp.podiums}
               color={artistColor(constructorChamp.artist)}
               cover={coverOf(teamCovers, 'artists', constructorChamp)} round
@@ -767,7 +764,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
               const key = normRowKey(d);
               return (
                 <StandingsRow
-                  key={key} rank={i + 1} gem={elite(d)}
+                  key={key} rank={i + 1}
                   name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
@@ -793,7 +790,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                 <StandingsHead label="가수" />
                 {constructors.slice(0, constructorShown).map((c, i) => (
                   <StandingsRow
-                    key={c.artist_key} rank={i + 1} gem={elite(c)}
+                    key={c.artist_key} rank={i + 1}
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
                     pointsFinishes={c.pointsFinishes} finishes={c.finishes}

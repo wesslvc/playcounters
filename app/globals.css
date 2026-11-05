@@ -536,27 +536,6 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .club-when { font-weight:600; color:var(--ink) !important }
 .club-ranks { margin-top:10px }
 .club-ranks .val { font-size:13.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
-/* gone far past the bar, all time: a small cut gem pinned to the picture's
-   corner, and a thin rim of the same tone around it. Steel blue ('sky') for an
-   artist past 1,500 plays or a song past 300; garnet ('ruby') past 2,000 or
-   500. `.ring` marks a row or card, `.gem` a picture alone. */
-:root { --t-sky:#4F7FB8; --t-ruby:#A8424F }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --t-sky:#7FA6D6; --t-ruby:#D06A76 } }
-:root[data-theme="dark"] { --t-sky:#7FA6D6; --t-ruby:#D06A76 }
-.ring .cover, .cover.gem { --tier:var(--t-sky); --b:clamp(13px, 28%, 22px) }
-.ring.ruby .cover, .cover.gem.ruby { --tier:var(--t-ruby) }
-.ring .cover::after, .cover.gem::after { box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--tier) 60%, transparent) }
-.ring .cover::before, .cover.gem::before {
-  content:''; position:absolute; z-index:1; pointer-events:none;
-  width:var(--b); height:var(--b); right:max(3px, 5%); bottom:max(3px, 5%); border-radius:50%;
-  background:var(--tier) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7.5 5.5h9l4 4.6L12 19.5 3.5 10.1z' fill='%23fff'/%3E%3Cpath d='M3.5 10.1h17M9.6 10.1 12 5.5l2.4 4.6M9.6 10.1 12 19.5l2.4-9.4' fill='none' stroke='rgba(0,0,0,.26)' stroke-width='1' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 72%;
-  box-shadow:0 0 0 1.5px var(--surface), 0 2px 6px rgba(0,0,0,.25);
-}
-/* a circle has no corner: the gem sits on its rim at the lower right, just inside */
-.ring .cover.round::before, .cover.gem.round::before {
-  right:calc(50% - (50% - var(--b) / 2 - 2px) * .7071 - var(--b) / 2);
-  bottom:calc(50% - (50% - var(--b) / 2 - 2px) * .7071 - var(--b) / 2);
-}
 .award.club { --champ:color-mix(in oklab, var(--gold) 70%, var(--ink-2));
   background:linear-gradient(180deg, color-mix(in oklab, var(--gold) 6%, transparent), transparent 120px), var(--surface) }
 .award.club header { display:flex; justify-content:space-between; align-items:baseline; gap:10px }

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { rowKey } from '@/lib/keys';
-import { useElite } from './useElite';
 import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks, computeRanksBy } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
@@ -143,14 +142,14 @@ function Strip({ days, item, color }) {
  * set big — and second and third sit under it, the way a chart's number one
  * is announced rather than listed.
  */
-function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, elite }) {
+function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst }) {
   if (rows.length < 3) return null;
   const [first, ...rest] = rows.slice(0, 3);
   const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
   const img = coverOf(covers, mode, first);
   return (
     <div className="top3">
-      <button className={`no1${elite(first) ? ` ring ${elite(first)}` : ''}`} onClick={() => onSelect(target(first))}>
+      <button className="no1" onClick={() => onSelect(target(first))}>
         <span className="no1-bg" style={img ? { backgroundImage: `url(${img})` } : undefined} aria-hidden="true" />
         <Cover src={img} size={132} round={mode === 'artists'} />
         <span className="no1-text">
@@ -164,7 +163,7 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst, elit
       </button>
       <div className="runners">
         {rest.map((r, i) => (
-          <button key={rowKey(r)} className={`runner${elite(r) ? ` ring ${elite(r)}` : ''}`} onClick={() => onSelect(target(r))}>
+          <button key={rowKey(r)} className="runner" onClick={() => onSelect(target(r))}>
             <span className="runner-rk">{ranks[i + 1]}</span>
             <Cover src={coverOf(covers, mode, r)} size={52} round={mode === 'artists'} />
             <span className="runner-text">
@@ -368,7 +367,6 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
   const priorSet = useMemo(() => new Set((data?.prior ?? []).map(rowKey)), [data]);
 
   const covers = useCovers(mode, rows);
-  const elite = useElite(src, estimate);
   const creditVersion = useCredits(rows);
   const genreNames = useMemo(
     () => [...new Set(rows.flatMap((r) => artistNames(r)))],
@@ -469,7 +467,7 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
           )}
           {showCount && (
             <TopThree rows={rows} ranks={ranks} mode={mode} covers={covers} sort={sort} unit={unit}
-                      onSelect={onSelect} isEst={isEst} elite={elite} />
+                      onSelect={onSelect} isEst={isEst} />
           )}
           <Highlights rows={rows} ranks={ranks} daily={data.daily} prevRank={prevRank}
                       prevComplete={prevComplete} familyOf={familyOf} />
@@ -490,7 +488,7 @@ export default function Chart({ source: src, mode, estimate, calendar, version, 
                   : prevComplete ? (priorSet.has(key) ? null : undefined) : null;
               return (
                 <li key={key}>
-                  <button className={`row${elite(r) ? ` ring ${elite(r)}` : ''}`} onClick={() => onSelect(target(r))}>
+                  <button className="row" onClick={() => onSelect(target(r))}>
                     <span className="rk" data-top={rank <= 3 || undefined}>
                       {rank}
                       {tied && <em>공동</em>}

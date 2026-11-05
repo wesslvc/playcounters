@@ -104,7 +104,7 @@ function careerEvents(cur, then, pace, mode) {
     if (hot && hot.p >= 1) {
       out.push({
         kind: 'hot', group: 'forecast', weight: 56, title: '최근 30일 최고 페이스',
-        text: `${nameOf(hot.r)}, 최근 30일 하루 ${hot.p.toFixed(1)}회로 통산 상위권에서 가장 뜨거움`,
+        text: `${nameOf(hot.r)}, 최근 30일 하루 ${hot.p.toFixed(1)}회 · 통산 상위권 중 가장 자주 들은 곡`,
         detail: `통산 P${hot.pos} · ${Number(hot.r.plays).toLocaleString('ko-KR')}회`,
         stat: { value: hot.p.toFixed(1), unit: '회/일' }, targets: [targetOf(hot.r)],
       });
@@ -474,7 +474,7 @@ function chaseCards(field, form, rounds, name, group, label) {
     out.push({
       kind: 'chase', group, weight: now >= need ? 78 - i : 60 - i, title: `${label} 역전 시나리오`,
       text: `${name(c)} → ${name(lead)} 역전 조건, 남은 ${rounds}라운드 라운드당 ${need}pt · 예상 득점 라운드당 ${now}pt`,
-      detail: `지금 ${lead.pts - c.pts}pt 차 (${c.pts}pt vs ${lead.pts}pt) · 예상 득점은 곡별 재생 수 시뮬레이션 기준`,
+      detail: `지금 ${lead.pts - c.pts}pt 차 · ${c.pts}pt vs ${lead.pts}pt`,
       stat: { value: String(need), unit: 'pt/라운드 필요' },
       // sides in the same order as targets: the chaser, then the leader
       duel: { sides: [{ pos: i + 2, pts: c.pts }, { pos: 1, pts: lead.pts }], gap: lead.pts - c.pts, unit: 'pt', eta: null, need, expect: now },
@@ -615,9 +615,9 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     events.push({
       kind: 'odds', group, weight: 94, title: `${y} 챔피언 가능성`,
       text: f.p >= 0.995
-        ? `${nameOf(f.c)}, 시뮬레이션상 챔피언 확실시`
+        ? `${nameOf(f.c)}, 챔피언 사실상 확정`
         : `${nameOf(f.c)}, 챔피언 가능성 ${pct(f.p)}%${odds[1] ? ` · ${nameOf(odds[1].c)} ${pct(odds[1].p)}%` : ''}`,
-      detail: `남은 ${12 - lastM}라운드를 곡별 예상 재생 수로 돌린 결과 (신곡 등장은 올해 실제 기록대로) · 이번 달이 이대로 끝나면 산술적 우승 가능 ${alive}명`,
+      detail: `이번 달 포함 ${12 - lastM + 1}라운드 남음 · 이번 달이 이대로 끝나면 우승 가능 ${alive}명`,
       stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
       odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
       targets: odds.map(({ c }) => targetOf(c)),
@@ -658,7 +658,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   if (form && recent.length === 3 && form.last3 > 0) {
     events.push({
       kind: 'form', group, weight: 48, title: '최근 폼',
-      text: `${nameOf(form)}, 최근 3라운드 ${form.last3}pt로 가장 뜨거움`,
+      text: `${nameOf(form)}, 최근 3라운드 ${form.last3}pt로 가장 많이 득점`,
       detail: `라운드 평균 ${Math.round(form.last3 / 3)}pt`,
       stat: { value: String(form.last3), unit: 'pt / 3R' }, targets: [targetOf(form)],
     });
@@ -913,13 +913,11 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         .catch(() => ({ moves: new Map(), since: null }));
       const biggest = [...moves].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
       events.push({
-        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성${astra ? ` · ${astra.by === 'astra' ? 'Astra' : 'Terra'} 판단` : ''}`,
+        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
         text: `${odds[0].c.artist}, 타이틀 가능성 ${pct(odds[0].p)}%${odds[1] ? ` · ${odds[1].c.artist} ${pct(odds[1].p)}%` : ''}${biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''}`,
         detail: (astra
-          ? `${astra.reasoning} — ${astra.by === 'astra'
-            ? `${astra.model} 판단 (${Number(astra.date.slice(5, 7))}월 ${Number(astra.date.slice(8))}일)${astra.checked && astra.checked !== astra.date ? ' · 이후 큰 변화 없음' : ''}`
-            : `${astra.model} 판단 · Astra 이후 판세 변화 감지`}`
-          : `소속 곡 예상 재생 수로 남은 ${12 - lastM}라운드를 매달 순위 매겨 돌린 결과 · 신곡·앨범 등장은 올해 실제 기록대로${sim?.history ? ` (${sim.history})` : ''}`)
+          ? `${astra.reasoning} ${Number(astra.date.slice(5, 7))}월 ${Number(astra.date.slice(8))}일 기준`
+          : `이번 달 포함 ${12 - lastM + 1}라운드 남음${sim?.history ? ` · ${sim.history}` : ''}`)
           + (since ? ` · 화살표는 ${Number(since.slice(5, 7))}월 ${Number(since.slice(8))}일 대비` : ''),
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts, move: moves.get(c.artist_key) ?? null })),
@@ -1488,7 +1486,7 @@ async function milestoneContext(userId, { src, estimate }) {
 
 // Terra has the better voice and the better head: it takes the lines that have
 // to weigh several things at once — odds, projections, how long a lead lasts, a
-// race's whole story — and the opening line. Luna, quicker and cheaper, takes
+// race's whole story. Luna, quicker and cheaper, takes
 // the plain facts: a climb, a milestone, a record.
 const TERRA = () => process.env.OPENAI_MODEL || 'gpt-6.1-terra';
 const LUNA = () => process.env.OPENAI_MODEL_FAST || 'gpt-6-luna';
@@ -1555,11 +1553,6 @@ const LINES = {
     },
   },
 };
-const OPENER = {
-  type: 'object', additionalProperties: false, required: ['headline'],
-  properties: { headline: { type: 'string' } },
-};
-
 /** Lines that weigh several things at once — odds, projections, a lead's lifetime, a race's story. */
 const COMPLEX = new Set([
   'odds', 'win-odds', 'cx-odds', 'hold', 'career-hold', 'lead', 'eta', 'champion', 'locked', 'swing', 'cx-swing',
@@ -1574,13 +1567,12 @@ const split = (list, n) => {
 
 /**
  * Rewords the lines as race radio — several casters at once, a few lines
- * each, so a long feed comes back as fast as a short one — while another
- * writes the opening line for the whole picture. A rewrite whose figures
+ * each, so a long feed comes back as fast as a short one. A rewrite whose figures
  * don't match the original's is thrown away; any failure leaves the plain
  * lines in place.
  */
 async function polish(events, context) {
-  if (!process.env.OPENAI_API_KEY || !events.length) return { items: events, headline: null };
+  if (!process.env.OPENAI_API_KEY || !events.length) return { items: events };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 12000);
   const tagged = events.map((e, id) => ({ id, e }));
@@ -1591,20 +1583,12 @@ async function polish(events, context) {
     ...split(light, 5).map((items) => ({ model: LUNA(), items })),
   ];
   try {
-    const [parts, opener] = await Promise.all([
-      Promise.all(chunks.map((chunk) => ask(
-        chunk.model,
-        `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
-        { context, items: chunk.items.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
-        LINES, ctl.signal,
-      ).catch(() => ({ items: [] })))),
-      ask(
-        TERRA(),
-        `${CASTER} 아래 항목들 중 가장 중요한 것 두세 개를 엮어 중계 오프닝 멘트를 한국어 한두 문장(70자 이내)으로 써라. 숫자는 항목에 있는 것만.`,
-        { context, items: events.slice(0, 8).map((e) => ({ title: e.title, text: e.text })) },
-        OPENER, ctl.signal,
-      ).catch(() => null),
-    ]);
+    const parts = await Promise.all(chunks.map((chunk) => ask(
+      chunk.model,
+      `${CASTER} 각 항목의 text를 한국어 한 문장(40자 안팎)으로 다시 써라. detail과 title은 참고만 해라.`,
+      { context, items: chunk.items.map(({ id, e }) => ({ id, title: e.title, text: e.text, detail: e.detail })) },
+      LINES, ctl.signal,
+    ).catch(() => ({ items: [] }))));
     const lines = new Map(parts.flatMap((p) => p.items ?? []).map((x) => [x.id, x.text?.trim()]));
     let kept = 0;
     const items = events.map((e, i) => {
@@ -1614,10 +1598,10 @@ async function polish(events, context) {
       return { ...e, text: t, ai: true };
     });
     console.log(`radio polish ok · ${kept}/${events.length} · terra ${heavy.length} / luna ${light.length} lines · ${chunks.length} casters`);
-    return { items, headline: opener?.headline?.trim() || null, models: [...new Set([TERRA(), ...(light.length ? [LUNA()] : [])])] };
+    return { items };
   } catch (e) {
     console.error('radio polish failed', e.message);
-    return { items: events, headline: null };
+    return { items: events };
   } finally {
     clearTimeout(timer);
   }
@@ -1660,16 +1644,11 @@ export async function GET(req) {
       const to = Date.parse(q.get('to') || iso(Date.now() + DAY));
       events = await windowEvents(userId, { from, to, mode, src, estimate });
     }
-    const { items: top, headline, models = [] } = await polish(
+    const { items: top } = await polish(
       pick(events, view === 'season' ? 30 : view === 'gp' ? 16 : 12),
       `${label} · ${mode === 'artists' ? '가수' : '곡'} 순위`,
     );
-    const body = {
-      items: top.map(({ weight, ...e }) => e),
-      headline,
-      model: top.some((e) => e.ai) || headline ? models.join(' · ') : null,
-      at: new Date().toISOString(),
-    };
+    const body = { items: top.map(({ weight, ai, ...e }) => e), at: new Date().toISOString() };
     cache.set(ck, { at: Date.now(), body });
     if (cache.size > 200) cache.delete(cache.keys().next().value);
     return NextResponse.json(body);

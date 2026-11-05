@@ -259,7 +259,7 @@ function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round
       <span className="leader-sub">{sub || '\u00a0'}</span>
       <span className="leader-pts">
         {points.toLocaleString()}<small>PTS</small>
-        <em>{podiums} {podiums === 1 ? 'podium' : 'podiums'}</em>
+        <em>포디움 {podiums}</em>
       </span>
     </button>
   );

@@ -18,13 +18,21 @@ const one = (v) => (Math.round(v * 10) / 10).toLocaleString('ko-KR');
 const ARROW = { up: '▲', down: '▼', plunge: '▼▼' };
 const DRIFT = { closing: '좁혀지는 중', opening: '벌어지는 중', steady: '그대로' };
 
-/** The line, with the bits worth reading twice marked up. */
-const KEY = /(약 \d+(?:시간|일) 뒤|곧|[\d,.]+(?:회|pt)(?: 차)?|P\d+|동률|동점|사실상 확정|조기 확정|챔피언 확정|추월 가시권|추월 예상|페이스 하락 중|느려지는 중|빨라지는 중|돌파)/;
-function Line({ text }) {
+/** The line itself. */
+const Line = ({ text }) => <span className="rr-text">{text}</span>;
+
+/** The newest message, as one quiet line above the LIVE button. */
+function Peek({ it, covers, onOpen }) {
+  const t = it.targets?.[0];
+  const kind = t?.track ? 'tracks' : 'artists';
   return (
-    <span className="rr-text">
-      {String(text).split(KEY).map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part))}
-    </span>
+    <button className="rr-peek" onClick={onOpen}>
+      <Cover src={t ? coverOf(covers[kind], kind, t) : null} size={32} round={kind === 'artists'} />
+      <span className="rr-peek-body">
+        <span className="rr-tag">{it.title}</span>
+        <span className="rr-peek-text">{it.text}</span>
+      </span>
+    </button>
   );
 }
 
@@ -58,7 +66,7 @@ function RadioCard({ it, covers, onOpen }) {
   const pic = (t) => coverOf(covers[isTrack(t) ? 'tracks' : 'artists'], isTrack(t) ? 'tracks' : 'artists', t);
   if (it.odds?.length) {
     return (
-      <button className="rr-card rr-odds" data-group={it.group} onClick={() => onOpen(it)}>
+      <button className="rr-card rr-odds" onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-odds-list">
           {it.odds.map((o, i) => (
@@ -94,7 +102,7 @@ function RadioCard({ it, covers, onOpen }) {
     const top = Math.max(a.p3 ?? 0, b.p3 ?? 0);
     const unit = d.unit ?? '회';
     return (
-      <button className="rr-card rr-duel" data-group={it.group} onClick={() => onOpen(it)}>
+      <button className="rr-card rr-duel" onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-vs">
           <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
@@ -142,7 +150,7 @@ function RadioCard({ it, covers, onOpen }) {
 
   const s = it.solo;
   return (
-    <button className="rr-card rr-solo" data-group={it.group} onClick={() => onOpen(it)} disabled={!pics.length}>
+    <button className="rr-card rr-solo" onClick={() => onOpen(it)} disabled={!pics.length}>
       <span className={`rr-pics n${pics.length}`} aria-hidden="true">
         {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 52 : 72} round={!isTrack(t)} />)}
       </span>
@@ -174,8 +182,8 @@ function RadioCard({ it, covers, onOpen }) {
  * championship picture and milestones in whatever ranking is on screen.
  * A LIVE button opens them at the foot of the screen, one card at a time to
  * swipe through, narrowed by kind; the first time a view has news in a
- * visit, its top card rises on its own for a few seconds. The numbers come
- * from the server; the wording may be the AI's.
+ * visit, its top message shows as one line above the button for a few
+ * seconds. The numbers come from the server.
  */
 export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
   // a view can tune the radio to something else on screen — a past Grand Prix — until it's closed
@@ -241,6 +249,12 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
   };
 
   useEffect(() => { setAt(0); track.current?.scrollTo({ left: 0 }); }, [group, open]);
+  // the panel is as tall as the card on show, not the tallest one
+  const [height, setHeight] = useState(null);
+  useEffect(() => {
+    const slide = track.current?.children?.[at];
+    if (slide) setHeight(slide.firstElementChild?.offsetHeight ?? null);
+  }, [at, shown, open, covers]);
   const onScroll = () => {
     const el = track.current;
     if (el) setAt(Math.round(el.scrollLeft / el.clientWidth));
@@ -257,21 +271,16 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
 
   return (
     <>
-      {toast && !open && (
-        <div className="rr-dock">
-          <RadioCard it={toast} covers={covers} onOpen={() => { setToast(null); setOpen(true); }} />
-        </div>
-      )}
+      {toast && !open && <Peek it={toast} covers={covers} onOpen={() => { setToast(null); setOpen(true); }} />}
 
       {open && (
         <>
           <button className="scrim" aria-label="닫기" onClick={close} />
           <div className="rr-dock rr-panel" role="dialog" aria-label="레이스 라디오">
             <div className="rr-top">
-              <b>Race Radio</b>
+              <b>라디오</b>
               <span>{ctx?.label}</span>
             </div>
-            {data?.key === ctxKey && data.headline && <p className="rr-headline">{data.headline}</p>}
             {groups.length > 2 && (
               <div className="rr-groups">
                 {groups.map(([g, l]) => (
@@ -281,7 +290,7 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
             )}
             {shown.length ? (
               <>
-                <div className="rr-track" ref={track} onScroll={onScroll}>
+                <div className="rr-track" ref={track} onScroll={onScroll} style={height ? { height } : undefined}>
                   {shown.map((it, i) => (
                     <div className="rr-slide" key={`${group}-${i}`}>
                       <RadioCard it={it} covers={covers} onOpen={openItem} />
@@ -290,16 +299,19 @@ export default function RaceRadio({ ctx: page, source, estimate, onSelect }) {
                 </div>
                 <div className="rr-nav">
                   <button className="icon-btn" aria-label="이전" disabled={at <= 0} onClick={() => goTo(at - 1)}>‹</button>
-                  <span className="rr-dots">
-                    {shown.map((_, i) => <i key={i} data-on={i === at || undefined} />)}
-                  </span>
+                  {shown.length > 8 ? (
+                    <span className="rr-count"><b>{at + 1}</b> / {shown.length}</span>
+                  ) : (
+                    <span className="rr-dots">
+                      {shown.map((_, i) => <i key={i} data-on={i === at || undefined} />)}
+                    </span>
+                  )}
                   <button className="icon-btn" aria-label="다음" disabled={at >= shown.length - 1} onClick={() => goTo(at + 1)}>›</button>
                 </div>
               </>
             ) : (
               <p className="rr-none">{data ? '지금은 조용해요. 눈에 띄는 경쟁이나 변동이 없어요.' : '무선 연결 중…'}</p>
             )}
-            {data?.model && <p className="rr-foot">{data.model} 해설 · 수치는 실제 기록 기준</p>}
           </div>
         </>
       )}

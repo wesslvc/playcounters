@@ -983,6 +983,20 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .pl-card .cover { width:100% !important; height:auto !important; aspect-ratio:1; border-radius:10px; margin-bottom:6px }
 .pl-card b { font-size:14px; font-weight:700; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .pl-card span { font-size:12px; color:var(--ink-3) }
+/* songs you haven't played: picture, name, the one of yours it's like */
+.rec-list .row.rec { grid-template-columns:52px minmax(0,1fr) auto; align-items:center; color:inherit; text-decoration:none }
+.rec-list[data-busy] { opacity:.5; transition:opacity .2s }
+.rec .nm > .rec-why { margin-top:3px; font-size:12.5px; line-height:1.45; color:var(--ink-2); white-space:normal;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; word-break:keep-all; overflow-wrap:anywhere }
+.rec-why em { font-style:normal; color:var(--ink-3) }
+.rec-new { font-style:normal; color:var(--ink-3) }
+.rec-new::before { content:' · ' }
+.rec-go { font-size:15px; color:var(--ink-3); transition:transform .15s, color .15s }
+.rec:hover .rec-go { color:var(--ink); transform:translate(1px, -1px) }
+.rec-ghost { display:grid; grid-template-columns:52px minmax(0,1fr); gap:14px; align-items:center; padding:11px 0 }
+.rec-ghost span { height:52px; border-radius:8px; background:var(--sunk); animation:ghost 1.4s ease-in-out infinite }
+.rec-ghost span + span { height:30px; width:70%; border-radius:6px }
+@keyframes ghost { 50% { opacity:.55 } }
 .pl-note { margin:18px 0; padding:18px; border-radius:16px; background:var(--surface); border:1px solid var(--hair) }
 .pl-note b { font-size:16px }
 .pl-note p { margin:6px 0 14px; font-size:13.5px; color:var(--ink-2) }

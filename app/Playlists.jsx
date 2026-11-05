@@ -303,6 +303,70 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
 }
 
 /**
+ * Songs you haven't played, picked from what you have: each with the song of
+ * yours it's like and what the two share. Opens on Spotify.
+ */
+function Recs() {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [all, setAll] = useState(false);
+  const load = (refresh) => {
+    setBusy(true);
+    return fetch(`/api/recommend${refresh ? '?refresh=1' : ''}`)
+      .then((r) => r.json())
+      .then((j) => { setData(j); if (refresh) setAll(false); })
+      .catch((e) => setData({ error: e.message }))
+      .finally(() => setBusy(false));
+  };
+  useEffect(() => { load(false); }, []);
+
+  const items = data?.items ?? [];
+  const shown = all ? items : items.slice(0, 5);
+  return (
+    <>
+      <Section title="안 들어본 추천곡" sub="최근 많이 들은 곡을 바탕으로, 한 번도 재생한 적 없는 곡만 골랐어요">
+        {items.length > 0 && (
+          <button className="pill" onClick={() => load(true)} disabled={busy || data?.left <= 0}
+                  title={data?.left <= 0 ? '오늘은 더 고를 수 없어요' : undefined}>
+            {busy ? '고르는 중…' : '다시 고르기'}
+          </button>
+        )}
+      </Section>
+      {!data || (busy && !items.length) ? (
+        <ol className="ranks rec-list" aria-busy="true">
+          {[0, 1, 2].map((i) => <li key={i} className="rec-ghost"><span /><span /></li>)}
+        </ol>
+      ) : data.error && !items.length ? (
+        <p className="note">{data.reauth ? 'Spotify 연결이 끊겼어요. 다시 로그인하면 추천을 받을 수 있어요.' : data.error}</p>
+      ) : (
+        <>
+          <ol className="ranks rec-list" data-busy={busy || undefined}>
+            {shown.map((x) => (
+              <li key={x.id}>
+                <a className="row rec" href={x.url} target="_blank" rel="noreferrer">
+                  <Cover src={x.image} size={52} />
+                  <span className="nm">
+                    <b>{x.title}</b>
+                    <span>{x.artists?.join(', ') ?? x.artist}{x.newArtist && <em className="rec-new">처음 만나는 가수</em>}</span>
+                    {x.reason && <span className="rec-why">{x.because ? <em>{x.because}처럼 · </em> : null}{x.reason}</span>}
+                  </span>
+                  <span className="rec-go" aria-hidden="true">↗</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+          {items.length > 5 && (
+            <div className="more">
+              <button className="btn ghost" onClick={() => setAll(!all)}>{all ? '접기' : `${items.length - 5}곡 더 보기`}</button>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/**
  * Your Spotify playlists, each read against what you actually play: which
  * songs carry it, which are rising or going quiet, which you never play, how
  * songs fared after going in, its Grand Prix record, who it's made of, and
@@ -325,12 +389,13 @@ export default function Playlists({ source, estimate, onSelect, onContext }) {
   }, []);
 
   if (open) return <Analysis id={open} source={source} estimate={estimate} onSelect={onSelect} onBack={() => setOpen(null)} />;
-  if (error) return error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>;
-  if (!lists) return <p className="note" style={{ padding: '18px 0' }}>Spotify 플레이리스트 불러오는 중…</p>;
+  if (error) return <><Recs />{error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>}</>;
+  if (!lists) return <><Recs /><p className="note" style={{ padding: '18px 0' }}>Spotify 플레이리스트 불러오는 중…</p></>;
 
   const shown = lists.filter((p) => (whose === 'mine' ? p.mine : !p.mine));
   return (
     <>
+      <Recs />
       <Section title="플레이리스트" sub="골라서 실제 재생 기록과 맞춰 보세요">
         <Seg size="sm" label="플리 종류" options={[['mine', '내 플리'], ['others', '팔로우']]} value={whose} onChange={setWhose} />
       </Section>

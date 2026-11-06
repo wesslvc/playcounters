@@ -1975,7 +1975,8 @@ as $$
     from jsonb_array_elements(p_items) with ordinality as e(v, ord)
   )
   select q.i, q.ak, q.tk,
-    coalesce(sum(case when p_estimate then p.est_plays else 1 end), 0),
+    -- the left join's empty row for a song never played is not a play
+    coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at is not null), 0),
     coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '30 days'), 0),
     coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '7 days'), 0),
     coalesce(sum(case when p_estimate then p.est_plays else 1 end) filter (where p.played_at >= now() - interval '3 days'), 0),

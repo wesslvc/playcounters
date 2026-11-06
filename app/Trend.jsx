@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { artistColor, familyLabel, repeats, swatch, DASHES } from '@/lib/genre';
+import { artistColor, familyLabel } from '@/lib/genre';
 import { smoothPath, sampleIdx } from '@/lib/curve';
 import { Seg } from './ui';
 
@@ -129,11 +129,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   // stable shade of their own, rather than sharing one neighbourhood of hue
   // with everyone else in their genre. Genre still names itself in the
   // legend below, just no longer decides the color.
-  // an artist's songs share its colour; only the rank view, where lines
-  // cross and swap, tells them apart by dash
-  const dashes = repeats(lines.map((s) => s.artist));
   const colorOf = (s) => artistColor(s.artist);
-  const dashOf = (s) => (ranked ? dashes[lines.indexOf(s)] ?? 0 : 0);
   const lead = lines[0];
   const genreOf = (s) => {
     const fam = genres[s.artist]?.family;
@@ -176,7 +172,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           </>
         )}
         {[...lines].reverse().map((s, i) => (
-          <path key={i} d={ranked ? rankLines[lines.indexOf(s)].d : s.d} fill="none" stroke={colorOf(s)} strokeDasharray={DASHES[dashOf(s)] ?? undefined}
+          <path key={i} d={ranked ? rankLines[lines.indexOf(s)].d : s.d} fill="none" stroke={colorOf(s)}
                 strokeWidth={s === lead ? 3.5 : 2.5} strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
         ))}
@@ -203,7 +199,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
             {[...lines].sort((a, b) => b.cum[hover] - a.cum[hover]).map((s, i) => (
               <li key={s.track ?? s.artist} data-zero={!s.cum[hover] || undefined}>
                 <u>{i + 1}</u>
-                <i style={swatch(colorOf(s), dashOf(s))} />
+                <i style={{ background: colorOf(s) }} />
                 <span>{s.track ?? s.artist}</span>
                 <em>{Math.round(s.cum[hover]).toLocaleString()}회</em>
               </li>
@@ -222,7 +218,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       <ol className="trend-key">
         {lines.map((s, i) => (
           <li key={i}>
-            <i style={swatch(colorOf(s), dashOf(s))} />
+            <i style={{ background: colorOf(s) }} />
             <b>{s.track ?? s.artist}</b>
             <span>
               {s.track ? s.artist : ''}

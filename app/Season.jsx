@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
-import { artistColor, repeats, swatch, DASHES } from '@/lib/genre';
+import { artistColor } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './useCredits';
@@ -423,16 +423,22 @@ function SeasonChart({ labels, series, view }) {
     : Array.from({ length: peak }, (_, k) => k + 1).filter((t) => peak <= 12 || t === 1 || t % 5 === 0);
   const xTicks = n <= 7 ? labels.map((_, i) => i) : [0, Math.floor((n - 1) / 3), Math.floor((2 * (n - 1)) / 3), n - 1];
 
-  // straight segments between rounds, the way a standings graphic joins them
+  // straight segments between rounds, the way a standings graphic joins them;
+  // the round under way joins the last finished one with a dashed line
+  const liveAt = series[0]?.pts.at(-1)?.live ? n - 1 : -1;
   const lines = series.map((s) => {
     const segs = [];
     let cur = [];
     s.pts.forEach((p, i) => {
+      if (i === liveAt) return;
       if (val(p) == null) { if (cur.length) segs.push(cur); cur = []; return; }
       cur.push([x(i), y(val(p))]);
     });
     if (cur.length) segs.push(cur);
-    return { ...s, segs };
+    const a = liveAt > 0 ? s.pts[liveAt - 1] : null;
+    const b = liveAt > 0 ? s.pts[liveAt] : null;
+    const liveSeg = a && b && val(a) != null && val(b) != null ? [[x(liveAt - 1), y(val(a))], [x(liveAt), y(val(b))]] : null;
+    return { ...s, segs, liveSeg };
   });
   const lead = points ? lines[0] : null;
   const leadPath = lead?.segs[0]?.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
@@ -468,13 +474,18 @@ function SeasonChart({ labels, series, view }) {
           </>
         )}
         {[...lines].reverse().map((s) => s.segs.map((seg, k) => (
-          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color} strokeDasharray={points ? undefined : DASHES[s.dash] ?? undefined}
+          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color}
                     strokeWidth={s === lines[0] ? 3 : 2.25} strokeLinejoin="round" strokeLinecap="round"
                     opacity={pick && pick.key !== s.key ? 0.25 : 1} />
         )))}
+        {[...lines].reverse().map((s) => s.liveSeg && (
+          <polyline key={`${s.key}-live`} points={s.liveSeg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color}
+                    strokeWidth={s === lines[0] ? 3 : 2.25} strokeDasharray="5 5" strokeLinecap="round"
+                    opacity={pick && pick.key !== s.key ? 0.2 : 0.85} />
+        ))}
         {[...lines].reverse().map((s) => s.pts.map((p, i) => (val(p) == null ? null : (
           <circle key={`${s.key}-d${i}`} cx={x(i)} cy={y(val(p))} r={pick?.key === s.key && pick.i === i ? 6 : 3.75}
-                  fill={pick?.key === s.key && pick.i === i ? s.color : 'var(--surface)'} stroke={s.color} strokeWidth="2"
+                  fill={pick?.key === s.key && pick.i === i ? s.color : 'var(--surface)'} stroke={s.color} strokeWidth="2" strokeDasharray={i === liveAt ? '2.5 2' : undefined}
                   opacity={pick && pick.key !== s.key ? 0.25 : 1} className="chart-dot"
                   onMouseEnter={() => setPick({ key: s.key, i })} onClick={() => setPick({ key: s.key, i })} />
         ))))}
@@ -483,11 +494,11 @@ function SeasonChart({ labels, series, view }) {
       {pp && (
         <div className={`chart-tip sc-tip${x(pick.i) / W < 0.3 ? ' tip-start' : x(pick.i) / W > 0.7 ? ' tip-end' : ''}`}
              style={{ left: `${x(pick.i)}px`, top: `${Math.max(0, y(val(pp)) - 12)}px` }}>
-          <b>{labels[pick.i]} GP</b>
+          <b>{labels[pick.i]} GP{pp.live ? ' · 진행 중' : ''}</b>
           <strong style={{ color: picked.color }}>{picked.label}</strong>
           <ul>
-            <li><span>챔피언십</span><em>P{pp.pos} · {pp.cum.toLocaleString()}pt</em></li>
-            <li><span>이 라운드</span><em>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트 없음'}</em></li>
+            <li><span>{pp.live ? '이대로 끝나면' : '챔피언십'}</span><em>P{pp.pos} · {pp.cum.toLocaleString()}pt</em></li>
+            <li><span>{pp.live ? '지금 순위' : '이 라운드'}</span><em>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트권 밖'}</em></li>
           </ul>
         </div>
       )}
@@ -557,8 +568,9 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   // that actually scored against each other, month by month.
   const chartData = useMemo(() => {
     if (!data) return null;
-    // Only finished rounds: a race still under way hasn't scored anything.
-    const months = data.months.filter((m) => !m.live);
+    // Every finished round, and the one under way as a provisional last point
+    // (drawn dashed): it hasn't scored anything yet, but it shows where things are heading.
+    const months = data.months.filter((m) => !m.live || m.top.length);
     const labels = months.map((m) => moLabel(m, allTime));
 
     // where everyone stood in the championship after each round: every car that
@@ -580,7 +592,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
       const pts = months.map((m, i) => {
         const hit = m.top.find((t) => normRowKey(t) === key);
         cum += hit ? hit.points : 0;
-        return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: driverPos[i].get(key) ?? null };
+        return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: driverPos[i].get(key) ?? null, live: Boolean(m.live) };
       });
       return { key, label: d.track ?? d.artist, artist: d.artist, pts };
     });
@@ -605,7 +617,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
         const pts = monthly.map((byKey, i) => {
           const hit = byKey.get(c.artist_key);
           cum += hit ? hit.points : 0;
-          return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: teamPos[i].get(c.artist_key) ?? null };
+          return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: teamPos[i].get(c.artist_key) ?? null, live: Boolean(months[i].live) };
         });
         return { key: c.artist_key, label: c.artist, artist: c.artist, pts };
       });
@@ -688,13 +700,9 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
   // Colored here rather than when the series were built, so a line moves
   // into its genre's band as soon as the genre arrives.
-  // each line in its artist's own colour; on the position view, where lines
-  // cross, an artist's second song is dashed, a third dotted
-  const activeSeries = (() => {
-    const list = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
-    const dash = repeats(list.map((sr) => sr.artist));
-    return list.map((sr, i) => ({ ...sr, color: artistColor(sr.artist), dash: dash[i] }));
-  })();
+  // each line in its artist's own colour
+  const activeSeries = (activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries)
+    .map((sr) => ({ ...sr, color: artistColor(sr.artist) }));
 
   return (
     <div className="season">
@@ -755,7 +763,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
             <ol className="chart-key">
               {activeSeries.map((s, i) => (
-                <li key={s.key} data-lead={i === 0 || undefined}><i style={swatch(s.color, chartView === 'position' ? s.dash : 0)} />{s.label}</li>
+                <li key={s.key} data-lead={i === 0 || undefined}><i style={{ background: s.color }} />{s.label}</li>
               ))}
             </ol>
           </div>

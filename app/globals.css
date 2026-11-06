@@ -676,6 +676,17 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-key li[data-lead] { color:var(--ink); font-weight:700 }
 .chart-key i { width:14px; height:4px; border-radius:2px; flex:0 0 auto }
 
+/* a row in its artist's colour: a soft wash from the left, fading out before the figures */
+.wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 15%, transparent), color-mix(in oklab, var(--wash) 5%, transparent) 40%, transparent 70%) }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 24%, transparent), color-mix(in oklab, var(--wash) 7%, transparent) 40%, transparent 70%) } }
+:root[data-theme="dark"] .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 24%, transparent), color-mix(in oklab, var(--wash) 7%, transparent) 40%, transparent 70%) }
+
+.live-top li.wash, .proj-list li.wash, .lead-list li.wash { padding-left:8px; padding-right:8px; border-radius:10px }
+/* a radio card lit from its corner by whoever it's about */
+.rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 16%, transparent), transparent 62%) }
+:root[data-theme="dark"] .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 26%, transparent), transparent 62%) }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 26%, transparent), transparent 62%) } }
+
 /* standings table */
 .season-list { display:grid; gap:0 8px; grid-template-columns:26px minmax(0,1fr) 50px 34px 42px 44px 34px 10px; margin-bottom:6px }
 .season-cols {
@@ -689,7 +700,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center;
   padding:9px 6px; border-bottom:1px solid var(--hair); cursor:pointer; border-radius:10px; transition:background .12s;
 }
-.season-row:hover { background:var(--surface) }
+.season-row:hover { background-color:var(--surface) }
 .season-row .pos { font-size:15px; font-weight:700; color:var(--ink-3); text-align:right }
 .season-row[data-leader] .pos { color:var(--ink); font-weight:800 }
 .season-row .nm3 { display:flex; align-items:center; gap:10px; min-width:0 }
@@ -740,7 +751,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .gp-cols span:nth-child(4) { text-align:right }
 .gp-cols span:nth-child(3) { padding-left:13px }
 .gp-cal-row { display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center; padding:11px 6px; border-bottom:1px solid var(--hair); font-size:13.5px; cursor:pointer; border-radius:10px }
-.gp-cal-row:hover { background:var(--surface) }
+.gp-cal-row:hover { background-color:var(--surface) }
 .gp-rd { display:flex; align-items:center; gap:6px; font-weight:600; font-size:12.5px; color:var(--ink-3) }
 .chq { width:12px; height:12px; flex:0 0 auto }
 .gp-mo { font-weight:700 }

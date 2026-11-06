@@ -52,6 +52,11 @@ export function edgeStyle(row, side = 'left') {
   return { borderImage: `${stripes(colors, dir)} 1` };
 }
 
+/** The row's colour as a CSS variable, for a soft wash behind it (the main artist's). */
+export function washStyle(row) {
+  return { '--wash': artistColors(row)[0] };
+}
+
 /** Background for a colored fill (a bar or a strip segment), split the same way. */
 export function fillStyle(row, dir = 'to right') {
   const colors = artistColors(row);

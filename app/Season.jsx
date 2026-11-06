@@ -5,7 +5,7 @@ import { rowKey, normRowKey } from '@/lib/keys';
 import { artistColor, distinctColors } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { smoothPath } from '@/lib/curve';
-import { useCredits, artistLine, artistNames, fillStyle } from './useCredits';
+import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import { Section, Cover, Seg } from './ui';
@@ -49,10 +49,10 @@ function StandingsHead({ label }) {
  * shows the full sheet — counts, race-by-race record and records — the same
  * one the chart opens.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, fill, share, cover, round, onOpen }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, fill, wash, share, cover, round, onOpen }) {
   return (
     <li
-      className="season-row" data-leader={rank === 1 || undefined}
+      className="season-row wash" data-leader={rank === 1 || undefined} style={wash}
       role="button" tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
@@ -192,7 +192,7 @@ function RaceLeaders({ stints, days, live }) {
         {stints.map((st) => {
           const n = st.to - st.from + 1;
           return (
-            <li key={`${st.key}-${st.from}`}>
+            <li key={`${st.key}-${st.from}`} className="wash" style={washStyle(st)}>
               <span className="lead-days">
                 {st.from === st.to ? `${st.from}일` : `${st.from}–${st.to}일`}
               </span>
@@ -295,7 +295,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
       </div>
       <ol className="live-top">
         {top.map((t) => (
-          <li key={normRowKey(t)}>
+          <li key={normRowKey(t)} className="wash" style={washStyle(t)}>
             <span className="live-pos">{t.rank}</span>
             <span className="live-nm">
               <b>{t.track ?? t.artist}</b>
@@ -327,7 +327,7 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
         )}
         <ol className="proj-list">
           {rows.slice(0, 10).map((r) => (
-            <li key={r.key}>
+            <li key={r.key} className="wash" style={washStyle(r)}>
               <span className="proj-pos">{r.pos}</span>
               <Move from={r.prevPos} to={r.pos} />
               <span className="proj-nm">
@@ -770,7 +770,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                   name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
-                  fill={fillStyle(d)} share={d.points / (drivers[0].points || 1)}
+                  fill={fillStyle(d)} wash={washStyle(d)} share={d.points / (drivers[0].points || 1)}
                   cover={coverOf(driverCovers, mode, d)} round={mode === 'artists'}
                   onOpen={() => open(d)}
                 />
@@ -796,7 +796,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
                     pointsFinishes={c.pointsFinishes} finishes={c.finishes}
-                    fill={{ background: artistColor(c.artist) }}
+                    fill={{ background: artistColor(c.artist) }} wash={{ '--wash': artistColor(c.artist) }}
                     share={c.points / (constructors[0].points || 1)}
                     cover={coverOf(teamCovers, 'artists', c)} round
                     onOpen={() => open(c)}
@@ -826,7 +826,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
               return (
                 <Fragment key={key}>
                   <li
-                    className="gp-cal-row" role="button" tabIndex={0} aria-expanded={open}
+                    className="gp-cal-row wash" style={washStyle(winner)} role="button" tabIndex={0} aria-expanded={open}
                     onClick={toggle}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                   >

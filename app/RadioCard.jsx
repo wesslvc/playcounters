@@ -51,7 +51,7 @@ export function RadioCard({ it, covers, onOpen }) {
   const pic = (t) => coverOf(covers[isTrack(t) ? 'tracks' : 'artists'], isTrack(t) ? 'tracks' : 'artists', t);
   if (it.odds?.length) {
     return (
-      <button className="rr-card rr-odds" onClick={() => onOpen(it)}>
+      <button className="rr-card rr-odds wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-odds-list">
           {it.odds.map((o, i) => (
@@ -88,7 +88,7 @@ export function RadioCard({ it, covers, onOpen }) {
     const top = Math.max(a.p3 ?? 0, b.p3 ?? 0);
     const unit = d.unit ?? '회';
     return (
-      <button className="rr-card rr-duel" onClick={() => onOpen(it)}>
+      <button className="rr-card rr-duel wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-vs">
           <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
@@ -136,7 +136,7 @@ export function RadioCard({ it, covers, onOpen }) {
 
   const s = it.solo;
   return (
-    <button className="rr-card rr-solo" onClick={() => onOpen(it)} disabled={!pics.length}>
+    <button className="rr-card rr-solo wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)} disabled={!pics.length}>
       <span className={`rr-pics n${pics.length}`} aria-hidden="true">
         {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 52 : 72} round={!isTrack(t)} />)}
       </span>

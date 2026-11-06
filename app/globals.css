@@ -679,13 +679,13 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 /* the name run over with a highlighter in its artist's colour: the lower
    part of the line only, a little past the letters at each end */
 .wash, .hl {
-  --hl:linear-gradient(transparent 42%, color-mix(in oklab, var(--wash) 32%, transparent) 42%, color-mix(in oklab, var(--wash) 28%, transparent) 94%, transparent 94%);
+  --hl:linear-gradient(transparent 40%, color-mix(in oklab, var(--wash) 50%, transparent) 40%, color-mix(in oklab, var(--wash) 44%, transparent) 95%, transparent 95%);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.wash, .hl) {
-  --hl:linear-gradient(transparent 40%, color-mix(in oklab, var(--wash) 38%, transparent) 40%, color-mix(in oklab, var(--wash) 32%, transparent) 95%, transparent 95%);
+  --hl:linear-gradient(transparent 38%, color-mix(in oklab, var(--wash) 58%, transparent) 38%, color-mix(in oklab, var(--wash) 50%, transparent) 96%, transparent 96%);
 } }
 :root[data-theme="dark"] :is(.wash, .hl) {
-  --hl:linear-gradient(transparent 40%, color-mix(in oklab, var(--wash) 38%, transparent) 40%, color-mix(in oklab, var(--wash) 32%, transparent) 95%, transparent 95%);
+  --hl:linear-gradient(transparent 38%, color-mix(in oklab, var(--wash) 58%, transparent) 38%, color-mix(in oklab, var(--wash) 50%, transparent) 96%, transparent 96%);
 }
 .season-row.wash .nm3 b, .live-top li.wash .live-nm b, .proj-list li.wash .proj-nm b, .lead-list li.wash .lead-nm b, .gp-cal-row.wash .gp-nm b {
   display:inline-block; max-width:calc(100% + 4px); vertical-align:top; margin-left:-4px; padding:0 4px; border-radius:3px 6px 4px 7px;

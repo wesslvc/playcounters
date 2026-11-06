@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
-import { artistColor, distinctColors } from '@/lib/genre';
+import { artistColor, repeats, swatch, DASHES } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './useCredits';
@@ -468,7 +468,7 @@ function SeasonChart({ labels, series, view }) {
           </>
         )}
         {[...lines].reverse().map((s) => s.segs.map((seg, k) => (
-          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color}
+          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color} strokeDasharray={DASHES[s.dash] ?? undefined}
                     strokeWidth={s === lines[0] ? 3 : 2.25} strokeLinejoin="round" strokeLinecap="round"
                     opacity={pick && pick.key !== s.key ? 0.25 : 1} />
         )))}
@@ -688,11 +688,11 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
   // Colored here rather than when the series were built, so a line moves
   // into its genre's band as soon as the genre arrives.
-  // each line its artist's colour — but two songs by one artist can't share one, so the second takes a free one
+  // each line in its artist's own colour; an artist's second song is dashed, a third dotted
   const activeSeries = (() => {
     const list = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
-    const colors = distinctColors(list.map((sr) => sr.artist));
-    return list.map((sr, i) => ({ ...sr, color: colors[i] }));
+    const dash = repeats(list.map((sr) => sr.artist));
+    return list.map((sr, i) => ({ ...sr, color: artistColor(sr.artist), dash: dash[i] }));
   })();
 
   return (
@@ -754,7 +754,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
             <ol className="chart-key">
               {activeSeries.map((s, i) => (
-                <li key={s.key} data-lead={i === 0 || undefined}><i style={{ background: s.color }} />{s.label}</li>
+                <li key={s.key} data-lead={i === 0 || undefined}><i style={swatch(s.color, s.dash)} />{s.label}</li>
               ))}
             </ol>
           </div>

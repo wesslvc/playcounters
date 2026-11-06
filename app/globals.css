@@ -929,6 +929,26 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .radio-groups .chip { height:32px; gap:6px }
 .radio-groups .chip small { font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums }
 .radio-groups .chip[aria-pressed="true"] small { color:inherit; opacity:.7 }
+.radio-sub span { color:var(--ink-3) }
+/* the channel's biggest story, lit by its cover like the leader cards */
+.radio-hero {
+  position:relative; overflow:hidden; isolation:isolate; display:flex; flex-direction:column; gap:10px; width:100%; margin-top:22px;
+  padding:22px; border-radius:24px; text-align:left; color:#fff;
+  background:linear-gradient(150deg, var(--team), color-mix(in oklab, var(--team) 45%, #0b0b0c));
+  box-shadow:0 18px 40px -22px color-mix(in oklab, var(--team) 70%, #000); transition:transform .2s ease;
+}
+.radio-hero:hover { transform:translateY(-2px) }
+.radio-hero::after { content:''; position:absolute; inset:0; z-index:-1;
+  background:linear-gradient(170deg, rgba(0,0,0,.05) 0%, rgba(0,0,0,.35) 55%, rgba(0,0,0,.66) 100%) }
+.radio-hero-tag { font-size:12px; font-weight:700; letter-spacing:.06em; color:rgba(255,255,255,.75) }
+.radio-hero-text { font-size:24px; font-weight:800; line-height:1.3; letter-spacing:-.035em; word-break:keep-all; overflow-wrap:anywhere }
+.radio-hero-foot { display:flex; align-items:center; gap:14px; margin-top:8px; padding-top:16px; border-top:1px solid rgba(255,255,255,.16) }
+.radio-hero-foot .cover { box-shadow:0 10px 24px -8px rgba(0,0,0,.55) }
+.radio-hero-detail { flex:1 1 auto; min-width:0; font-size:13px; line-height:1.45; color:rgba(255,255,255,.78); word-break:keep-all }
+.radio-hero-stat { display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap }
+.radio-hero-stat b { font-size:34px; font-weight:800; letter-spacing:-.045em; line-height:1 }
+.radio-hero-stat small { margin-top:4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:rgba(255,255,255,.7) }
+@media (max-width:560px) { .radio-hero-text { font-size:20px } .radio-hero-stat b { font-size:28px } }
 .radio-sec { margin-top:30px }
 .radio-sec h2 { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:18px; font-weight:750; letter-spacing:-.03em }
 .radio-sec h2 span { font-size:13px; font-weight:600; color:var(--ink-3) }

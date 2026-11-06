@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useCovers } from './useCovers';
+import { useCovers, coverOf } from './useCovers';
 import { RadioCard, GROUPS } from './RadioCard';
+import { Cover } from './ui';
+import { artistColor } from '@/lib/genre';
 
 const DAY = 864e5;
 const KST = 9 * 3600e3;
@@ -21,6 +23,34 @@ function channels(pin) {
   ];
   if (pin) list.push({ key: 'pin', label: `${pin.month}월 GP 다시보기`, sub: `${pin.year}년 ${pin.month}월 레이스`, q: { view: 'gp', year: pin.year, month: pin.month } });
   return list;
+}
+
+/** "방금", "12분 전", "3시간 전". */
+function ago(iso) {
+  const m = Math.floor((Date.now() - Date.parse(iso)) / 60e3);
+  if (!(m >= 1)) return '방금';
+  return m < 60 ? `${m}분 전` : `${Math.floor(m / 60)}시간 전`;
+}
+
+/** The channel's biggest story, large, lit by its own cover like the leader cards. */
+function Headline({ it, covers, onOpen }) {
+  const t = it.targets?.[0];
+  const kind = isTrack(t) ? 'tracks' : 'artists';
+  const pic = t ? coverOf(covers[kind], kind, t) : null;
+  return (
+    <button className="radio-hero" style={{ '--team': artistColor(t?.artist) }} onClick={() => onOpen(it)}>
+      {pic && <span className="leader-bg" aria-hidden="true" style={{ backgroundImage: `url(${pic})` }} />}
+      <span className="radio-hero-tag">{it.title}</span>
+      <span className="radio-hero-text">{it.text}</span>
+      <span className="radio-hero-foot">
+        <Cover src={pic} size={56} round={kind === 'artists'} />
+        <span className="radio-hero-detail">{it.detail}</span>
+        {it.stat && (
+          <span className="radio-hero-stat"><b>{it.stat.value}</b>{it.stat.unit && <small>{it.stat.unit}</small>}</span>
+        )}
+      </span>
+    </button>
+  );
 }
 
 /**
@@ -56,13 +86,19 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
   useEffect(() => { setGroup('all'); }, [chan]);
 
   const got = data[qs];
-  const items = useMemo(() => got?.items ?? [], [got]);
-  const targets = useMemo(() => items.flatMap((x) => x.targets ?? []), [items]);
+  // on a Grand Prix's own channel its name on every tag says nothing new
+  const all = useMemo(() => (got?.items ?? []).map((x) => (ch.q.view === 'gp'
+    ? { ...x, title: x.title.replace(/^\d+월 GP · /, '') } : x)), [got, ch]);
+  // the biggest story leads, large; the rest follow by kind
+  const lead = group === 'all' ? all[0] : null;
+  const items = useMemo(() => all.slice(1), [all]);
+  const targets = useMemo(() => all.flatMap((x) => x.targets ?? []), [all]);
   const covers = {
     tracks: useCovers('tracks', useMemo(() => targets.filter(isTrack), [targets])),
     artists: useCovers('artists', useMemo(() => targets.filter((t) => !isTrack(t)), [targets])),
   };
-  const present = GROUPS.filter(([g]) => g !== 'all' && items.some((x) => x.group === g));
+  const present = GROUPS.filter(([g]) => g !== 'all' && all.some((x) => x.group === g));
+  const inGroup = (g) => (group === 'all' ? items : all).filter((x) => x.group === g);
   const sections = present.filter(([g]) => group === 'all' || g === group);
   const open = (it) => { if (it.targets?.[0]) onSelect(it.targets[0]); };
 
@@ -70,7 +106,7 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
     <div className="radio">
       <div className="radio-head">
         <h1>라디오</h1>
-        <p className="radio-sub">순위표 뒤에서 벌어지는 추격, 추월, 확률과 기록</p>
+        <p className="radio-sub">순위표 뒤에서 벌어지는 추격, 추월, 확률과 기록{got?.at && <span> · {ago(got.at)} 기준</span>}</p>
       </div>
 
       <div className="radio-chans" role="tablist" aria-label="채널">
@@ -86,7 +122,7 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
         <div className="radio-groups">
           {[['all', '전체'], ...present].map(([g, l]) => (
             <button key={g} className="chip" aria-pressed={group === g} onClick={() => setGroup(g)}>
-              {l}{g !== 'all' && <small>{items.filter((x) => x.group === g).length}</small>}
+              {l}{g !== 'all' && <small>{all.filter((x) => x.group === g).length}</small>}
             </button>
           ))}
         </div>
@@ -98,19 +134,22 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
         </div>
       ) : got.error ? (
         <p className="err">{got.error}</p>
-      ) : !items.length ? (
+      ) : !all.length ? (
         <p className="radio-none">지금은 조용해요. 눈에 띄는 경쟁이나 변동이 없어요.</p>
       ) : (
-        sections.map(([g, label]) => (
-          <section key={g} className="radio-sec">
-            <h2>{label}<span>{items.filter((x) => x.group === g).length}</span></h2>
-            <div className="radio-grid">
-              {items.filter((x) => x.group === g).map((it, i) => (
-                <RadioCard key={`${g}-${i}`} it={it} covers={covers} onOpen={open} />
-              ))}
-            </div>
-          </section>
-        ))
+        <>
+          {lead && <Headline it={lead} covers={covers} onOpen={open} />}
+          {sections.filter(([g]) => inGroup(g).length).map(([g, label]) => (
+            <section key={g} className="radio-sec">
+              <h2>{label}<span>{inGroup(g).length}</span></h2>
+              <div className="radio-grid">
+                {inGroup(g).map((it, i) => (
+                  <RadioCard key={`${g}-${i}`} it={it} covers={covers} onOpen={open} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
       )}
     </div>
   );

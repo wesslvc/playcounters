@@ -3,7 +3,6 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
-import { ask } from '@/lib/openai';
 import {
   keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span,
   paceModel, expectIn, poisson, gauss,
@@ -305,134 +304,6 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
   return { drivers: dWon, teams: tWon, driverPace: dGot, teamPace: tGot };
 }
 
-const ASTRA = () => process.env.OPENAI_MODEL_ASTRA || 'gpt-6-astra';
-const TITLE_RULES = '너는 음악 감상 기록으로 치르는 F1식 시즌의 분석가다. 아래는 이 사람의 올해 기록 전부다. '
-  + '매달 재생 횟수로 순위를 매기고 1~10위에 25-18-15-12-10-8-6-4-2-1점을 준다. '
-  + '컨스트럭터는 곡에 크레딧된 아티스트들이 그 곡의 점수를 나눠 갖는다. '
-  + '남은 라운드 동안의 흐름을 스스로 판단해서 컨스트럭터 타이틀을 누가 가져갈지 확률로 답하라. '
-  + '기존 강세의 지속, 하락 조짐, 신곡·앨범의 등장 가능성 등 무엇을 어떻게 볼지는 네가 정한다. '
-  + 'reasoning은 한국어 두 문장 이내, 핵심 근거만.';
-const titleSchema = (teams, extra = {}) => ({
-  type: 'object', additionalProperties: false, required: ['odds', 'reasoning', ...Object.keys(extra)],
-  properties: {
-    odds: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false, required: ['team', 'pct'],
-        properties: { team: { type: 'string', enum: teams }, pct: { type: 'number' } },
-      },
-    },
-    reasoning: { type: 'string' },
-    ...extra,
-  },
-});
-// list price per million tokens, in and out
-const PRICE = { astra: [10, 50], terra: [2.5, 10] };
-const costOf = (u, [pin, pout]) => ({
-  input: u?.input_tokens ?? null,
-  output: u?.output_tokens ?? null,
-  reasoning: u?.output_tokens_details?.reasoning_tokens ?? null,
-  tier: u?.tier ?? null,
-  // Flex is billed at Batch rates, half the list price
-  usd: Math.round((((u?.input_tokens ?? 0) * pin + (u?.output_tokens ?? 0) * pout) / 1e6) * (u?.tier === 'flex' ? 0.5 : 1) * 1000) / 1000,
-});
-const cleanOdds = (odds, teams) => (odds ?? []).filter((o) => teams.includes(o.team)).sort((a, b) => b.pct - a.pct);
-
-/**
- * The constructors' title, judged from the season's raw records alone —
- * every month's top ten with counts and credited artists, this month so far,
- * the standings, each song's recent counts and first play, and the rules.
- * None of this radio's own modelling goes with it.
- *
- * Astra's verdict is the one shown. Terra looks each day, handed that
- * verdict, and says whether things have really moved; its own odds are shown
- * only when they have and Astra can't be asked again this month. Astra is asked when there's no
- * verdict of its own yet, when Terra says the picture has shifted, or when
- * Terra can't call a close race and Astra's word
- * is more than a week old — and never more than four times a month. The
- * day's call is kept in radio_notes; null when there's no key or no answer.
- */
-const judging = new Map();
-function judgeTitle(key, input) {
-  // one judgement at a time, however many views ask at once
-  if (!judging.has(key)) judging.set(key, judge(key, input).finally(() => judging.delete(key)));
-  return judging.get(key);
-}
-
-async function judge(key, input) {
-  if (!process.env.OPENAI_API_KEY) return null;
-  const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
-  const month = today.slice(0, 7);
-  const { data: kept } = await db.from('radio_notes').select('body, created_at').eq('key', key).maybeSingle();
-  const prev = kept?.body ?? {};
-  if (prev.date === today && prev.current) return prev.current;
-  if (prev.pending && Date.now() - Date.parse(kept.created_at) < 90e3) return prev.current ?? null;
-  await db.from('radio_notes').upsert({ key, body: { ...prev, pending: true }, created_at: new Date().toISOString() });
-
-  const teams = input.standings.map((t) => t.team);
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 50000);
-  const save = (body) => db.from('radio_notes').upsert({ key, body: { ...body, pending: false }, created_at: new Date().toISOString() });
-  try {
-    const astraPrev = prev.astra ?? null;
-    let terra = null;
-    try {
-      const t = await ask(
-        TERRA(),
-        `${TITLE_RULES} 직전에 더 신중한 분석가(Astra)가 내린 판단이 있으면 그것을 기본으로 따르되, `
-          + '그 뒤로 판세를 바꿀 만한 변화가 있었으면 shifted를 true로, 접전이거나 판단이 서지 않으면 confident를 false로 하라.',
-        { ...input, astraVerdict: astraPrev ? { date: astraPrev.date, odds: astraPrev.odds, reasoning: astraPrev.reasoning } : null },
-        titleSchema(teams, { confident: { type: 'boolean' }, shifted: { type: 'boolean' } }),
-        ctl.signal,
-        'medium',
-        'flex',
-      );
-      terra = { odds: cleanOdds(t.odds, teams), reasoning: String(t.reasoning ?? '').trim(), confident: t.confident, shifted: t.shifted, date: today, model: TERRA(), usage: costOf(t.usage, PRICE.terra) };
-      if (!terra.odds.length) terra = null;
-    } catch (e) {
-      console.error('radio title terra failed', e.message);
-    }
-
-    // when to go up to Astra
-    const calls = (prev.astraCalls ?? []).filter((d) => d.startsWith(month));
-    const stale = !astraPrev || (Date.now() - Date.parse(astraPrev.date)) / DAY > 7;
-    const close = terra && terra.odds.length > 1 && terra.odds[0].pct - terra.odds[1].pct < 10;
-    const why = !astraPrev ? 'Astra 판단 없음'
-      : !terra ? (stale ? 'Terra 응답 없음' : null)
-        : terra.shifted ? 'Terra가 판세 변화 감지'
-          : (!terra.confident || close) && stale ? '접전이라 Terra 판단 보류'
-            : null;
-    let astra = astraPrev;
-    if (why && calls.length < 4) {
-      try {
-        const a = await ask(ASTRA(), TITLE_RULES, input, titleSchema(teams), ctl.signal, 'medium', 'flex');
-        const odds = cleanOdds(a.odds, teams);
-        if (odds.length) {
-          astra = { odds, reasoning: String(a.reasoning ?? '').trim(), date: today, model: ASTRA(), why, usage: costOf(a.usage, PRICE.astra) };
-          calls.push(today);
-          console.log(`radio title astra · ${why} · ${astra.usage.tier ?? 'standard'} · in ${astra.usage.input} / out ${astra.usage.output} tokens · ≈$${astra.usage.usd} · ${calls.length}/4 this month`);
-        }
-      } catch (e) {
-        console.error('radio title astra failed', e.message);
-      }
-    }
-    const fresh = astra && astra.date === today;
-    // Astra's word stands until Terra sees the picture move and Astra can't be asked again
-    const current = astra && (fresh || !terra?.shifted) ? { ...astra, by: 'astra', checked: terra ? today : null }
-      : terra ? { ...terra, by: 'terra' }
-        : null;
-    if (terra) console.log(`radio title terra · ${terra.usage.tier ?? 'standard'} · confident ${terra.confident} · shifted ${terra.shifted} · ≈$${terra.usage.usd}${fresh ? ' · escalated' : ''}`);
-    await save({ date: today, current, terra, astra, astraCalls: [...(prev.astraCalls ?? []).filter((d) => !d.startsWith(month)), ...calls] });
-    return current;
-  } catch (e) {
-    console.error('radio title failed', e.message);
-    await save({ ...prev, date: null });
-    return prev.current ?? null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
  * How each one's chance has moved since an earlier day: a day's odds are
  * kept (the last of the day wins), and today's are compared with the latest
@@ -550,7 +421,6 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
 
   // the rest of the season played out song by song, once for both championships
   let sim = null;
-  let raw = null; // the same records, kept for the one question put to Astra
   if (isNow && ifNow.length >= 2 && 12 - lastM > 0) {
     const now = Date.now();
     const since = now - 60 * DAY;
@@ -577,7 +447,6 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     // each finished month's brand-new arrivals in the top ten (first played
     // within six weeks of it), grouped by artist, with their counts
     const debut = await firstPlays(userId, mode, src, estimate);
-    raw = { recent, pace, debut, credits };
     const doneRowsAll = (data ?? []).filter((r) => !(r.yr === y && r.mo === lastM));
     const drops = [];
     const seen = new Set();
@@ -876,45 +745,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
         ({ odds: chances, form } = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed()));
       }
-      let odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
-      // this one question goes to Astra, with the records and nothing of ours
-      let astra = null;
-      if (raw) {
-        const day = (ms) => new Date(ms + KST).toISOString().slice(0, 10);
-        const names = (r) => creditList(r, raw.credits).map((c) => c.name);
-        const kst = new Date(Date.now() + KST);
-        const before = new Map(cDone.map((c) => [c.artist_key, c.pts]));
-        const input = {
-          season: y,
-          today: day(Date.now()),
-          // the month under way still has its points to pay out, so it counts as a round to play
-          roundsToPlay: 12 - lastM + 1,
-          roundsToPlayNote: `이번 달(${lastM}월, 진행 중)을 포함해 ${lastM}월~12월 ${12 - lastM + 1}라운드가 남음. 이번 달 기록은 잠정치.`,
-          currentMonth: { month: lastM, day: kst.getUTCDate(), daysInMonth: new Date(Date.UTC(y, lastM, 0)).getUTCDate(), inProgress: true },
-          months: [...new Set((data ?? []).map((r) => r.mo))].sort((a, b) => a - b).map((mo) => ({
-            month: mo,
-            provisional: mo === lastM,
-            top10: (data ?? []).filter((r) => r.mo === mo).sort((a, b) => a.place - b.place)
-              .map((r) => ({ place: r.place, song: r.track ?? r.artist, artists: names(r), plays: Number(r.plays) })),
-          })),
-          // confirmed points from finished rounds, and with this month as it stands so far
-          standings: field.map((c) => ({ team: c.artist, confirmedPoints: before.get(c.artist_key) ?? 0, withThisMonthSoFar: c.pts })),
-          recentSongs: raw.recent.slice(0, 40).map((r) => ({
-            song: r.track ?? r.artist,
-            artists: names(r),
-            last3d: Math.round((raw.pace.p3.get(keyOf(r)) ?? 0) * 3),
-            last7d: Math.round((raw.pace.p7.get(keyOf(r)) ?? 0) * 7),
-            last30d: Math.round((raw.pace.p30.get(keyOf(r)) ?? 0) * 30),
-            firstPlayed: raw.debut.get(keyOf(r)) ? day(raw.debut.get(keyOf(r))) : null,
-          })),
-        };
-        // v2: the rounds left now count the month under way (v1 told Astra one round was left in November)
-        astra = await judgeTitle(`cx-title-v2|${userId}|${y}|${src}|${estimate}`, input);
-        if (astra) {
-          const byName = new Map(field.map((c) => [c.artist, c]));
-          odds = astra.odds.slice(0, 3).map((o) => ({ c: byName.get(o.team), p: o.pct / 100 })).filter((o) => o.c);
-        }
-      }
+      const odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
       // who could still catch the leader, and what it would take
       events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
       // since an earlier day: who has gained, who has lost
@@ -926,9 +757,7 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
         kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
         text: oddsLine(odds[0].c.artist, odds[0].p, odds[1]?.c.artist, odds[1]?.p)
           + (biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''),
-        detail: (astra
-          ? `${astra.reasoning} ${Number(astra.date.slice(5, 7))}월 ${Number(astra.date.slice(8))}일 기준`
-          : `이번 달 포함 ${12 - lastM + 1}라운드 남음${sim?.history ? ` · ${sim.history}` : ''}`)
+        detail: `이번 달 포함 ${12 - lastM + 1}라운드 남음${sim?.history ? ` · ${sim.history}` : ''}`
           + (since ? ` · 화살표는 ${Number(since.slice(5, 7))}월 ${Number(since.slice(8))}일 대비` : ''),
         stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
         odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts, move: moves.get(c.artist_key) ?? null })),
@@ -1494,8 +1323,6 @@ async function milestoneContext(userId, { src, estimate }) {
     ...milestoneEvents(artists, artistsThen, aPace, [1000, 1500, 2000, 3000], { label: (m) => (m === 1000 ? '1000 Club' : `${m}회`) }),
   ];
 }
-
-const TERRA = () => process.env.OPENAI_MODEL || 'gpt-6.1-terra';
 
 /**
  * GET /api/radio?view=chart|season|replay|records&...

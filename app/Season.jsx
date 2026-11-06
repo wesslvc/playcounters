@@ -14,12 +14,7 @@ import { Section, Cover, Seg } from './ui';
     grid without the page opening on a scroll of forty names. */
 const STANDINGS_PAGE = 10;
 
-const CHART_W = 720;
-const CHART_H = 220;
-const CHART_PAD = { l: 56, r: 64, t: 14, b: 22 };
-/** The position chart's scale never needs to go past P10 — only the ten
-    point-scoring finishes are tracked at all, so there is no lower rank to
-    plot even if the field itself is bigger. */
+/** The position chart shows at least P1–P10, further down when a line goes there. */
 const MAX_POS = 10;
 
 const moLabel = (m, allTime) =>
@@ -247,17 +242,18 @@ function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round
   return (
     <button className="leader" style={{ '--team': color }} onClick={onOpen}>
       {cover && <span className="leader-bg" aria-hidden="true" style={{ backgroundImage: `url(${cover})` }} />}
-      <Cover src={cover} size={64} round={round} className="leader-cover" />
-      <span className="leader-tag">{tag}</span>
-      <span className="leader-wins" aria-label={`${wins}승`}>
-        <b>{wins}</b>
-        <small>{wins === 1 ? 'WIN' : 'WINS'}</small>
+      <span className="leader-id">
+        <Cover src={cover} size={84} round={round} className="leader-cover" />
+        <span className="leader-text">
+          <span className="leader-tag">{tag}</span>
+          <b className="leader-name">{name}</b>
+          {sub && <span className="leader-sub">{sub}</span>}
+        </span>
       </span>
-      <b className="leader-name">{name}</b>
-      <span className="leader-sub">{sub || '\u00a0'}</span>
-      <span className="leader-pts">
-        {points.toLocaleString()}<small>PTS</small>
-        <em>포디움 {podiums}</em>
+      <span className="leader-stats">
+        <span><b>{points.toLocaleString()}</b><small>PTS</small></span>
+        <span><b>{wins}</b><small>{wins === 1 ? 'WIN' : 'WINS'}</small></span>
+        <span><b>{podiums}</b><small>PODIUMS</small></span>
       </span>
     </button>
   );
@@ -390,149 +386,108 @@ function projectStandings(current, liveTop, keyOf, entriesOf) {
 }
 
 /**
- * The season's own trend chart — how the leaders actually got to their
- * totals, race by race, in one of two readings:
- *
- * "points" is the running total, same idea as the dashboard's own play-count
- * trend — a flat stretch is a month a driver didn't score in, not a month
- * with no data.
- *
- * "position" is the F1 broadcast's own chart: each driver's actual finishing
- * position, race by race, plotted on an inverted scale so P1 sits at the
- * top. A driver who didn't finish in the points that month has no position
- * to plot — the line breaks there rather than interpolating a rank that was
- * never earned, the same way a real standings tracker leaves a gap for a
- * round a driver sat out.
+ * The season as F1 graphics draw it: one line per car, a dot for every
+ * round. 포인트 plots the running total; 순위 plots where each stood in the
+ * championship after that round, P1 at the top. Tap or hover a dot for that
+ * round: the standing, the total, and how the race itself went. Drawn at the
+ * width it's shown at, so the dots stay round.
  */
 function SeasonChart({ labels, series, view }) {
-  const [hover, setHover] = useState(null);
+  const [pick, setPick] = useState(null); // { key, i }
+  const box = useRef(null);
+  const [W, setW] = useState(680);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(260, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const ident = `${view}|${series.map((sr) => sr.key).join(',')}`;
+  useEffect(() => { setPick(null); }, [ident]);
+
   const n = labels.length;
+  const H = Math.round(Math.min(300, Math.max(220, W * 0.5)));
+  const P = { l: 34, r: 14, t: 16, b: 28 };
+  const x = (i) => P.l + (n <= 1 ? 0 : (i / (n - 1)) * (W - P.l - P.r));
+  const points = view === 'points';
+  const val = (p) => (points ? p.cum : p.pos);
+  const peak = points
+    ? Math.max(1, ...series.map((s) => s.pts[n - 1]?.cum ?? 0))
+    : Math.max(MAX_POS, ...series.flatMap((s) => s.pts.map((p) => p.pos ?? 0)));
+  const y = points
+    ? (v) => P.t + (1 - v / peak) * (H - P.t - P.b)
+    : (v) => P.t + ((v - 1) / (peak - 1)) * (H - P.t - P.b);
+  // every place has its line, F1-graphic style; a long field marks every fifth
+  const ticks = points ? [0, Math.round(peak / 2), peak]
+    : Array.from({ length: peak }, (_, k) => k + 1).filter((t) => peak <= 12 || t === 1 || t % 5 === 0);
+  const xTicks = n <= 7 ? labels.map((_, i) => i) : [0, Math.floor((n - 1) / 3), Math.floor((2 * (n - 1)) / 3), n - 1];
 
-  const innerW = CHART_W - CHART_PAD.l - CHART_PAD.r;
-  const innerH = CHART_H - CHART_PAD.t - CHART_PAD.b;
-  const x = (i) => CHART_PAD.l + (n <= 1 ? 0 : (i / (n - 1)) * innerW);
-
-  const peak = view === 'points'
-    ? Math.max(1, ...series.map((s) => s.pts[s.pts.length - 1].cum))
-    : MAX_POS;
-  const y = view === 'points'
-    ? (v) => CHART_PAD.t + (1 - v / peak) * innerH
-    : (rank) => CHART_PAD.t + ((rank - 1) / (MAX_POS - 1)) * innerH;
-
+  // straight segments between rounds, the way a standings graphic joins them
   const lines = series.map((s) => {
-    if (view === 'points') {
-      const d = smoothPath(s.pts.map((p, i) => [x(i), y(p.cum)]));
-      return { ...s, segs: [d], ex: x(n - 1), ey: y(s.pts[n - 1].cum) };
-    }
     const segs = [];
     let cur = [];
-    let lastIdx = -1, lastRank = null;
     s.pts.forEach((p, i) => {
-      if (p.rank == null) {
-        if (cur.length) { segs.push(smoothPath(cur)); cur = []; }
-        return;
-      }
-      cur.push([x(i), y(p.rank)]);
-      lastIdx = i; lastRank = p.rank;
+      if (val(p) == null) { if (cur.length) segs.push(cur); cur = []; return; }
+      cur.push([x(i), y(val(p))]);
     });
-    if (cur.length) segs.push(smoothPath(cur));
-    return { ...s, segs, ex: lastIdx >= 0 ? x(lastIdx) : null, ey: lastRank != null ? y(lastRank) : null };
+    if (cur.length) segs.push(cur);
+    return { ...s, segs };
   });
+  const lead = points ? lines[0] : null;
+  const leadPath = lead?.segs[0]?.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
 
-  const yTicks = view === 'points'
-    ? [0, Math.round(peak / 2), peak]
-    : [1, 5, 10];
-  const xTicks = n <= 6 ? labels.map((l, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
-  const binW = innerW / n;
-
-  // the final figure at each line's end, nudged apart so none sit on another
-  const ends = lines.filter((s) => s.ex != null && (view === 'points' || s.pts[n - 1]?.rank != null))
-    .map((s) => ({ key: s.key, color: s.color, y: s.ey, v: view === 'points' ? s.pts[n - 1].cum : `P${s.pts.findLast((p) => p.rank != null)?.rank}` }))
-    .sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 17);
-  const lead = view === 'points' ? lines[0] : null;
-  const area = lead && `${lead.segs[0]} L ${x(n - 1)} ${CHART_H - CHART_PAD.b} L ${x(0)} ${CHART_H - CHART_PAD.b} Z`;
-
-  const tipSide = hover == null ? 'mid' : hover / (n - 1 || 1) < 0.25 ? 'start' : hover / (n - 1 || 1) > 0.75 ? 'end' : 'mid';
+  const picked = pick && lines.find((s) => s.key === pick.key);
+  const pp = picked?.pts[pick.i];
 
   return (
-    <div className="chart-wrap">
-      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" className="chart-svg" role="img"
-           aria-label={view === 'points' ? '누적 포인트 추이' : '레이스별 순위 추이'}
-           onMouseLeave={() => setHover(null)}>
-        {yTicks.map((t) => (
+    <div className="chart-wrap" ref={box}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="chart-svg" role="img"
+           aria-label={points ? '누적 포인트 추이' : '챔피언십 순위 추이'} onClick={(e) => { if (e.target === e.currentTarget) setPick(null); }}>
+        {ticks.map((t) => (
           <g key={t}>
-            <line x1={CHART_PAD.l} x2={CHART_W - CHART_PAD.r} y1={y(t)} y2={y(t)}
-                  className="chart-grid" vectorEffect="non-scaling-stroke" />
+            <line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} className="chart-grid" />
+            <text x={P.l - 8} y={y(t)} className="chart-ytext" textAnchor="end" dominantBaseline="middle">
+              {points ? t.toLocaleString() : `P${t}`}
+            </text>
           </g>
         ))}
-        {area && (
+        {xTicks.map((i) => (
+          <text key={i} x={x(i)} y={H - 8} className="chart-ytext" textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{labels[i]}</text>
+        ))}
+        {pick && <line x1={x(pick.i)} x2={x(pick.i)} y1={P.t} y2={H - P.b} className="chart-hover-line" />}
+        {leadPath && (
           <>
             <defs>
               <linearGradient id="sc-lead" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0" stopColor={lead.color} stopOpacity=".32" />
+                <stop offset="0" stopColor={lead.color} stopOpacity=".26" />
                 <stop offset="1" stopColor={lead.color} stopOpacity="0" />
               </linearGradient>
             </defs>
-            <path d={area} fill="url(#sc-lead)" />
+            <path d={`${leadPath} L${lead.segs[0].at(-1)[0]},${H - P.b} L${lead.segs[0][0][0]},${H - P.b} Z`} fill="url(#sc-lead)" />
           </>
         )}
-        {hover != null && (
-          <line x1={x(hover)} x2={x(hover)} y1={CHART_PAD.t} y2={CHART_H - CHART_PAD.b}
-                className="chart-hover-line" vectorEffect="non-scaling-stroke" />
-        )}
-        {[...lines].reverse().map((s, ri) => s.segs.map((d, si) => (
-          <path key={`${s.key}-${si}`} d={d} fill="none" stroke={s.color}
-                strokeWidth={ri === lines.length - 1 ? 3.5 : 2.5} strokeLinejoin="round" strokeLinecap="round"
-                vectorEffect="non-scaling-stroke" opacity={hover == null || s.pts[hover]?.[view === 'points' ? 'cum' : 'rank'] != null ? 1 : .35} />
+        {[...lines].reverse().map((s) => s.segs.map((seg, k) => (
+          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color}
+                    strokeWidth={s === lines[0] ? 3 : 2.25} strokeLinejoin="round" strokeLinecap="round"
+                    opacity={pick && pick.key !== s.key ? 0.25 : 1} />
         )))}
-        {hover != null && lines.map((s) => {
-          const p = s.pts[hover];
-          const v = view === 'points' ? p.cum : p.rank;
-          if (v == null) return null;
-          return (
-            <circle key={`h-${s.key}`} cx={x(hover)} cy={y(v)} r="3.5"
-                    fill={s.color} stroke="var(--paper)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          );
-        })}
-        {labels.map((_, i) => (
-          <rect key={`hit-${i}`} x={CHART_PAD.l + i * binW} y="0" width={binW} height={CHART_H}
-                fill="transparent" onMouseEnter={() => setHover(i)} />
-        ))}
+        {[...lines].reverse().map((s) => s.pts.map((p, i) => (val(p) == null ? null : (
+          <circle key={`${s.key}-d${i}`} cx={x(i)} cy={y(val(p))} r={pick?.key === s.key && pick.i === i ? 6 : 3.75}
+                  fill={pick?.key === s.key && pick.i === i ? s.color : 'var(--surface)'} stroke={s.color} strokeWidth="2"
+                  opacity={pick && pick.key !== s.key ? 0.25 : 1} className="chart-dot"
+                  onMouseEnter={() => setPick({ key: s.key, i })} onClick={() => setPick({ key: s.key, i })} />
+        ))))}
       </svg>
 
-      <div className="chart-y" aria-hidden="true" style={{ width: `calc(${(CHART_PAD.l / CHART_W) * 100}% - 6px)` }}>
-        {yTicks.map((t) => (
-          <span key={t} style={{ top: `${(y(t) / CHART_H) * 100}%` }}>{view === 'points' ? t.toLocaleString() : `P${t}`}</span>
-        ))}
-      </div>
-      <div className="chart-ends" aria-hidden="true" style={{ left: `calc(${((CHART_W - CHART_PAD.r) / CHART_W) * 100}% + 4px)` }}>
-        {ends.map((e) => (
-          <span key={e.key} style={{ top: `${(e.y / CHART_H) * 100}%`, background: e.color }}>{typeof e.v === 'number' ? e.v.toLocaleString() : e.v}</span>
-        ))}
-      </div>
-
-      <div className="chart-x" style={{ paddingLeft: `calc(${(CHART_PAD.l / CHART_W) * 100}% - 8px)`, paddingRight: `calc(${(CHART_PAD.r / CHART_W) * 100}% - 8px)` }}>
-        {xTicks.map((i) => <span key={i}>{labels[i]}</span>)}
-      </div>
-
-      {hover != null && (
-        <div className={`chart-tip tip-${tipSide}`} style={{ left: `${(x(hover) / CHART_W) * 100}%` }}>
-          <b>{labels[hover]}</b>
+      {pp && (
+        <div className={`chart-tip sc-tip${x(pick.i) / W < 0.3 ? ' tip-start' : x(pick.i) / W > 0.7 ? ' tip-end' : ''}`}
+             style={{ left: `${x(pick.i)}px`, top: `${Math.max(0, y(val(pp)) - 12)}px` }}>
+          <b>{labels[pick.i]} GP</b>
+          <strong style={{ color: picked.color }}>{picked.label}</strong>
           <ul>
-            {[...series].sort((a, b) => (view === 'points'
-              ? b.pts[hover].cum - a.pts[hover].cum
-              : (a.pts[hover].rank ?? 99) - (b.pts[hover].rank ?? 99))).map((s) => {
-              const p = s.pts[hover];
-              const v = view === 'points' ? p.cum : p.rank;
-              return (
-                <li key={s.key}>
-                  <i style={{ background: s.color }} />
-                  <span>{s.label}</span>
-                  <em>{v == null ? '—' : view === 'points' ? `${v.toLocaleString()}pt` : `P${v}`}</em>
-                </li>
-              );
-            })}
+            <li><span>챔피언십</span><em>P{pp.pos} · {pp.cum.toLocaleString()}pt</em></li>
+            <li><span>이 라운드</span><em>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트 없음'}</em></li>
           </ul>
         </div>
       )}
@@ -606,13 +561,26 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
     const months = data.months.filter((m) => !m.live);
     const labels = months.map((m) => moLabel(m, allTime));
 
+    // where everyone stood in the championship after each round: every car that
+    // ever scored, by running total, ties sharing a place
+    const standingAfter = (perRound) => {
+      const run = new Map();
+      return perRound.map((round) => {
+        for (const [k, p] of round) run.set(k, (run.get(k) ?? 0) + p);
+        const rows = [...run.entries()].map(([k, points]) => ({ k, points })).sort((a, b) => b.points - a.points);
+        const ranks = computeRanks(rows, 'points');
+        return new Map(rows.map((r, i) => [r.k, ranks[i]]));
+      });
+    };
+    const driverPos = standingAfter(months.map((m) => new Map(m.top.map((t) => [normRowKey(t), t.points]))));
+
     const driverSeries = data.drivers.slice(0, chartN).map((d) => {
       const key = normRowKey(d);
       let cum = 0;
-      const pts = months.map((m) => {
+      const pts = months.map((m, i) => {
         const hit = m.top.find((t) => normRowKey(t) === key);
         cum += hit ? hit.points : 0;
-        return { rank: hit ? hit.rank : null, cum };
+        return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: driverPos[i].get(key) ?? null };
       });
       return { key, label: d.track ?? d.artist, artist: d.artist, pts };
     });
@@ -631,12 +599,13 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
         const ranks = computeRanks(rows, 'points');
         return new Map(rows.map((r, i) => [r.artist_key, { points: r.points, rank: ranks[i] }]));
       });
+      const teamPos = standingAfter(monthly.map((byKey) => new Map([...byKey].map(([k, v]) => [k, v.points]))));
       constructorSeries = data.constructors.slice(0, chartN).map((c) => {
         let cum = 0;
-        const pts = monthly.map((byKey) => {
+        const pts = monthly.map((byKey, i) => {
           const hit = byKey.get(c.artist_key);
           cum += hit ? hit.points : 0;
-          return { rank: hit ? hit.rank : null, cum };
+          return { rank: hit ? hit.rank : null, gained: hit ? hit.points : 0, cum, pos: teamPos[i].get(c.artist_key) ?? null };
         });
         return { key: c.artist_key, label: c.artist, artist: c.artist, pts };
       });

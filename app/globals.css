@@ -870,7 +870,6 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rr-side.r .rr-bar { justify-content:flex-end }
 .rr-bar i { display:block; height:100%; border-radius:2px; background:var(--ink-3) }
 .rr-side.fast .rr-bar i, .rr-bar.wide i { background:var(--ink) }
-.rr-p7 { margin-top:4px; font-size:11.5px; color:var(--ink-3); font-variant-numeric:tabular-nums }
 .rr-mid { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:76px; padding-top:16px; text-align:center }
 .rr-mid small { font-size:11.5px; color:var(--ink-3); white-space:nowrap }
 .rr-mid b { font-size:26px; font-weight:750; letter-spacing:-.04em; line-height:1.1; white-space:nowrap; font-variant-numeric:tabular-nums }
@@ -951,6 +950,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 @media (max-width:560px) { .radio-hero-text { font-size:20px } .radio-hero-stat b { font-size:28px } }
 .radio-sec { margin-top:30px }
 .radio-sec h2 { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:18px; font-weight:750; letter-spacing:-.03em }
+.radio-sec h2::after { content:''; flex:1 1 auto; height:1px; margin-left:6px; background:var(--line) }
 .radio-sec h2 span { font-size:13px; font-weight:600; color:var(--ink-3) }
 .radio-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:10px }
 @media (min-width:760px) {

@@ -34,7 +34,6 @@ function Side({ s, t, pic, top, align }) {
             <b>{one(s.p3)}</b><small>회/일</small>{s.trend && <i>{ARROW[s.trend]}</i>}
           </span>
           <span className="rr-bar"><i style={{ width: `${top > 0 ? Math.max(4, (s.p3 / top) * 100) : 0}%`, background: color }} /></span>
-          <small className="rr-p7">예상 · 7일 평균 {one(s.p7)}</small>
         </>
       )}
     </span>
@@ -95,21 +94,17 @@ export function RadioCard({ it, covers, onOpen }) {
           <span className="rr-mid">
             {d.need != null ? (
               <>
-                <small>라운드당 필요</small>
-                <b>{num(d.need)}{unit}</b>
-                <small>예상 {num(d.expect)}{unit} · {num(d.gap)}{unit} 차</small>
+                <small>{d.needLabel ?? '라운드당 필요'}</small>
+                <b>{d.need % 1 ? one(d.need) : num(d.need)}{unit}</b>
+                <small>
+                  {d.expect != null && `${d.needLabel ? '2위 페이스' : '예상'} ${d.expect % 1 ? one(d.expect) : num(d.expect)}${unit} · `}{num(d.gap)}{unit} 차
+                </small>
               </>
             ) : d.holdFor != null ? (
               <>
-                <small>1위 유지</small>
-                <b>{d.holdFor}</b>
+                <small>{d.holdFor === '안정' ? '추격 페이스' : '따라잡히기까지'}</small>
+                <b>{d.holdFor === '안정' ? '없음' : d.holdFor}</b>
                 <small>{num(d.gap)}{unit} 차</small>
-              </>
-            ) : d.hold != null ? (
-              <>
-                <small>1위 유지</small>
-                <b>{d.hold}%</b>
-                <small>{d.until} · {num(d.gap)}{unit} 차</small>
               </>
             ) : d.eta != null ? (
               <>
@@ -138,7 +133,7 @@ export function RadioCard({ it, covers, onOpen }) {
   return (
     <button className="rr-card rr-solo wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)} disabled={!pics.length}>
       <span className={`rr-pics n${pics.length}`} aria-hidden="true">
-        {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 52 : 72} round={!isTrack(t)} />)}
+        {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 48 : 60} round={!isTrack(t)} />)}
       </span>
       <span className="rr-body">
         <span className="rr-tag">{it.title}</span>

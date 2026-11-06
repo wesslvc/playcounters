@@ -4,7 +4,7 @@ import { rpcAll } from '@/lib/rpcPage';
 import { pointsForRank, splitPoints, F1_POINTS } from '@/lib/rank';
 import { creditsFor, creditList } from '@/lib/storedCredits';
 import {
-  keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, pct, span,
+  keyOf, nameOf, targetOf, ranked, rankingEvents, milestoneEvents, pick, span,
   paceModel, expectIn, poisson, gauss,
 } from '@/lib/radio';
 
@@ -304,35 +304,6 @@ function songSim({ recent, pace, from, base, drops, credits, rounds, drivers, te
   return { drivers: dWon, teams: tWon, driverPace: dGot, teamPace: tGot };
 }
 
-/**
- * How each one's chance has moved since an earlier day: a day's odds are
- * kept (the last of the day wins), and today's are compared with the latest
- * day before it. Moves under two points are a simulation's wobble, not news.
- */
-async function oddsMoves(key, odds) {
-  const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
-  const { data: kept } = await db.from('radio_notes').select('body').eq('key', key).maybeSingle();
-  const days = (kept?.body?.days ?? []).filter((d) => d.date !== today);
-  const before = days[days.length - 1]?.odds ?? null;
-  const now = Object.fromEntries(odds.map((o) => [o.key, o.pct]));
-  await db.from('radio_notes').upsert({ key, body: { days: [...days, { date: today, odds: now }].slice(-14) }, created_at: new Date().toISOString() });
-  if (!before) return { moves: new Map(), since: null };
-  const moves = new Map();
-  for (const o of odds) {
-    const d = o.pct - (before[o.key] ?? 0);
-    if (Math.abs(d) >= 2) moves.set(o.key, Math.round(d));
-  }
-  return { moves, since: days[days.length - 1].date };
-}
-
-/** The odds card's line: the story the bars tell, not the bars again. */
-function oddsLine(a, pa, b, pb) {
-  if (pa >= 0.995) return `${a}, 사실상 확정`;
-  if (pa >= 0.9 || !b) return `${a}, 굳히기에 들어간 흐름`;
-  if (pa - pb < 0.15) return `${a}·${b}, 끝까지 가는 접전`;
-  return `${a} 우세 속 ${b} 추격`;
-}
-
 /** How far through the current month we are, in Seoul. */
 function monthElapsed() {
   const kst = new Date(Date.now() + KST);
@@ -474,32 +445,16 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
   if (isNow && !decided && ifNow.length >= 2 && (sim || months.length >= 2)) {
     const field = ifNow.slice(0, 10);
     const start = new Map(field.map((c) => [keyOf(c), c.pts]));
-    let chances;
+    // what each car behind would have to score a round, against what it's scoring
     let form;
     if (sim) {
-      chances = field.map((c) => sim.drivers.get(keyOf(c)) ?? 0);
       form = field.map((c) => sim.driverPace.get(keyOf(c)) ?? 0);
     } else {
       const live = new Map();
       for (const r of data ?? []) if (r.yr === y && r.mo === lastM) live.set(keyOf(r), pointsForRank(r.place));
-      ({ odds: chances, form } = titleOdds(start, months, live, 12 - lastM, field.map(keyOf), monthElapsed()));
+      ({ form } = titleOdds(start, months, live, 12 - lastM, field.map(keyOf), monthElapsed()));
     }
-    const odds = chances
-      .map((p, i) => ({ c: field[i], p }))
-      .sort((a, b) => b.p - a.p)
-      .slice(0, 3);
-    if (chances[0] < 0.97) events.push(...chaseCards(field, form, 12 - lastM, nameOf, group, '챔피언십'));
-    // still able to win it on paper, with this month ending as it stands
-    const alive = ifNow.filter((c) => c.pts + F1_POINTS[0] * (12 - lastM) >= ifNow[0].pts).length;
-    const [f] = odds;
-    events.push({
-      kind: 'odds', group, weight: 94, title: `${y} 챔피언 가능성`,
-      text: oddsLine(nameOf(f.c), f.p, odds[1] && nameOf(odds[1].c), odds[1]?.p),
-      detail: `이번 달 포함 ${12 - lastM + 1}라운드 남음 · 이번 달이 이대로 끝나면 우승 가능 ${alive}명`,
-      stat: { value: `${pct(f.p)}%`, unit: '챔피언' },
-      odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts })),
-      targets: odds.map(({ c }) => targetOf(c)),
-    });
+    events.push(...chaseCards(field, form, 12 - lastM, nameOf, group, '챔피언십'));
   }
 
   // who has won most, who stands on the podium most, who is in form
@@ -715,55 +670,66 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
     const cDone = teams(doneRows);
     const cNow = teams(data ?? []);
     const cMaxLeft = F1_POINTS.reduce((a, b) => a + b, 0) * roundsLeft;
+    // the most songs each artist has put into one month's top ten this year: a
+    // rival can't be counted on for more than one past its best month, so it
+    // can score at most the points for that many places a round
+    const best = new Map();
+    {
+      const perMonth = new Map();
+      for (const r of data ?? []) {
+        for (const { key } of creditList(r, credits)) {
+          const k = `${r.mo}|${key}`;
+          perMonth.set(k, (perMonth.get(k) ?? 0) + 1);
+        }
+      }
+      for (const [k, n] of perMonth) {
+        const key = k.slice(k.indexOf('|') + 1);
+        best.set(key, Math.max(best.get(key) ?? 0, n));
+      }
+    }
+    const roundMax = (key) => F1_POINTS.slice(0, Math.min(10, (best.get(key) ?? 0) + 1)).reduce((a, b) => a + b, 0);
+    const clinch = (() => {
+      if (!isNow || cDone.length < 2) return null;
+      const [a] = cDone;
+      if (a.pts - cDone[1].pts > cMaxLeft) return { math: true };
+      // every rival, even running one song past its best month every round, falls short
+      const short = cDone.slice(1).every((r) => a.pts - r.pts > roundMax(r.artist_key) * roundsLeft);
+      return short ? { math: false, by: cDone[1], max: roundMax(cDone[1].artist_key), songs: (best.get(cDone[1].artist_key) ?? 0) + 1 } : null;
+    })();
     if (cDone.length >= 2) {
       const [a, b] = cDone;
       const lead = a.pts - b.pts;
       events.push({
-        kind: 'cx-lead', group: cx, weight: !isNow ? 90 : lead > cMaxLeft ? 88 : 62,
-        title: !isNow ? `${y} 컨스트럭터 챔피언` : lead > cMaxLeft ? '컨스트럭터 조기 확정' : '컨스트럭터 선두',
+        kind: 'cx-lead', group: cx, weight: !isNow ? 90 : clinch ? 88 : 62,
+        title: !isNow ? `${y} 컨스트럭터 챔피언` : clinch?.math ? '컨스트럭터 확정' : clinch ? '컨스트럭터 사실상 확정' : '컨스트럭터 선두',
         text: !isNow
           ? `${a.artist}, ${y} 컨스트럭터 챔피언 · ${lead}pt 차`
-          : lead > cMaxLeft
+          : clinch?.math
             ? `${a.artist}, 남은 라운드와 상관없이 컨스트럭터 타이틀 확정`
-            : `${a.artist}, 컨스트럭터 ${lead}pt 차 선두 · ${a.wins}승 ${a.podiums}포디움`,
-        detail: `2위 ${b.artist} · 팀 득점 ${a.cars}회`,
+            : clinch
+              ? `${a.artist}, 컨스트럭터 타이틀 사실상 확정 · ${lead}pt 차`
+              : `${a.artist}, 컨스트럭터 ${lead}pt 차 선두 · ${a.wins}승 ${a.podiums}포디움`,
+        detail: clinch && !clinch.math
+          ? `2위 ${clinch.by.artist}가 매 라운드 TOP 10에 ${clinch.songs}곡(올해 최다보다 1곡 더)을 올려도 라운드당 최대 ${clinch.max}pt · 이번 달 포함 ${roundsLeft}라운드 ${clinch.max * roundsLeft}pt < ${lead}pt`
+          : `2위 ${b.artist} · 팀 득점 ${a.cars}회`,
         stat: { value: String(lead), unit: 'pt 차' },
         duel: { sides: [{ pos: 1, pts: a.pts }, { pos: 2, pts: b.pts }], gap: lead, unit: 'pt', eta: null, lead: true },
         targets: [targetOf(a), targetOf(b)],
       });
     }
-    const cDecided = isNow && cDone.length >= 2 && cDone[0].pts - cDone[1].pts > cMaxLeft;
+    const cDecided = Boolean(clinch);
     if (isNow && !cDecided && cNow.length >= 2 && months.length >= 2) {
       const field = cNow.slice(0, 8);
       const cMonths = doneMos.map((mo) => new Map(teams(doneRows.filter((r) => r.mo === mo)).map((c) => [c.artist_key, c.pts])));
-      let chances;
       let form;
       if (sim) {
-        chances = field.map((c) => sim.teams.get(c.artist_key) ?? 0);
         form = field.map((c) => sim.teamPace.get(c.artist_key) ?? 0);
       } else {
         const cLive = new Map(teams(liveRows).map((c) => [c.artist_key, c.pts]));
-        ({ odds: chances, form } = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed()));
+        ({ form } = titleOdds(new Map(field.map((c) => [c.artist_key, c.pts])), cMonths, cLive, 12 - lastM, field.map((c) => c.artist_key), monthElapsed()));
       }
-      const odds = chances.map((p, i) => ({ c: field[i], p })).sort((a, b) => b.p - a.p).slice(0, 3);
       // who could still catch the leader, and what it would take
       events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
-      // since an earlier day: who has gained, who has lost
-      const shown = odds.map(({ c, p }) => ({ key: c.artist_key, pct: pct(p) }));
-      const { moves, since } = await oddsMoves(`odds|cx|${userId}|${y}|${src}|${estimate}`, shown)
-        .catch(() => ({ moves: new Map(), since: null }));
-      const biggest = [...moves].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
-      events.push({
-        kind: 'cx-odds', group: cx, weight: 84, title: `${y} 컨스트럭터 타이틀 가능성`,
-        text: oddsLine(odds[0].c.artist, odds[0].p, odds[1]?.c.artist, odds[1]?.p)
-          + (biggest ? ` · ${field.find((c) => c.artist_key === biggest[0])?.artist} ${biggest[1] > 0 ? '+' : ''}${biggest[1]}%p` : ''),
-        detail: `이번 달 포함 ${12 - lastM + 1}라운드 남음${sim?.history ? ` · ${sim.history}` : ''}`
-          + (since ? ` · 화살표는 ${Number(since.slice(5, 7))}월 ${Number(since.slice(8))}일 대비` : ''),
-        stat: { value: `${pct(odds[0].p)}%`, unit: '타이틀' },
-        odds: odds.map(({ c, p }) => ({ ...targetOf(c), pct: pct(p), pts: c.pts, move: moves.get(c.artist_key) ?? null })),
-        ...(since ? { since } : {}),
-        targets: odds.map(({ c }) => targetOf(c)),
-      });
     }
     // swap at the top if this month ended now
     if (isNow && !cDecided && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {

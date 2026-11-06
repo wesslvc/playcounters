@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, useEffect, useRef } from 'react';
 import { rowKey, normRowKey } from '@/lib/keys';
-import { artistColor } from '@/lib/genre';
+import { artistColor, distinctColors } from '@/lib/genre';
 import { computeRanks, splitPoints } from '@/lib/rank';
 import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, edgeStyle, fillStyle } from './useCredits';
@@ -16,7 +16,7 @@ const STANDINGS_PAGE = 10;
 
 const CHART_W = 720;
 const CHART_H = 220;
-const CHART_PAD = { l: 28, r: 10, t: 14, b: 22 };
+const CHART_PAD = { l: 56, r: 64, t: 14, b: 22 };
 /** The position chart's scale never needs to go past P10 — only the ten
     point-scoring finishes are tracked at all, so there is no lower rank to
     plot even if the field itself is bigger. */
@@ -54,7 +54,7 @@ function StandingsHead({ label }) {
  * shows the full sheet — counts, race-by-race record and records — the same
  * one the chart opens.
  */
-function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, cover, round, onOpen }) {
+function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, finishes, edge, fill, share, cover, round, onOpen }) {
   return (
     <li
       className="season-row" data-leader={rank === 1 || undefined}
@@ -68,6 +68,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, 
         <span>
           <b>{name}</b>
           {sub && <span>{sub}</span>}
+          {share != null && <i className="pts-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, share * 100)}%`, ...fill }} /></i>}
         </span>
       </div>
       <div className="cell-pt">{points.toLocaleString()}</div>
@@ -90,7 +91,7 @@ function StandingsRow({ rank, name, sub, points, wins, podiums, pointsFinishes, 
  * `live` is the month still under way: the order is real but provisional,
  * so it reads as a running order with no points attached yet.
  */
-function GrandPrixResult({ year, month, mode, source, estimate, live }) {
+function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
 
@@ -117,9 +118,7 @@ function GrandPrixResult({ year, month, mode, source, estimate, live }) {
     {!live && (
       <button
         className="gp-radio"
-        onClick={() => window.dispatchEvent(new CustomEvent('race-radio', {
-          detail: { view: 'gp', year, month, mode, label: `${year} ${month}월 GP 다시보기` },
-        }))}
+        onClick={() => onRadio?.({ year, month })}
       >
         <i aria-hidden="true" />레이스 라디오로 다시보기<span aria-hidden="true">›</span>
       </button>
@@ -247,7 +246,8 @@ function Chequered() {
 function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round, onOpen }) {
   return (
     <button className="leader" style={{ '--team': color }} onClick={onOpen}>
-      <Cover src={cover} size={56} round={round} className="leader-cover" />
+      {cover && <span className="leader-bg" aria-hidden="true" style={{ backgroundImage: `url(${cover})` }} />}
+      <Cover src={cover} size={64} round={round} className="leader-cover" />
       <span className="leader-tag">{tag}</span>
       <span className="leader-wins" aria-label={`${wins}승`}>
         <b>{wins}</b>
@@ -445,6 +445,14 @@ function SeasonChart({ labels, series, view }) {
   const xTicks = n <= 6 ? labels.map((l, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
   const binW = innerW / n;
 
+  // the final figure at each line's end, nudged apart so none sit on another
+  const ends = lines.filter((s) => s.ex != null && (view === 'points' || s.pts[n - 1]?.rank != null))
+    .map((s) => ({ key: s.key, color: s.color, y: s.ey, v: view === 'points' ? s.pts[n - 1].cum : `P${s.pts.findLast((p) => p.rank != null)?.rank}` }))
+    .sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 17);
+  const lead = view === 'points' ? lines[0] : null;
+  const area = lead && `${lead.segs[0]} L ${x(n - 1)} ${CHART_H - CHART_PAD.b} L ${x(0)} ${CHART_H - CHART_PAD.b} Z`;
+
   const tipSide = hover == null ? 'mid' : hover / (n - 1 || 1) < 0.25 ? 'start' : hover / (n - 1 || 1) > 0.75 ? 'end' : 'mid';
 
   return (
@@ -456,24 +464,28 @@ function SeasonChart({ labels, series, view }) {
           <g key={t}>
             <line x1={CHART_PAD.l} x2={CHART_W - CHART_PAD.r} y1={y(t)} y2={y(t)}
                   className="chart-grid" vectorEffect="non-scaling-stroke" />
-            <text x={CHART_PAD.l - 6} y={y(t)} className="chart-ytext" textAnchor="end" dominantBaseline="middle">
-              {view === 'points' ? t.toLocaleString() : `P${t}`}
-            </text>
           </g>
         ))}
+        {area && (
+          <>
+            <defs>
+              <linearGradient id="sc-lead" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor={lead.color} stopOpacity=".32" />
+                <stop offset="1" stopColor={lead.color} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill="url(#sc-lead)" />
+          </>
+        )}
         {hover != null && (
           <line x1={x(hover)} x2={x(hover)} y1={CHART_PAD.t} y2={CHART_H - CHART_PAD.b}
                 className="chart-hover-line" vectorEffect="non-scaling-stroke" />
         )}
-        {lines.map((s) => s.segs.map((d, si) => (
+        {[...lines].reverse().map((s, ri) => s.segs.map((d, si) => (
           <path key={`${s.key}-${si}`} d={d} fill="none" stroke={s.color}
-                strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+                strokeWidth={ri === lines.length - 1 ? 3.5 : 2.5} strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" opacity={hover == null || s.pts[hover]?.[view === 'points' ? 'cum' : 'rank'] != null ? 1 : .35} />
         )))}
-        {lines.map((s) => s.ex != null && (
-          <rect key={`p-${s.key}`} x={s.ex - 7} y={s.ey - 3.5} width="14" height="7" rx="3.5"
-                fill={s.color} stroke="var(--paper)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-        ))}
         {hover != null && lines.map((s) => {
           const p = s.pts[hover];
           const v = view === 'points' ? p.cum : p.rank;
@@ -489,7 +501,18 @@ function SeasonChart({ labels, series, view }) {
         ))}
       </svg>
 
-      <div className="chart-x">
+      <div className="chart-y" aria-hidden="true" style={{ width: `calc(${(CHART_PAD.l / CHART_W) * 100}% - 6px)` }}>
+        {yTicks.map((t) => (
+          <span key={t} style={{ top: `${(y(t) / CHART_H) * 100}%` }}>{view === 'points' ? t.toLocaleString() : `P${t}`}</span>
+        ))}
+      </div>
+      <div className="chart-ends" aria-hidden="true" style={{ left: `calc(${((CHART_W - CHART_PAD.r) / CHART_W) * 100}% + 4px)` }}>
+        {ends.map((e) => (
+          <span key={e.key} style={{ top: `${(e.y / CHART_H) * 100}%`, background: e.color }}>{typeof e.v === 'number' ? e.v.toLocaleString() : e.v}</span>
+        ))}
+      </div>
+
+      <div className="chart-x" style={{ paddingLeft: `calc(${(CHART_PAD.l / CHART_W) * 100}% - 8px)`, paddingRight: `calc(${(CHART_PAD.r / CHART_W) * 100}% - 8px)` }}>
         {xTicks.map((i) => <span key={i}>{labels[i]}</span>)}
       </div>
 
@@ -536,7 +559,7 @@ function SeasonChart({ labels, series, view }) {
  * career points and one season's are both real numbers but never confused
  * for each other.
  */
-export default function Season({ mode, source, estimate, year, allTime, onSelect, version }) {
+export default function Season({ mode, source, estimate, year, allTime, onSelect, onRadio, version }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [openGP, setOpenGP] = useState(null);
@@ -643,6 +666,10 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
 
   const driverCovers = useCovers(mode, data ? data.drivers.slice(0, driverShown) : null);
   const teamCovers = useCovers('artists', data?.constructors ? data.constructors.slice(0, constructorShown) : null);
+  // each finished round's winner, for the results list's pictures
+  const winners = useMemo(() => (data ? data.months.filter((m) => m.top.length && !m.live)
+    .map((m) => m.top.find((t) => t.rank === 1) ?? m.top[0]) : null), [data]);
+  const winnerCovers = useCovers(mode, winners);
   const open = (r) => onSelect?.({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
 
   // Credits for tracks nobody had opened before arrive a moment after the
@@ -692,8 +719,12 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
   // Colored here rather than when the series were built, so a line moves
   // into its genre's band as soon as the genre arrives.
-  const activeSeries = (activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries)
-    .map((sr) => ({ ...sr, color: artistColor(sr.artist) }));
+  // each line its artist's colour — but two songs by one artist can't share one, so the second takes a free one
+  const activeSeries = (() => {
+    const list = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
+    const colors = distinctColors(list.map((sr) => sr.artist));
+    return list.map((sr, i) => ({ ...sr, color: colors[i] }));
+  })();
 
   return (
     <div className="season">
@@ -750,12 +781,14 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
               <button role="tab" aria-selected={activeKind === 'constructors'} onClick={() => setChartKind('constructors')}>컨스트럭터</button>
             </div>
           )}
-          <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
-          <ol className="chart-key">
-            {activeSeries.map((s) => (
-              <li key={s.key}><i style={{ background: s.color }} />{s.label}</li>
-            ))}
-          </ol>
+          <div className="chart-card">
+            <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
+            <ol className="chart-key">
+              {activeSeries.map((s, i) => (
+                <li key={s.key} data-lead={i === 0 || undefined}><i style={{ background: s.color }} />{s.label}</li>
+              ))}
+            </ol>
+          </div>
 
           <SectionHead title="드라이버 스탠딩" />
           <ol className="season-list">
@@ -768,7 +801,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                   name={d.track ?? d.artist} sub={d.track ? artistLine(d) : null}
                   points={d.points} wins={d.wins} podiums={d.podiums}
                   pointsFinishes={d.pointsFinishes} finishes={d.finishes}
-                  edge={edgeStyle(d)}
+                  edge={edgeStyle(d)} fill={fillStyle(d)} share={d.points / (drivers[0].points || 1)}
                   cover={coverOf(driverCovers, mode, d)} round={mode === 'artists'}
                   onOpen={() => open(d)}
                 />
@@ -794,7 +827,8 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                     name={c.artist} sub={null}
                     points={c.points} wins={c.wins} podiums={c.podiums}
                     pointsFinishes={c.pointsFinishes} finishes={c.finishes}
-                    edge={{ borderLeftColor: artistColor(c.artist) }}
+                    edge={{ borderLeftColor: artistColor(c.artist) }} fill={{ background: artistColor(c.artist) }}
+                    share={c.points / (constructors[0].points || 1)}
                     cover={coverOf(teamCovers, 'artists', c)} round
                     onOpen={() => open(c)}
                   />
@@ -830,8 +864,11 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                     <span className="gp-rd"><Chequered />R{m.round}</span>
                     <span className="gp-mo">{moLabel(m, allTime)}</span>
                     <span className="gp-nm" style={edgeStyle(winner)}>
-                      <b>{winner.track ?? winner.artist}</b>
-                      {winner.track && <span>{artistLine(winner)}</span>}
+                      <Cover src={coverOf(winnerCovers, mode, winner)} size={36} round={mode === 'artists'} />
+                      <span>
+                        <b>{winner.track ?? winner.artist}</b>
+                        {winner.track && <span>{artistLine(winner)}</span>}
+                      </span>
                     </span>
                     <span className="gp-pt">{Number(winner.plays).toLocaleString()}회</span>
                     <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
@@ -839,7 +876,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
                   {open && (
                     <li className="gp-history-wrap">
                       <GrandPrixResult
-                        year={m.year} month={m.month} mode={mode} source={source} estimate={estimate}
+                        year={m.year} month={m.month} mode={mode} source={source} estimate={estimate} onRadio={onRadio}
                       />
                     </li>
                   )}

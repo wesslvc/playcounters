@@ -116,7 +116,7 @@ function Months({ months }) {
       {last.map((m) => (
         <div key={m.month} className="pl-mo" title={`${Number(m.month.slice(0, 4))}년 ${Number(m.month.slice(5))}월 · ${m.n}곡`}>
           <span className="pl-mo-n">{m.n === max ? m.n : ''}</span>
-          <i style={{ height: m.n ? `${Math.max(4, (m.n / max) * 100)}%` : 0 }} />
+          <i data-max={m.n === max || undefined} style={{ height: m.n ? `${Math.max(4, (m.n / max) * 100)}%` : 0 }} />
           <span className="pl-mo-x">{m.month.endsWith('-01') ? `${m.month.slice(2, 4)}.1` : Number(m.month.slice(5))}</span>
         </div>
       ))}

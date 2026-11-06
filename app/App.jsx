@@ -7,7 +7,7 @@ import Replay from './Replay';
 import Records from './Records';
 import Playlists from './Playlists';
 import Detail from './Detail';
-import RaceRadio from './RaceRadio';
+import Radio from './Radio';
 import Picker from './Picker';
 import { Seg } from './ui';
 import { invalidate } from './data';
@@ -15,6 +15,7 @@ import { invalidate } from './data';
 const TABS = [
   ['chart', '차트', '/'],
   ['season', '챔피언십', '/championship'],
+  ['radio', '라디오', '/radio'],
   ['replay', '리플레이', '/replay'],
   ['records', 'Awards', '/records'],
   ['playlists', '플리', '/playlists'],
@@ -82,7 +83,8 @@ export default function App({ initialTab = 'chart' }) {
   const [menu, setMenu] = useState(false);
   const [detail, setDetail] = useState(null);
   // what the open view is showing, for the race radio
-  const [radioCtx, setRadioCtx] = useState(null);
+  // a finished Grand Prix the radio tab was asked to replay
+  const [radioPin, setRadioPin] = useState(null);
   // A year handed over from the chart ("스탠딩 보기"), read once by the championship.
   const [seasonYear, setSeasonYear] = useState(null);
 
@@ -164,7 +166,7 @@ export default function App({ initialTab = 'chart' }) {
 
   const syncedAt = me?.user?.last_synced_at;
   const calibrated = Boolean(me?.calibrated);
-  const shared = { source: src, mode, estimate: estimate && calibrated, calendar, version, onSelect: setDetail, go, onContext: setRadioCtx };
+  const shared = { source: src, mode, estimate: estimate && calibrated, calendar, version, onSelect: setDetail, go, onRadio: (pin) => { setRadioPin(pin); go('radio'); } };
 
   return (
     <div className="app">
@@ -210,7 +212,7 @@ export default function App({ initialTab = 'chart' }) {
       </header>
 
       <div className="filters">
-        {(tab === 'chart' || tab === 'season') && (
+        {(tab === 'chart' || tab === 'season' || tab === 'radio') && (
           <Seg options={MODES} value={mode} onChange={setMode} label="종류" />
         )}
         <Picker
@@ -228,13 +230,13 @@ export default function App({ initialTab = 'chart' }) {
       <main>
         {tab === 'chart' && <Chart {...shared} />}
         {tab === 'season' && <Championship {...shared} year={seasonYear} onYear={setSeasonYear} />}
+        {tab === 'radio' && <Radio {...shared} pin={radioPin} />}
         {tab === 'replay' && <Replay {...shared} />}
         {tab === 'records' && <Records {...shared} />}
         {tab === 'playlists' && <Playlists {...shared} />}
       </main>
 
       <Detail target={detail} source={src} estimate={estimate && calibrated} onClose={closeDetail} />
-      <RaceRadio ctx={radioCtx} source={src} estimate={estimate && calibrated} onSelect={setDetail} />
 
       <footer className="foot" />
     </div>

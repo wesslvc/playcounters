@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { awardsFor, gpRecords, formatValue } from '@/lib/awards';
 import { smoothPath } from '@/lib/curve';
+import { artistColor } from '@/lib/genre';
 import { artistLine } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
@@ -330,7 +331,8 @@ export default function Detail({ target, source, estimate, onClose }) {
   return (
     <>
       <button className="sheet-scrim" aria-label="닫기" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}
+           style={{ '--acc': artistColor(target.artist) }}>
         <div className="sheet-grip" aria-hidden="true" />
         <div className="sheet-head">
           <Cover src={coverOf(covers, mode, target)} size={84} round={!target.track} />

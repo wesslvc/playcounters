@@ -11,7 +11,7 @@ import Season from './Season';
  * one fixed ruler to mean anything across months — whatever the chart tab
  * happens to be sorted by.
  */
-export default function Championship({ source, mode, estimate, calendar, version, onSelect, year: asked, onYear, onContext }) {
+export default function Championship({ source, mode, estimate, calendar, version, onSelect, year: asked, onYear, onContext, onRadio }) {
   const [allTime, setAllTime] = useState(false);
   const years = useMemo(() => yearsFromCalendar(calendar ?? []), [calendar]);
   const [year, setYear] = useState(asked ?? null);
@@ -45,9 +45,9 @@ export default function Championship({ source, mode, estimate, calendar, version
       </div>
 
       {allTime
-        ? <Season mode={mode} source={source} estimate={estimate} allTime onSelect={onSelect} version={version} />
+        ? <Season mode={mode} source={source} estimate={estimate} allTime onSelect={onSelect} onRadio={onRadio} version={version} />
         : year != null
-          ? <Season mode={mode} source={source} estimate={estimate} year={year} onSelect={onSelect} version={version} />
+          ? <Season mode={mode} source={source} estimate={estimate} year={year} onSelect={onSelect} onRadio={onRadio} version={version} />
           : <div className="skeleton"><i /><i /><i /></div>}
     </section>
   );

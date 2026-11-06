@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { artistColor, familyLabel } from '@/lib/genre';
+import { artistColor, distinctColors, familyLabel } from '@/lib/genre';
 import { smoothPath, sampleIdx } from '@/lib/curve';
 
 const W = 720;
@@ -104,7 +104,10 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   // stable shade of their own, rather than sharing one neighbourhood of hue
   // with everyone else in their genre. Genre still names itself in the
   // legend below, just no longer decides the color.
-  const colorOf = (s) => artistColor(s.artist);
+  // two songs by one artist can't share a colour: the second takes a free one
+  const shades = distinctColors(lines.map((s) => s.artist));
+  const colorOf = (s) => shades[lines.indexOf(s)] ?? artistColor(s.artist);
+  const lead = lines[0];
   const genreOf = (s) => {
     const fam = genres[s.artist]?.family;
     return fam && fam !== 'other' ? familyLabel(fam) : null;
@@ -131,9 +134,20 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         {/* The finish line: every series ends here, at the current total. */}
         <line x1={W - PAD.r} y1={PAD.t} x2={W - PAD.r} y2={H - PAD.b}
               stroke="var(--line)" strokeWidth="1.5" strokeDasharray="2,3" className="trend-finish" />
-        {lines.map((s, i) => (
+        {lead && (
+          <>
+            <defs>
+              <linearGradient id="trend-lead" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor={colorOf(lead)} stopOpacity=".28" />
+                <stop offset="1" stopColor={colorOf(lead)} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={`${lead.d} L ${W - PAD.r} ${H - PAD.b} L ${PAD.l} ${H - PAD.b} Z`} fill="url(#trend-lead)" />
+          </>
+        )}
+        {[...lines].reverse().map((s, i) => (
           <path key={i} d={s.d} fill="none" stroke={colorOf(s)}
-                strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round"
+                strokeWidth={s === lead ? 3.5 : 2.5} strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
         ))}
         {hover != null && lines.map((s, i) => (

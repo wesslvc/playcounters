@@ -693,10 +693,10 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .season-row .pos { font-size:15px; font-weight:700; color:var(--ink-3); text-align:right }
 .season-row[data-leader] .pos { color:var(--ink); font-weight:800 }
 .season-row .nm3 { display:flex; align-items:center; gap:10px; min-width:0 }
-.season-row .nm3 > span { min-width:0; display:block }
+.season-row .nm3 > span:not(.cover) { min-width:0; display:block }
 .season-row .nm3 b { display:block; font-weight:650; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .season-row .nm3 > span > span { display:block; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.season-row .nm3 > span { flex:1 1 auto }
+.season-row .nm3 > span:not(.cover) { flex:1 1 auto }
 .pts-bar { display:block; height:4px; margin-top:6px; border-radius:2px; background:var(--sunk); overflow:hidden }
 .pts-bar i { display:block; height:100%; border-radius:2px }
 .season-row .cell-pt { font-weight:750; font-size:16px; text-align:right; white-space:nowrap; letter-spacing:-.02em }

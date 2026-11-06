@@ -731,8 +731,19 @@ async function seasonEvents(userId, { year, mode, src, estimate }) {
       // who could still catch the leader, and what it would take
       events.push(...chaseCards(field, form, 12 - lastM, (c) => c.artist, cx, '컨스트럭터'));
     }
-    // swap at the top if this month ended now
-    if (isNow && !cDecided && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {
+    // would this month, ending as it stands, settle it? After it, no team can
+    // take more than a whole top ten (101pt) a round
+    const cAfterLead = cNow.length >= 2 ? cNow[0].pts - cNow[1].pts : 0;
+    if (isNow && !cDecided && cNow.length >= 2 && cAfterLead > cMaxLeft / roundsLeft * (12 - lastM)) {
+      events.push({
+        kind: 'cx-swing', group: cx, weight: 86, title: `${lastM}월 GP 반영 시`,
+        text: `${cNow[0].artist}, ${lastM}월이 이대로 끝나면 컨스트럭터 챔피언 확정 · 격차 ${cDone[0] && cDone[1] ? cDone[0].pts - cDone[1].pts : 0}pt → ${cAfterLead}pt`,
+        detail: 12 - lastM > 0 ? `남은 ${12 - lastM}라운드 최대 ${(cMaxLeft / roundsLeft) * (12 - lastM)}pt < ${cAfterLead}pt 차` : '마지막 라운드',
+        stat: { value: String(cAfterLead), unit: 'pt 차' },
+        duel: { sides: [{ pos: 2, pts: cNow[1].pts }, { pos: 1, pts: cNow[0].pts }], gap: cAfterLead, unit: 'pt', eta: null },
+        targets: [targetOf(cNow[1]), targetOf(cNow[0])],
+      });
+    } else if (isNow && !cDecided && cDone[0] && cNow[0] && cDone[0].artist_key !== cNow[0].artist_key) {
       events.push({
         kind: 'cx-swing', group: cx, weight: 82, title: `${lastM}월 GP 반영 시`,
         text: `${cNow[0].artist}, 이번 달 결과대로면 컨스트럭터 선두 탈환`,

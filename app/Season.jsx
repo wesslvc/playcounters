@@ -285,6 +285,12 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
   );
   const activeKind = kind === 'constructors' && projected.constructors ? 'constructors' : 'drivers';
   const rows = projected[activeKind];
+  // would this month, ending as it stands, settle the title? Nobody can take
+  // more than a whole top ten a round (101pt) for a team, or a win (25pt) for a car
+  const after = allTime ? null : 12 - m.month;
+  const perRound = activeKind === 'constructors' ? 101 : 25;
+  const gap = rows.length >= 2 ? rows[0].points - rows[1].points : 0;
+  const settles = after != null && rows.length >= 2 && gap > perRound * after;
 
   return (
     <div className="live-card">
@@ -341,6 +347,12 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
             </li>
           ))}
         </ol>
+        {settles && (
+          <p className="proj-settle">
+            <b>{rows[0].track ?? rows[0].artist}</b>, 이대로 끝나면 {activeKind === 'constructors' ? '컨스트럭터' : '드라이버'} 챔피언 확정
+            <span>{after ? `남은 ${after}라운드 최대 ${perRound * after}pt < ${gap}pt 차` : '마지막 라운드'}</span>
+          </p>
+        )}
       </div>
     </div>
   );

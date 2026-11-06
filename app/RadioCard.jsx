@@ -26,7 +26,7 @@ function Side({ s, t, pic, top, align }) {
   return (
     <span className={`rr-side ${align}${s.p3 != null && top > 0 && s.p3 === top ? ' fast' : ''}`}>
       <Cover src={pic} size={48} round={!isTrack(t)} />
-      <b className="rr-name">{nameOf(t)}</b>
+      <b className="rr-name"><span className="hl" style={{ '--wash': color }}>{nameOf(t)}</span></b>
       <small className="rr-pos">P{s.pos} · {s.pts != null ? `${num(s.pts)}pt` : `${num(s.plays)}회`}</small>
       {s.p3 != null && (
         <>
@@ -51,14 +51,14 @@ export function RadioCard({ it, covers, onOpen }) {
   const pic = (t) => coverOf(covers[isTrack(t) ? 'tracks' : 'artists'], isTrack(t) ? 'tracks' : 'artists', t);
   if (it.odds?.length) {
     return (
-      <button className="rr-card rr-odds wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)}>
+      <button className="rr-card rr-odds" onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-odds-list">
           {it.odds.map((o, i) => (
             <span className="rr-odd" key={i}>
               <Cover src={pic(o)} size={40} round={!isTrack(o)} />
               <span className="rr-odd-body">
-                <b className="rr-name">{nameOf(o)}</b>
+                <b className="rr-name"><span className="hl" style={{ '--wash': artistColor(o.artist) }}>{nameOf(o)}</span></b>
                 <span className="rr-bar"><i style={{ width: `${Math.max(2, o.pct)}%`, background: artistColor(o.artist) }} /></span>
               </span>
               <span className="rr-odd-pct" data-first={i === 0 || undefined}>
@@ -88,7 +88,7 @@ export function RadioCard({ it, covers, onOpen }) {
     const top = Math.max(a.p3 ?? 0, b.p3 ?? 0);
     const unit = d.unit ?? '회';
     return (
-      <button className="rr-card rr-duel wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)}>
+      <button className="rr-card rr-duel" onClick={() => onOpen(it)}>
         <span className="rr-tag">{it.title}</span>
         <span className="rr-vs">
           <Side s={a} t={ta} pic={pic(ta)} top={top} align="l" />
@@ -136,7 +136,7 @@ export function RadioCard({ it, covers, onOpen }) {
 
   const s = it.solo;
   return (
-    <button className="rr-card rr-solo wash" style={{ '--wash': artistColor((it.targets ?? [])[0]?.artist) }} onClick={() => onOpen(it)} disabled={!pics.length}>
+    <button className="rr-card rr-solo" onClick={() => onOpen(it)} disabled={!pics.length}>
       <span className={`rr-pics n${pics.length}`} aria-hidden="true">
         {pics.map((t, i) => <Cover key={i} src={pic(t)} size={pics.length > 1 ? 52 : 72} round={!isTrack(t)} />)}
       </span>

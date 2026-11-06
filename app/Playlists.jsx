@@ -325,7 +325,7 @@ function Recs() {
   return (
     <>
       <Section title="안 들어본 추천곡" sub="최근 많이 들은 곡을 바탕으로, 한 번도 재생한 적 없는 곡만 골랐어요">
-        {items.length > 0 && (
+        {data && (
           <button className="pill" onClick={() => load(true)} disabled={busy || data?.left <= 0}
                   title={data?.left <= 0 ? '오늘은 더 고를 수 없어요' : undefined}>
             {busy ? '고르는 중…' : '다시 고르기'}

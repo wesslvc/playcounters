@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
-import { spotifyFor } from '@/lib/spotifyUser';
+import { deezerGet } from '@/lib/artwork';
 import { ask } from '@/lib/openai';
 
 export const dynamic = 'force-dynamic';
@@ -35,41 +35,49 @@ const SCHEMA = {
 
 const RULES = '너는 이 사람의 실제 재생 기록을 읽고 아직 안 들어본 곡을 골라 주는 음악 큐레이터다. '
   + 'recent는 최근 60일 많이 들은 곡, artists는 통산 많이 들은 가수, avoid는 이미 추천했던 곡이다. '
-  + '실제로 존재하고 스트리밍에서 찾을 수 있는 곡만, 24곡을 골라라. recent에 있는 곡과 avoid에 있는 곡은 빼라. '
+  + '실제로 발매되어 스트리밍에서 찾을 수 있는 곡만, 30곡을 골라라. 확실하지 않은 곡은 넣지 마라. recent에 있는 곡과 avoid에 있는 곡은 빼라. '
   + '3분의 1은 이 사람이 자주 듣는 가수의 안 들어봤을 법한 곡, 나머지는 비슷한 결의 다른 가수 곡으로. '
   + '한 가수는 두 곡까지. 이 사람이 듣는 언어와 장르의 비율을 따르되, 뻔한 대표곡만 고르지 말고 결이 맞는 곡을 골라라. '
-  + 'title과 artist는 스트리밍 서비스에 표기된 그대로. because는 recent에 있는 곡 제목 하나를 그대로. '
+  + 'title과 artist는 Spotify에 표기된 그대로(한국 가수도 IU, AKMU, NewJeans처럼 영문 표기). because는 recent에 있는 곡 제목 하나를 그대로. '
   + 'reason은 because와 무엇이 닮았는지 한국어 한 문장(30자 안팎)으로: 소리·분위기·보컬·템포처럼 구체적으로, 칭찬이나 수식어는 빼고.';
 
 const norm = (s) => String(s ?? '').toLowerCase().normalize('NFKC').replace(/\(.*?\)|\[.*?\]|feat\..*$|[^\p{L}\p{N}]+/gu, '');
 const today = () => new Date(Date.now() + KST).toISOString().slice(0, 10);
 
-/** The song on Spotify, or null when the name doesn't find it by that artist. */
-async function find(call, { title, artist }) {
-  const q = encodeURIComponent(`track:${title} artist:${artist}`);
-  const res = await call(`/search?q=${q}&type=track&limit=5&market=from_token`);
-  if (!res.ok) return null;
-  const { tracks } = await res.json();
-  const want = norm(artist);
-  const t = (tracks?.items ?? []).find((x) => x.artists.some((a) => {
-    const n = norm(a.name);
-    return n && (n === want || n.includes(want) || want.includes(n));
-  }));
-  if (!t) return null;
-  return {
-    id: t.id,
-    title: t.name,
-    artist: t.artists[0].name,
-    artists: t.artists.map((a) => a.name),
-    image: t.album?.images?.[1]?.url ?? t.album?.images?.[0]?.url ?? null,
-    url: t.external_urls?.spotify ?? `https://open.spotify.com/track/${t.id}`,
-  };
+/** Close enough to be the same name: one contains the other once both are stripped down. */
+const same = (a, b) => {
+  const x = norm(a);
+  const y = norm(b);
+  return Boolean(x && y) && (x === y || x.includes(y) || y.includes(x));
+};
+
+/**
+ * The song as it exists, found on Deezer (the same catalogue the app's
+ * pictures come from) under that artist and title, or null. The link opens
+ * it in Spotify's search, where it's listened to.
+ */
+async function find({ title, artist }) {
+  for (const q of [`artist:"${artist}" track:"${title}"`, `${artist} ${title}`]) {
+    const json = await deezerGet('/search/track', { q, limit: '10' }).catch(() => null);
+    const t = (json?.data ?? []).find((x) => same(x.artist?.name, artist) && same(x.title_short ?? x.title, title));
+    if (t) {
+      return {
+        id: `dz${t.id}`,
+        title: t.title_short || t.title,
+        artist: t.artist.name,
+        artists: [t.artist.name],
+        image: t.album?.cover_medium ?? t.album?.cover ?? null,
+        url: `https://open.spotify.com/search/${encodeURIComponent(`${t.artist.name} ${t.title_short || t.title}`)}`,
+      };
+    }
+  }
+  return null;
 }
 
 /** Picks a fresh set: the model chooses, Spotify confirms, the plays rule out what's been heard. */
 async function pickSongs(userId, avoid) {
   const now = Date.now();
-  const [recent, artists, sp] = await Promise.all([
+  const [recent, artists] = await Promise.all([
     rpcAll('top_items', {
       p_user: userId, p_from: new Date(now - 60 * DAY).toISOString(), p_to: new Date(now + 60e3).toISOString(),
       p_mode: 'tracks', p_tz: TZ, p_limit: 40, p_source: 'all', p_estimate: false,
@@ -78,10 +86,8 @@ async function pickSongs(userId, avoid) {
       p_user: userId, p_from: new Date(0).toISOString(), p_to: new Date(now + 60e3).toISOString(),
       p_mode: 'artists', p_tz: TZ, p_limit: 300, p_source: 'all', p_estimate: false,
     }, 300),
-    spotifyFor(userId),
   ]);
   if (recent.error) throw new Error(recent.error.message);
-  if (sp.error) return { error: sp.error, reauth: sp.reauth, status: sp.status };
   const songs = recent.data ?? [];
   if (songs.length < 5) return { error: '추천하려면 최근 기록이 조금 더 필요해요', status: 422 };
 
@@ -93,8 +99,8 @@ async function pickSongs(userId, avoid) {
 
   // only songs Spotify has under that artist, once each
   const seen = new Set();
-  const found = (await Promise.all((answer.items ?? []).slice(0, 30).map(async (x) => {
-    const hit = await find(sp.call, x).catch(() => null);
+  const found = (await Promise.all((answer.items ?? []).slice(0, 36).map(async (x) => {
+    const hit = await find(x).catch(() => null);
     return hit && { ...hit, reason: String(x.reason ?? '').trim(), because: String(x.because ?? '').trim() };
   }))).filter((x) => x && !seen.has(x.id) && seen.add(x.id));
 
@@ -113,7 +119,7 @@ async function pickSongs(userId, avoid) {
     .filter((x) => x.heard === 0)
     .map(({ heard: _, ...x }) => ({ ...x, because: fromRecent.has(x.because) ? x.because : null }))
     .slice(0, KEEP);
-  console.log(`recommend · ${answer.items?.length ?? 0} asked · ${found.length} on spotify · ${items.length} unheard`);
+  console.log(`recommend · ${answer.items?.length ?? 0} asked · ${found.length} found · ${items.length} unheard`);
   return { items };
 }
 
@@ -143,6 +149,11 @@ export async function GET(req) {
     const avoid = (prev.history ?? []).slice(-60);
     const out = await pickSongs(userId, avoid);
     if (out.error) return NextResponse.json(out, { status: out.status ?? 500 });
+    // an empty set isn't kept: the next visit (or 다시 고르기) tries again, at no cost to the day's re-picks
+    if (!out.items.length) {
+      if (prev.items?.length) return NextResponse.json({ items: prev.items, at: prev.at, left, stale: true });
+      return NextResponse.json({ error: '이번엔 추천곡을 찾지 못했어요. 다시 고르기를 눌러 주세요.', items: [], left }, { status: 200 });
+    }
     const body = {
       day,
       at: new Date().toISOString(),

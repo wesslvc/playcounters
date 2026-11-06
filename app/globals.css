@@ -84,7 +84,7 @@ main { min-height:60vh }
   font-size:12.5px; font-weight:500; color:var(--ink-2); white-space:nowrap;
 }
 .sync:hover:not(:disabled) { background:var(--sunk); color:var(--ink) }
-.sync i { width:6px; height:6px; border-radius:50%; background:var(--pos) }
+.sync i { display:none }
 .sync i[data-on] { background:var(--ink-3); animation:pulse 1s ease-in-out infinite }
 .icon-btn {
   display:inline-grid; place-items:center; width:34px; height:34px; border-radius:10px; color:var(--ink-2);
@@ -344,7 +344,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .trend-x span:first-child { transform:none }
 .trend-key { margin-top:12px }
 .trend-key li { display:flex; align-items:baseline; gap:10px; padding:8px 0; border-top:1px solid var(--hair); font-size:13px }
-.trend-key i { width:9px; height:9px; border-radius:50%; flex:0 0 auto }
+.trend-key i { width:14px; height:4px; border-radius:2px; flex:0 0 auto; align-self:center }
 .trend-key b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .trend-key span { display:flex; font-size:12px; color:var(--ink-2); flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .trend-key em { font-style:normal; font-size:13px; font-weight:600; color:var(--ink-2); margin-left:auto }
@@ -563,7 +563,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .share-bar i, .share-dot { opacity:var(--o, 1) }
 .share-list { margin-top:12px }
 .share-list li { display:grid; grid-template-columns:8px minmax(0,1fr) minmax(20px,56px) 44px 38px; gap:8px; align-items:center; padding:6px 0; font-size:13px }
-.share-dot { width:8px; height:8px; border-radius:50% }
+.share-dot { width:14px; height:4px; border-radius:2px }
 .share-nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .share-meter { height:4px; border-radius:2px; background:var(--sunk-2); overflow:hidden }
 .share-meter i { display:block; height:100%; background:color-mix(in oklab, var(--gold) 70%, var(--ink-2)) }
@@ -596,7 +596,6 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .leader-cover { margin-bottom:18px; box-shadow:0 10px 26px -8px rgba(0,0,0,.55) }
 .leader-cover::after { box-shadow:inset 0 0 0 1px rgba(255,255,255,.14) !important }
 .leader-tag { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; letter-spacing:.02em; color:rgba(255,255,255,.8); margin-bottom:4px }
-.leader-tag::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--team); box-shadow:0 0 0 2px rgba(255,255,255,.85) }
 .leader-wins { position:absolute; right:20px; top:20px; display:flex; flex-direction:column; align-items:flex-end; pointer-events:none }
 .leader-wins b { font-size:44px; font-weight:800; letter-spacing:-.05em; line-height:1; color:#fff; text-shadow:0 2px 14px rgba(0,0,0,.25) }
 .leader-wins small { font-size:10.5px; font-weight:700; letter-spacing:.16em; margin-top:4px; color:rgba(255,255,255,.7) }
@@ -612,12 +611,12 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .live-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px }
 .live-head b { font-size:17px; font-weight:750; letter-spacing:-.025em }
 .live-badge { display:inline-flex; align-items:center; gap:5px; background:var(--live); color:#fff; border-radius:6px; padding:2px 7px 2px 6px; font-size:11px; font-weight:700; letter-spacing:.08em }
-.live-badge i { width:6px; height:6px; border-radius:50%; background:#fff; animation:pulse 1.6s ease-in-out infinite }
+.live-badge i { display:none }
 .live-round { font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--ink-3) }
 .live-top { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:0 10px }
 .live-top li { display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center; padding:8px 0; border-top:1px solid var(--hair) }
 .live-pos { font-size:16px; font-weight:800 }
-.live-nm { min-width:0; border-left:3px solid transparent; padding-left:10px }
+.live-nm { min-width:0 }
 .live-nm b { display:block; font-weight:650; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .live-nm span { display:block; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .live-plays { font-weight:600; font-size:13.5px; color:var(--ink-2) }
@@ -634,7 +633,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .mv { font-weight:650; font-size:11.5px; white-space:nowrap }
 .mv.up { color:var(--pos) } .mv.down { color:var(--neg) } .mv.same { color:var(--ink-3) }
 .mv.new { color:var(--ink-2); font-size:10px; letter-spacing:.05em }
-.proj-nm { min-width:0; border-left:3px solid transparent; padding-left:9px }
+.proj-nm { min-width:0 }
 .proj-nm b { display:block; font-weight:650; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .proj-nm span { display:block; font-size:11.5px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .proj-pts { display:flex; align-items:baseline; gap:6px; justify-content:flex-end; font-weight:750; font-size:14.5px; white-space:nowrap }
@@ -666,7 +665,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-tip.tip-end { transform:translateX(-100%) }
 .chart-tip b { display:block; font-size:11px; color:var(--ink-2); margin-bottom:4px }
 .chart-tip li { display:flex; align-items:center; gap:6px; padding:2px 0; white-space:nowrap }
-.chart-tip i { width:8px; height:8px; border-radius:50%; flex:0 0 auto }
+.chart-tip i { width:14px; height:4px; border-radius:2px; flex:0 0 auto }
 .chart-tip u { text-decoration:none; width:16px; font-weight:700; color:var(--ink-3); text-align:right; flex:0 0 auto }
 .chart-tip li[data-zero] { opacity:.45 }
 .chart-tip span { min-width:0; overflow:hidden; text-overflow:ellipsis }
@@ -675,7 +674,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-key li { display:flex; align-items:center; gap:6px; max-width:100%; padding:4px 10px 4px 8px; border-radius:999px; background:var(--sunk);
   font-size:12px; font-weight:550; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .chart-key li[data-lead] { color:var(--ink); font-weight:700 }
-.chart-key i { width:9px; height:9px; border-radius:50%; flex:0 0 auto }
+.chart-key i { width:14px; height:4px; border-radius:2px; flex:0 0 auto }
 
 /* standings table */
 .season-list { display:grid; gap:0 8px; grid-template-columns:26px minmax(0,1fr) 50px 34px 42px 44px 34px 10px; margin-bottom:6px }
@@ -693,7 +692,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .season-row:hover { background:var(--surface) }
 .season-row .pos { font-size:15px; font-weight:700; color:var(--ink-3); text-align:right }
 .season-row[data-leader] .pos { color:var(--ink); font-weight:800 }
-.season-row .nm3 { display:flex; align-items:center; gap:10px; min-width:0; border-left:3px solid transparent; padding-left:10px }
+.season-row .nm3 { display:flex; align-items:center; gap:10px; min-width:0 }
 .season-row .nm3 > span { min-width:0; display:block }
 .season-row .nm3 b { display:block; font-weight:650; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .season-row .nm3 > span > span { display:block; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
@@ -729,7 +728,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .lead-list { display:grid; grid-template-columns:58px minmax(0,1fr) auto; gap:0 10px }
 .lead-list li { display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:center; padding:7px 0; border-top:1px solid var(--hair) }
 .lead-days { font-weight:650; font-size:12.5px }
-.lead-nm { min-width:0; border-left:3px solid transparent; padding-left:8px }
+.lead-nm { min-width:0 }
 .lead-nm b { display:block; font-weight:650; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .lead-nm span { display:block; font-size:11.5px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .lead-n { font-weight:600; font-size:12px; color:var(--ink-2); white-space:nowrap }
@@ -745,7 +744,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .gp-rd { display:flex; align-items:center; gap:6px; font-weight:600; font-size:12.5px; color:var(--ink-3) }
 .chq { width:12px; height:12px; flex:0 0 auto }
 .gp-mo { font-weight:700 }
-.gp-nm { display:flex; align-items:center; gap:10px; min-width:0; border-left:3px solid transparent; padding-left:10px }
+.gp-nm { display:flex; align-items:center; gap:10px; min-width:0 }
 .gp-nm > span { min-width:0 }
 .gp-nm b { display:block; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .gp-nm > span > span { display:block; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
@@ -899,31 +898,9 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .rr-mid b { font-size:24px }
 }
 
-/* each kind of message has its colour: a stripe down the card's edge and its tag */
-:root {
-  --g-lead:#E10600; --g-battle:#E8780C; --g-move:#2F6BFF; --g-forecast:#7B4DFF;
-  --g-milestone:#B8860B; --g-champ:#C2185B; --g-cx:#0E9C9C; --g-rookie:#1E9E62;
-}
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --g-lead:#FF4D4D; --g-battle:#FF9F43; --g-move:#6E9BFF; --g-forecast:#A68BFF;
-  --g-milestone:#E3B54D; --g-champ:#FF6FA8; --g-cx:#3CCFCF; --g-rookie:#3DD68C;
-} }
-:root[data-theme="dark"] {
-  --g-lead:#FF4D4D; --g-battle:#FF9F43; --g-move:#6E9BFF; --g-forecast:#A68BFF;
-  --g-milestone:#E3B54D; --g-champ:#FF6FA8; --g-cx:#3CCFCF; --g-rookie:#3DD68C;
-}
-[data-group="lead"] { --acc:var(--g-lead) } [data-group="battle"] { --acc:var(--g-battle) }
-[data-group="move"] { --acc:var(--g-move) } [data-group="forecast"] { --acc:var(--g-forecast) }
-[data-group="milestone"] { --acc:var(--g-milestone) } [data-group="champ"] { --acc:var(--g-champ) }
-[data-group="cx"] { --acc:var(--g-cx) } [data-group="rookie"] { --acc:var(--g-rookie) }
-.rr-card[data-group]::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--acc) }
-.rr-card[data-group] .rr-tag { color:var(--acc) }
-
 /* ---------- the radio tab ---------- */
 .radio-head { padding:30px 0 6px }
-.radio-kicker { display:flex; align-items:center; gap:7px; font-size:11.5px; font-weight:750; letter-spacing:.14em; color:var(--live) }
-.radio-kicker i { width:8px; height:8px; border-radius:50%; background:var(--live); box-shadow:0 0 0 4px color-mix(in oklab, var(--live) 22%, transparent); animation:pulse 1.6s ease-in-out infinite }
-.radio-head h1 { margin-top:6px; font-size:40px; font-weight:800; letter-spacing:-.045em; line-height:1.05 }
+.radio-head h1 { font-size:40px; font-weight:800; letter-spacing:-.045em; line-height:1.05 }
 .radio-sub { margin-top:8px; font-size:14px; color:var(--ink-2) }
 .radio-chans { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; margin:22px -20px 0; padding:2px 20px 4px }
 .radio-chans::-webkit-scrollbar { display:none }
@@ -936,12 +913,10 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .radio-chan[aria-selected="true"] span { color:color-mix(in oklab, var(--bg) 65%, var(--ink)) }
 .radio-groups { display:flex; gap:6px; flex-wrap:wrap; margin:18px 0 4px }
 .radio-groups .chip { height:32px; gap:6px }
-.radio-groups .chip[data-group]:not([data-group="all"])::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--acc) }
 .radio-groups .chip small { font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums }
 .radio-groups .chip[aria-pressed="true"] small { color:inherit; opacity:.7 }
 .radio-sec { margin-top:30px }
 .radio-sec h2 { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:18px; font-weight:750; letter-spacing:-.03em }
-.radio-sec h2 i { width:10px; height:10px; border-radius:3px; background:var(--acc) }
 .radio-sec h2 span { font-size:13px; font-weight:600; color:var(--ink-3) }
 .radio-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:10px }
 @media (min-width:760px) {
@@ -954,7 +929,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 /* a finished Grand Prix: replay it on the radio */
 .gp-radio { display:flex; align-items:center; gap:8px; width:100%; margin:4px 0 12px; padding:11px 14px; border-radius:14px;
   background:var(--surface); border:1px solid var(--hair); font-size:13.5px; font-weight:700; color:var(--ink); text-align:left }
-.gp-radio i { width:7px; height:7px; border-radius:50%; background:var(--live) }
+.gp-radio i { display:none }
 .gp-radio span { margin-left:auto; font-size:18px; line-height:1; color:var(--ink-3) }
 
 /* room under the last row for the LIVE button */
@@ -997,7 +972,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .legend button[aria-pressed] span { font-weight:700 }
 .legend button[data-dim] { opacity:.45 }
 .legend button:disabled { cursor:default; color:var(--ink) }
-.legend i { width:10px; height:10px; border-radius:3px }
+.legend i { width:14px; height:4px; border-radius:2px }
 .legend span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .legend b { font-weight:700; font-variant-numeric:tabular-nums }
 .legend em { font-style:normal; font-size:12px; color:var(--ink-3); text-align:right; font-variant-numeric:tabular-nums }

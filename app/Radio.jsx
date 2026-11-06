@@ -69,7 +69,6 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
   return (
     <div className="radio">
       <div className="radio-head">
-        <p className="radio-kicker"><i aria-hidden="true" />ON AIR</p>
         <h1>라디오</h1>
         <p className="radio-sub">순위표 뒤에서 벌어지는 추격, 추월, 확률과 기록</p>
       </div>
@@ -86,7 +85,7 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
       {present.length > 1 && (
         <div className="radio-groups">
           {[['all', '전체'], ...present].map(([g, l]) => (
-            <button key={g} className="chip" data-group={g} aria-pressed={group === g} onClick={() => setGroup(g)}>
+            <button key={g} className="chip" aria-pressed={group === g} onClick={() => setGroup(g)}>
               {l}{g !== 'all' && <small>{items.filter((x) => x.group === g).length}</small>}
             </button>
           ))}
@@ -103,8 +102,8 @@ export default function Radio({ source, mode, estimate, onSelect, pin }) {
         <p className="radio-none">지금은 조용해요. 눈에 띄는 경쟁이나 변동이 없어요.</p>
       ) : (
         sections.map(([g, label]) => (
-          <section key={g} className="radio-sec" data-group={g}>
-            <h2><i aria-hidden="true" />{label}<span>{items.filter((x) => x.group === g).length}</span></h2>
+          <section key={g} className="radio-sec">
+            <h2>{label}<span>{items.filter((x) => x.group === g).length}</span></h2>
             <div className="radio-grid">
               {items.filter((x) => x.group === g).map((it, i) => (
                 <RadioCard key={`${g}-${i}`} it={it} covers={covers} onOpen={open} />

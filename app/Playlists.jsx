@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCovers, coverOf } from './useCovers';
+import { useEffect, useMemo, useState } from 'react';
 import { useGenres } from './useGenres';
 import { familyLabel, artistColor } from '@/lib/genre';
 import { Seg, Section, Cover, Stat } from './ui';
@@ -303,134 +302,6 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
   );
 }
 
-const SEEDS_KEY = 'pc-rec-seeds';
-const LAST_KEY = 'pc-rec-last';
-const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
-const kept = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const seedKey = (s) => `${s.artist_key}\u0000${s.track_key}`;
-
-/**
- * Recommendations from a box of songs you pick: type part of a title or an
- * artist and your own plays come up as you type; put the ones that set the
- * mood in the box, choose how many songs, and ask. Each suggestion shows
- * which song in the box it follows and what the two share; none is a song
- * you've already played. The box and the last answer stay on this device.
- */
-function Recs() {
-  const [seeds, setSeeds] = useState([]);
-  const [count, setCount] = useState(10);
-  const [q, setQ] = useState('');
-  const [hits, setHits] = useState(null);
-  const [focus, setFocus] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState(null);
-  const cache = useRef(new Map());
-  const input = useRef(null);
-
-  useEffect(() => { setSeeds(kept(SEEDS_KEY, [])); setRes(kept(LAST_KEY, null)); }, []);
-  useEffect(() => { keep(SEEDS_KEY, seeds); }, [seeds]);
-
-  // as you type: your own plays, a short pause after the last key
-  useEffect(() => {
-    const term = q.trim();
-    if (cache.current.has(term)) { setHits(cache.current.get(term)); return undefined; }
-    const ctl = new AbortController();
-    const t = setTimeout(() => {
-      fetch(`/api/recommend/search?q=${encodeURIComponent(term)}`, { signal: ctl.signal })
-        .then((r) => r.json())
-        .then((j) => { const items = j.items ?? []; cache.current.set(term, items); setHits(items); })
-        .catch(() => {});
-    }, term ? 120 : 0);
-    return () => { clearTimeout(t); ctl.abort(); };
-  }, [q]);
-
-  const inBox = useMemo(() => new Set(seeds.map(seedKey)), [seeds]);
-  const covers = useCovers('tracks', useMemo(() => [...seeds, ...(hits ?? [])], [seeds, hits]));
-  const add = (h) => {
-    if (inBox.has(seedKey(h)) || seeds.length >= 10) return;
-    setSeeds([...seeds, { artist: h.artist, track: h.track, artist_key: h.artist_key, track_key: h.track_key }]);
-    setQ('');
-    input.current?.focus();
-  };
-  const remove = (s) => setSeeds(seeds.filter((x) => seedKey(x) !== seedKey(s)));
-  const ask = () => {
-    setBusy(true);
-    fetch('/api/recommend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seeds, count }) })
-      .then((r) => r.json())
-      .then((j) => { setRes(j); if (j.items?.length) keep(LAST_KEY, j); })
-      .catch((e) => setRes({ error: e.message }))
-      .finally(() => setBusy(false));
-  };
-  const shown = (hits ?? []).slice(0, 8);
-
-  return (
-    <>
-      <Section title="추천 받기" sub="들었던 곡을 상자에 담으면, 그 결을 따라 안 들어본 곡을 골라 줘요" />
-      <div className="rec-box">
-        <div className="rec-search">
-          <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="곡이나 가수 이름 일부" aria-label="들었던 곡 찾기"
-                 onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 150)}
-                 onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) { e.preventDefault(); add(shown.find((h) => !inBox.has(seedKey(h))) ?? shown[0]); } }} />
-          {focus && shown.length > 0 && (
-            <ul className="rec-hits" role="listbox">
-              {!q.trim() && <li className="rec-hits-k">최근 많이 들은 곡</li>}
-              {shown.map((h) => (
-                <li key={seedKey(h)}>
-                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => add(h)} disabled={inBox.has(seedKey(h))}>
-                    <Cover src={coverOf(covers, 'tracks', h)} size={36} />
-                    <span className="nm"><b>{h.track}</b><span>{h.artist}</span></span>
-                    <em>{inBox.has(seedKey(h)) ? '담음' : `${h.plays.toLocaleString()}회`}</em>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {seeds.length > 0 ? (
-          <ul className="rec-seeds">
-            {seeds.map((s) => (
-              <li key={seedKey(s)}>
-                <Cover src={coverOf(covers, 'tracks', s)} size={28} />
-                <span><b>{s.track}</b><small>{s.artist}</small></span>
-                <button type="button" aria-label={`${s.track} 빼기`} onClick={() => remove(s)}>×</button>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="rec-empty">상자가 비어 있어요. 위에서 찾아 담아 주세요 (최대 10곡).</p>}
-
-        <div className="rec-go-row">
-          <Seg size="sm" label="곡 수" options={[[5, '5곡'], [10, '10곡'], [20, '20곡']]} value={count} onChange={setCount} />
-          <button className="btn" onClick={ask} disabled={!seeds.length || busy}>{busy ? '고르는 중…' : '추천 받기'}</button>
-        </div>
-      </div>
-
-      {busy && !res?.items?.length ? (
-        <ol className="ranks rec-list" aria-busy="true">
-          {[0, 1, 2].map((i) => <li key={i} className="rec-ghost"><span /><span /></li>)}
-        </ol>
-      ) : res?.error && !res.items?.length ? (
-        <p className="note">{res.error}</p>
-      ) : res?.items?.length > 0 && (
-        <ol className="ranks rec-list" data-busy={busy || undefined}>
-          {res.items.map((x) => (
-            <li key={x.id}>
-              <a className="row rec" href={x.url} target="_blank" rel="noreferrer">
-                <Cover src={x.image} size={52} />
-                <span className="nm">
-                  <b>{x.title}</b>
-                  <span>{x.artist}</span>
-                  {x.reason && <span className="rec-why">{x.because ? <em>{x.because}처럼 · </em> : null}{x.reason}</span>}
-                </span>
-                <span className="rec-go" aria-hidden="true">↗</span>
-              </a>
-            </li>
-          ))}
-        </ol>
-      )}
-    </>
-  );
-}
 
 /**
  * Your Spotify playlists, each read against what you actually play: which
@@ -455,13 +326,12 @@ export default function Playlists({ source, estimate, onSelect, onContext }) {
   }, []);
 
   if (open) return <Analysis id={open} source={source} estimate={estimate} onSelect={onSelect} onBack={() => setOpen(null)} />;
-  if (error) return <><Recs />{error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>}</>;
-  if (!lists) return <><Recs /><p className="note" style={{ padding: '18px 0' }}>Spotify 플레이리스트 불러오는 중…</p></>;
+  if (error) return error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>;
+  if (!lists) return <p className="note" style={{ padding: '18px 0' }}>Spotify 플레이리스트 불러오는 중…</p>;
 
   const shown = lists.filter((p) => (whose === 'mine' ? p.mine : !p.mine));
   return (
     <>
-      <Recs />
       <Section title="플레이리스트" sub="골라서 실제 재생 기록과 맞춰 보세요">
         <Seg size="sm" label="플리 종류" options={[['mine', '내 플리'], ['others', '팔로우']]} value={whose} onChange={setWhose} />
       </Section>

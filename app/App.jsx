@@ -8,6 +8,7 @@ import Records from './Records';
 import Playlists from './Playlists';
 import Detail from './Detail';
 import Radio from './Radio';
+import Recs from './Recs';
 import Picker from './Picker';
 import { Seg } from './ui';
 import { invalidate } from './data';
@@ -16,6 +17,7 @@ const TABS = [
   ['chart', '차트', '/'],
   ['season', '챔피언십', '/championship'],
   ['radio', '라디오', '/radio'],
+  ['recs', '추천', '/recs'],
   ['replay', '리플레이', '/replay'],
   ['records', 'Awards', '/records'],
   ['playlists', '플리', '/playlists'],
@@ -211,7 +213,7 @@ export default function App({ initialTab = 'chart' }) {
         </nav>
       </header>
 
-      <div className="filters">
+      {tab !== 'recs' && <div className="filters">
         {(tab === 'chart' || tab === 'season' || tab === 'radio') && (
           <Seg options={MODES} value={mode} onChange={setMode} label="종류" />
         )}
@@ -225,12 +227,13 @@ export default function App({ initialTab = 'chart' }) {
             유튜브 보정
           </button>
         )}
-      </div>
+      </div>}
 
       <main>
         {tab === 'chart' && <Chart {...shared} />}
         {tab === 'season' && <Championship {...shared} year={seasonYear} onYear={setSeasonYear} />}
         {tab === 'radio' && <Radio {...shared} pin={radioPin} />}
+        {tab === 'recs' && <Recs />}
         {tab === 'replay' && <Replay {...shared} />}
         {tab === 'records' && <Records {...shared} />}
         {tab === 'playlists' && <Playlists {...shared} />}

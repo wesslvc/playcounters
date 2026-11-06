@@ -1055,6 +1055,24 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rec-seeds button { width:26px; height:26px; border-radius:8px; font-size:16px; line-height:1; color:var(--ink-3) }
 .rec-seeds button:hover { background:var(--sunk-2); color:var(--ink) }
 .rec-empty { margin-top:12px; font-size:13px; color:var(--ink-3) }
+.recs .rec-box { margin-top:22px }
+.rec-panel-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; margin-top:14px; padding:12px 2px 0;
+  border-top:1px solid var(--hair); text-align:left }
+.rec-panel-toggle > span { display:flex; flex-direction:column; gap:2px; min-width:0 }
+.rec-panel-toggle b { font-size:14px; font-weight:700 }
+.rec-panel-toggle small { font-size:12.5px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.rec-panel-toggle i { font-style:normal; font-size:20px; line-height:1; color:var(--ink-3) }
+.rec-panel { display:flex; flex-direction:column; gap:16px; padding:14px 0 4px }
+.rec-opt { display:flex; flex-direction:column; gap:8px; min-width:0 }
+.rec-opt-k { font-size:12.5px; font-weight:650; color:var(--ink-2) }
+.rec-opt-k small { margin-left:4px; font-weight:500; color:var(--ink-3) }
+.rec-opt .seg { align-self:flex-start; max-width:100%; overflow-x:auto }
+.rec-chips { display:flex; flex-wrap:wrap; gap:6px }
+.rec-chips .chip { height:32px; padding:0 12px; font-size:13px }
+.rec-mood { width:100%; height:42px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); font:inherit; font-size:14px; color:var(--ink); outline:none }
+.rec-mood:focus { border-color:var(--ink-3) }
+.rec-reset { align-self:flex-start; font-size:12.5px; color:var(--ink-3); text-decoration:underline; text-underline-offset:3px }
+.rec-note { margin-top:16px }
 .rec-go-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px }
 .rec-box + .rec-list, .rec-box + .note { margin-top:14px }
 .rec-list .row.rec { grid-template-columns:52px minmax(0,1fr) auto; align-items:center; color:inherit; text-decoration:none }

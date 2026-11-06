@@ -677,18 +677,20 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-key i { width:14px; height:4px; border-radius:2px; flex:0 0 auto }
 
 /* a row in its artist's colour: a soft wash from the left, fading out before the figures */
-.wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 15%, transparent), color-mix(in oklab, var(--wash) 5%, transparent) 40%, transparent 70%) }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 24%, transparent), color-mix(in oklab, var(--wash) 7%, transparent) 40%, transparent 70%) } }
-:root[data-theme="dark"] .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 24%, transparent), color-mix(in oklab, var(--wash) 7%, transparent) 40%, transparent 70%) }
+.wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 10%, transparent), color-mix(in oklab, var(--wash) 3%, transparent) 30%, transparent 55%) }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 16%, transparent), color-mix(in oklab, var(--wash) 4%, transparent) 30%, transparent 55%) } }
+:root[data-theme="dark"] .wash { background-image:linear-gradient(90deg, color-mix(in oklab, var(--wash) 16%, transparent), color-mix(in oklab, var(--wash) 4%, transparent) 30%, transparent 55%) }
 
-.live-top li.wash, .proj-list li.wash, .lead-list li.wash { padding-left:8px; padding-right:8px; border-radius:10px }
+.live-top li.wash, .proj-list li.wash, .lead-list li.wash { padding-left:8px; padding-right:8px; border-radius:10px; border-top:none }
+.season-row.wash, .gp-cal-row.wash { border-bottom:none }
+.live-top, .proj-list, .lead-list { row-gap:3px }
 /* a radio card lit from its corner by whoever it's about */
-.rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 16%, transparent), transparent 62%) }
-:root[data-theme="dark"] .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 26%, transparent), transparent 62%) }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 26%, transparent), transparent 62%) } }
+.rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 11%, transparent), transparent 58%) }
+:root[data-theme="dark"] .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 17%, transparent), transparent 58%) }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rr-card.wash { background-image:radial-gradient(120% 110% at 0% 0%, color-mix(in oklab, var(--wash) 17%, transparent), transparent 58%) } }
 
 /* standings table */
-.season-list { display:grid; gap:0 8px; grid-template-columns:26px minmax(0,1fr) 50px 34px 42px 44px 34px 10px; margin-bottom:6px }
+.season-list { display:grid; gap:4px 8px; grid-template-columns:26px minmax(0,1fr) 50px 34px 42px 44px 34px 10px; margin-bottom:6px }
 .season-cols {
   display:grid; grid-template-columns:subgrid; grid-column:1 / -1; align-items:end;
   padding:0 6px 8px; border-bottom:1px solid var(--line);
@@ -746,7 +748,7 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .lead-note { font-size:12px; color:var(--ink-2); padding-top:8px; border-top:1px solid var(--hair) }
 .gp-sub { font-weight:750; font-size:14px; padding:6px 2px 8px }
 
-.gp-cal { display:grid; gap:0 10px; grid-template-columns:54px 56px minmax(0,1fr) auto 10px }
+.gp-cal { display:grid; gap:4px 10px; grid-template-columns:54px 56px minmax(0,1fr) auto 10px }
 .gp-cols { display:grid; grid-template-columns:subgrid; grid-column:1 / -1; padding:0 6px 8px; border-bottom:1px solid var(--line); font-size:11px; color:var(--ink-3); font-weight:600 }
 .gp-cols span:nth-child(4) { text-align:right }
 .gp-cols span:nth-child(3) { padding-left:13px }
@@ -830,7 +832,7 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .season-cols span:nth-child(2) { padding-left:13px }
   .season-row .cell-pt { font-size:14px }
   .season-row .cell-w, .season-row .cell-p { font-size:12px }
-  .gp-cal { grid-template-columns:44px 50px minmax(0,1fr) auto 8px; gap:0 8px }
+  .gp-cal { grid-template-columns:44px 50px minmax(0,1fr) auto 8px; gap:4px 8px }
   .sheet { padding:8px 18px 34px }
   .sheet-head .cover { width:68px !important; height:68px !important }
   .sheet-title b { font-size:19px }

@@ -468,7 +468,7 @@ function SeasonChart({ labels, series, view }) {
           </>
         )}
         {[...lines].reverse().map((s) => s.segs.map((seg, k) => (
-          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color} strokeDasharray={DASHES[s.dash] ?? undefined}
+          <polyline key={`${s.key}-${k}`} points={seg.map(([px, py]) => `${px},${py}`).join(' ')} fill="none" stroke={s.color} strokeDasharray={points ? undefined : DASHES[s.dash] ?? undefined}
                     strokeWidth={s === lines[0] ? 3 : 2.25} strokeLinejoin="round" strokeLinecap="round"
                     opacity={pick && pick.key !== s.key ? 0.25 : 1} />
         )))}
@@ -688,7 +688,8 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
   const activeKind = chartKind === 'constructors' && chartData.constructorSeries ? 'constructors' : 'drivers';
   // Colored here rather than when the series were built, so a line moves
   // into its genre's band as soon as the genre arrives.
-  // each line in its artist's own colour; an artist's second song is dashed, a third dotted
+  // each line in its artist's own colour; on the position view, where lines
+  // cross, an artist's second song is dashed, a third dotted
   const activeSeries = (() => {
     const list = activeKind === 'constructors' ? chartData.constructorSeries : chartData.driverSeries;
     const dash = repeats(list.map((sr) => sr.artist));
@@ -754,7 +755,7 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             <SeasonChart labels={chartData.labels} series={activeSeries} view={chartView} />
             <ol className="chart-key">
               {activeSeries.map((s, i) => (
-                <li key={s.key} data-lead={i === 0 || undefined}><i style={swatch(s.color, s.dash)} />{s.label}</li>
+                <li key={s.key} data-lead={i === 0 || undefined}><i style={swatch(s.color, chartView === 'position' ? s.dash : 0)} />{s.label}</li>
               ))}
             </ol>
           </div>

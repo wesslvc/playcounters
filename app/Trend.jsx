@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { artistColor, familyLabel, repeats, swatch, DASHES } from '@/lib/genre';
 import { smoothPath, sampleIdx } from '@/lib/curve';
+import { Seg } from './ui';
 
 const W = 720;
 const H = 200;
@@ -49,6 +50,8 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [hover, setHover] = useState(null);
+  // 누적: running totals; 순위: where each stood among these on each day
+  const [view, setView] = useState('cum');
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -85,13 +88,35 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       // close finish is still easier to read off a marker than a hue.
       return { ...s, d, cum, ex: x(buckets.length - 1), ey: y(run) };
     });
-    return { buckets, lines, peak, x, y };
+
+    // the order among these lines on each day: by running total, ties kept in
+    // the final order; nothing until a line has its first play
+    const n = lines.length;
+    const ry = (r) => PAD.t + ((r - 1) / Math.max(1, n - 1)) * (H - PAD.t - PAD.b);
+    const ranks = lines.map(() => new Array(buckets.length).fill(null));
+    for (let b = 0; b < buckets.length; b++) {
+      lines.map((l, k) => [k, l.cum[b]]).filter(([, v]) => v > 0)
+        .sort((p, q) => q[1] - p[1] || p[0] - q[0])
+        .forEach(([k], r) => { ranks[k][b] = r + 1; });
+    }
+    // read off about sixty times across the window (and on the last day),
+    // joined straight, so a week of swapping places doesn't turn into a wall
+    const every = Math.max(1, Math.round(buckets.length / 60));
+    const at = buckets.map((_, b) => b).filter((b) => b % every === 0 || b === buckets.length - 1);
+    const rankLines = lines.map((l, k) => {
+      const rk = ranks[k];
+      const pts = at.filter((b) => rk[b] != null).map((b) => `${x(b).toFixed(1)},${ry(rk[b]).toFixed(1)}`);
+      const last = rk[buckets.length - 1];
+      return { d: pts.length ? `M${pts.join(' L')}` : '', ey: last != null ? ry(last) : null };
+    });
+    return { buckets, lines, peak, x, y, ry, ranks, rankLines };
   }, [data]);
 
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!chart) return <p className="note" style={{ padding: '12px 2px' }}>추이를 불러오는 중…</p>;
 
-  const { buckets, lines, peak, x, y } = chart;
+  const { buckets, lines, peak, x, y, ry, rankLines } = chart;
+  const ranked = view === 'rank';
   const ticks = axisTicks(buckets);
   const pickDay = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -104,10 +129,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   // stable shade of their own, rather than sharing one neighbourhood of hue
   // with everyone else in their genre. Genre still names itself in the
   // legend below, just no longer decides the color.
-  // two songs by one artist can't share a colour: the second takes a free one
+  // an artist's songs share its colour; only the rank view, where lines
+  // cross and swap, tells them apart by dash
   const dashes = repeats(lines.map((s) => s.artist));
   const colorOf = (s) => artistColor(s.artist);
-  const dashOf = (s) => dashes[lines.indexOf(s)] ?? 0;
+  const dashOf = (s) => (ranked ? dashes[lines.indexOf(s)] ?? 0 : 0);
   const lead = lines[0];
   const genreOf = (s) => {
     const fam = genres[s.artist]?.family;
@@ -116,8 +142,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
 
   return (
     <div className="trend">
+      <div className="trend-head">
+        <Seg size="sm" label="그래프" options={[['cum', '누적'], ['rank', '순위']]} value={view} onChange={setView} />
+      </div>
       <div className="legend">
-        <span>누적 재생</span>
+        <span>{ranked ? '이 중 순위' : '누적 재생'}</span>
         <span>{buckets[0].replaceAll('-', '.')} – {buckets[buckets.length - 1].replaceAll('-', '.')}</span>
       </div>
 
@@ -135,7 +164,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         {/* The finish line: every series ends here, at the current total. */}
         <line x1={W - PAD.r} y1={PAD.t} x2={W - PAD.r} y2={H - PAD.b}
               stroke="var(--line)" strokeWidth="1.5" strokeDasharray="2,3" className="trend-finish" />
-        {lead && (
+        {lead && !ranked && (
           <>
             <defs>
               <linearGradient id="trend-lead" x1="0" x2="0" y1="0" y2="1">
@@ -147,12 +176,12 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           </>
         )}
         {[...lines].reverse().map((s, i) => (
-          <path key={i} d={s.d} fill="none" stroke={colorOf(s)} strokeDasharray={DASHES[dashOf(s)] ?? undefined}
+          <path key={i} d={ranked ? rankLines[lines.indexOf(s)].d : s.d} fill="none" stroke={colorOf(s)} strokeDasharray={DASHES[dashOf(s)] ?? undefined}
                 strokeWidth={s === lead ? 3.5 : 2.5} strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
         ))}
         {hover != null && lines.map((s, i) => (
-          <rect key={`h${i}`} x={x(hover) - 4} y={y(s.cum[hover]) - 4} width="8" height="8" rx="4"
+          (ranked ? chart.ranks[i][hover] == null : false) ? null : <rect key={`h${i}`} x={x(hover) - 4} y={(ranked ? ry(chart.ranks[i][hover]) : y(s.cum[hover])) - 4} width="8" height="8" rx="4"
                 fill={colorOf(s)} stroke="var(--paper)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
         ))}
         {/* The finishing order, marked where each line ends. The legend below
@@ -160,11 +189,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
             a rounded rect rather than a circle: the viewBox is stretched to the
             container (preserveAspectRatio="none"), which would squash a circle
             into an ellipse at phone width. */}
-        {lines.map((s, i) => (
-          <rect key={`p${i}`} x={s.ex - 7} y={s.ey - 3.5} width="14" height="7" rx="3.5"
+        {lines.map((s, i) => ((ranked ? rankLines[i].ey : s.ey) == null ? null : (
+          <rect key={`p${i}`} x={s.ex - 7} y={(ranked ? rankLines[i].ey : s.ey) - 3.5} width="14" height="7" rx="3.5"
                 fill={colorOf(s)} stroke="var(--paper)" strokeWidth="1.5"
                 vectorEffect="non-scaling-stroke" />
-        ))}
+        )))}
       </svg>
       {hover != null && (
         <div className="chart-tip" style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${hover / buckets.length < 0.25 ? '0' : hover / buckets.length > 0.75 ? '-100%' : '-50%'})` }}>

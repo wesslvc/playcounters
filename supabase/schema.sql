@@ -1994,3 +1994,23 @@ as $$
   group by q.i, q.ak, q.tk, q.added
   order by q.i;
 $$;
+
+-- ---------- songs you've played, by part of a name ----------
+-- What the recommendation box searches as you type: played songs whose
+-- title or artist contains the text, titles starting with it first, then
+-- by play count.
+create or replace function search_played(p_user uuid, p_q text, p_limit int default 8)
+returns table (artist text, track text, artist_key text, track_key text, plays bigint, last_at timestamptz)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select mode() within group (order by p.artist), mode() within group (order by p.track),
+         p.artist_key, p.track_key, count(*), max(p.played_at)
+  from plays p
+  where p.user_id = p_user
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p.track ilike '%' || p_q || '%' or p.artist ilike '%' || p_q || '%')
+  group by p.artist_key, p.track_key
+  order by (bool_or(p.track ilike p_q || '%')) desc, count(*) desc
+  limit p_limit
+$$;

@@ -151,8 +151,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
            aria-label={`상위 ${lines.length}개 누적 재생 추이`}
            onMouseMove={pickDay} onMouseLeave={() => setHover(null)}
            onTouchStart={(e) => pickDay(e.touches[0] ? { currentTarget: e.currentTarget, clientX: e.touches[0].clientX } : e)}
-           onTouchMove={(e) => pickDay({ currentTarget: e.currentTarget, clientX: e.touches[0].clientX })}
-           onTouchEnd={() => setHover(null)}>
+           onTouchMove={(e) => pickDay({ currentTarget: e.currentTarget, clientX: e.touches[0].clientX })}>
         {hover != null && (
           <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={H - PAD.b}
                 stroke="var(--line)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
@@ -191,22 +190,6 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
                 vectorEffect="non-scaling-stroke" />
         )))}
       </svg>
-      {hover != null && (
-        <div className="chart-tip" style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${hover / buckets.length < 0.25 ? '0' : hover / buckets.length > 0.75 ? '-100%' : '-50%'})` }}>
-          <b>{buckets[hover].replaceAll('-', '.')}</b>
-          <ul>
-            {/* In the order they stood on that day, not the final one. */}
-            {[...lines].sort((a, b) => b.cum[hover] - a.cum[hover]).map((s, i) => (
-              <li key={s.track ?? s.artist} data-zero={!s.cum[hover] || undefined}>
-                <u>{i + 1}</u>
-                <i style={{ background: colorOf(s) }} />
-                <span>{s.track ?? s.artist}</span>
-                <em>{Math.round(s.cum[hover]).toLocaleString()}회</em>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       </div>
 
       <div className="trend-x">
@@ -215,16 +198,21 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         ))}
       </div>
 
+      {/* the day under the finger, read out in the list below rather than over the lines */}
+      <p className="trend-day" aria-live="polite">
+        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 그날 순위</> : '그래프를 누르거나 훑으면 그날 기준으로 바뀌어요'}
+      </p>
       <ol className="trend-key">
         {lines.map((s, i) => (
-          <li key={i}>
+          <li key={i} data-zero={(hover != null && !s.cum[hover]) || undefined}>
+            {hover != null && <u>{[...lines].sort((a, b) => b.cum[hover] - a.cum[hover]).indexOf(s) + 1}</u>}
             <i style={{ background: colorOf(s) }} />
             <b>{s.track ?? s.artist}</b>
             <span>
               {s.track ? s.artist : ''}
               {genreOf(s) && <em className="rowgenre">{genreOf(s)}</em>}
             </span>
-            <em>{estimate && s.yt ? '≈' : ''}{s.total.toLocaleString()}회</em>
+            <em>{estimate && s.yt ? '≈' : ''}{(hover != null ? Math.round(s.cum[hover]) : s.total).toLocaleString()}회</em>
           </li>
         ))}
       </ol>

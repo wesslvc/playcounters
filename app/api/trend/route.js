@@ -12,6 +12,37 @@ const MAX_SERIES = 10;
 const kstDay = (iso) => new Date(new Date(iso).getTime() + KST).toISOString().slice(0, 10);
 
 /**
+ * For each of `top`, its place (1 = most played) on each day of `buckets`,
+ * counting plays from the window's start; null before its first play. Null
+ * overall when the day-by-day plays can't be had — the chart then falls back
+ * to ranking only the lines it draws.
+ */
+async function placesByDay({ userId, from, to, mode, src, estimate, top, buckets }) {
+  const { data, error } = await db.rpc('plays_by_day', {
+    p_user: userId, p_from: from, p_to: to, p_tz: TZ, p_source: src, p_estimate: estimate, p_mode: mode,
+  });
+  if (error || !data?.keys) return null;
+  const index = new Map(data.keys.map((k, i) => [k, i]));
+  const mine = top.map((r) => index.get(mode === 'artists' ? r.artist_key : `${r.artist_key}\u001f${r.track_key}`));
+  const totals = new Float64Array(data.keys.length);
+  const rows = data.rows ?? [];
+  const out = top.map(() => new Array(buckets.length).fill(null));
+  let at = 0;
+  buckets.forEach((day, b) => {
+    const dn = Math.round(Date.parse(day) / 864e5);
+    while (at < rows.length && rows[at][1] <= dn) { totals[rows[at][0]] += Number(rows[at][2]); at += 1; }
+    mine.forEach((k, i) => {
+      if (k == null || !(totals[k] > 0)) return;
+      const t = totals[k];
+      let ahead = 0;
+      for (let j = 0; j < totals.length; j++) if (totals[j] > t) ahead += 1;
+      out[i][b] = ahead + 1;
+    });
+  });
+  return out;
+}
+
+/**
  * Shape of the leaders over the selected period, for the trend chart.
  *
  * Built from two readers that already take the arguments this needs, rather
@@ -83,6 +114,11 @@ export async function GET(req) {
   }
   const bucketOf = (day) => day;
 
+  // Each item's real place on every day: where it stood among everything played
+  // in the window by then, not among the few drawn. plays_by_day gives every
+  // item's plays by day in one answer; the running totals are walked day by day.
+  const places = await placesByDay({ userId, from, to, mode, src, estimate, top, buckets });
+
   const series = top.map((r, i) => {
     const byBucket = new Map();
     let total = 0;
@@ -100,6 +136,7 @@ export async function GET(req) {
       // Rounded once over the whole period rather than once a bucket: adding up
       // rounded buckets put the same track a play or two clear of the ranking.
       total: Math.round(total),
+      ranks: places?.[i] ?? null,
     };
   }).sort((a, b) => b.total - a.total);
 

@@ -89,16 +89,22 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       return { ...s, d, cum, ex: x(buckets.length - 1), ey: y(run) };
     });
 
-    // the order among these lines on each day: by running total, ties kept in
-    // the final order; nothing until a line has its first play
-    const n = lines.length;
-    const ry = (r) => PAD.t + ((r - 1) / Math.max(1, n - 1)) * (H - PAD.t - PAD.b);
-    const ranks = lines.map(() => new Array(buckets.length).fill(null));
-    for (let b = 0; b < buckets.length; b++) {
-      lines.map((l, k) => [k, l.cum[b]]).filter(([, v]) => v > 0)
-        .sort((p, q) => q[1] - p[1] || p[0] - q[0])
-        .forEach(([k], r) => { ranks[k][b] = r + 1; });
+    // each line's real place on each day, among everything played, from the
+    // server; without it, the order among just these lines
+    const ranks = lines.map((l) => (l.ranks && l.ranks.length === buckets.length ? l.ranks : null));
+    if (ranks.some((r) => !r)) {
+      lines.forEach((_, k) => { ranks[k] = new Array(buckets.length).fill(null); });
+      for (let b = 0; b < buckets.length; b++) {
+        lines.map((l, k) => [k, l.cum[b]]).filter(([, v]) => v > 0)
+          .sort((p, q) => q[1] - p[1] || p[0] - q[0])
+          .forEach(([k], r) => { ranks[k][b] = r + 1; });
+      }
     }
+    // the worst place drawn sets the scale; on a log axis, so 3rd and 300th both read
+    const worst = Math.max(2, ...ranks.flat().filter((r) => r != null));
+    const ry = (r) => PAD.t + (Math.log(r) / Math.log(worst)) * (H - PAD.t - PAD.b);
+    const rankTicks = [1, 3, 10, 30, 100, 300, 1000, 3000].filter((t) => t < worst);
+    rankTicks.push(worst);
     // read off about sixty times across the window (and on the last day),
     // joined straight, so a week of swapping places doesn't turn into a wall
     const every = Math.max(1, Math.round(buckets.length / 60));
@@ -109,13 +115,13 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       const last = rk[buckets.length - 1];
       return { d: pts.length ? `M${pts.join(' L')}` : '', ey: last != null ? ry(last) : null };
     });
-    return { buckets, lines, peak, x, y, ry, ranks, rankLines };
+    return { buckets, lines, peak, x, y, ry, ranks, rankLines, rankTicks };
   }, [data]);
 
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!chart) return <p className="note" style={{ padding: '12px 2px' }}>추이를 불러오는 중…</p>;
 
-  const { buckets, lines, peak, x, y, ry, ranks, rankLines } = chart;
+  const { buckets, lines, peak, x, y, ry, ranks, rankLines, rankTicks } = chart;
   const ranked = view === 'rank';
   const ticks = axisTicks(buckets);
   const pickDay = (e) => {
@@ -142,11 +148,16 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         <Seg size="sm" label="그래프" options={[['cum', '누적'], ['rank', '순위']]} value={view} onChange={setView} />
       </div>
       <div className="legend">
-        <span>{ranked ? '이 중 순위' : '누적 재생'}</span>
+        <span>{ranked ? '전체 곡 중 순위' : '누적 재생'}</span>
         <span>{buckets[0].replaceAll('-', '.')} – {buckets[buckets.length - 1].replaceAll('-', '.')}</span>
       </div>
 
       <div className="trend-plot">
+        {ranked && (
+          <div className="trend-yaxis" aria-hidden="true">
+            {rankTicks.map((t) => <span key={t} style={{ top: `${(ry(t) / H) * 100}%` }}>{t.toLocaleString()}위</span>)}
+          </div>
+        )}
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="trend-svg" role="img"
            aria-label={`상위 ${lines.length}개 누적 재생 추이`}
            onMouseMove={pickDay} onMouseLeave={() => setHover(null)}
@@ -202,7 +213,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           rather than over the lines: each one's place among these and how it
           moved over the week before */}
       <p className="trend-day" aria-live="polite">
-        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 순위는 7일 전 대비</> : <>지금 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
+        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 전체 곡 중 순위 · 7일 전 대비</> : <>지금 전체 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
       </p>
       <ol className="trend-key">
         {(() => {

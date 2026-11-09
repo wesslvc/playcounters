@@ -2015,3 +2015,35 @@ as $$
   order by (bool_or(p.track ilike p_q || '%')) desc, count(*) desc
   limit p_limit
 $$;
+
+-- ---------- every item's plays, day by day ----------
+-- One answer for the trend chart's real places: item keys once, then
+-- [key index, day (days since 1970-01-01), plays] rows in day order. The
+-- server walks the running totals to say where each charted item stood
+-- among everything played, on every day.
+create or replace function plays_by_day(
+  p_user uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_source text, p_estimate boolean, p_mode text
+)
+returns json
+language sql stable
+set search_path = public, pg_temp
+as $$
+  with daily as (
+    select case when p_mode = 'artists' then p.artist_key else p.artist_key || chr(31) || p.track_key end as k,
+           ((p.played_at at time zone p_tz)::date - date '1970-01-01') as d,
+           sum(case when p_estimate then p.est_plays else 1 end) as w
+    from plays p
+    where p.user_id = p_user
+      and p.played_at >= p_from and p.played_at < p_to
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source = 'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+    group by 1, 2
+  ),
+  keyed as (select k, dense_rank() over (order by k) - 1 as i, d, w from daily)
+  select json_build_object(
+    'keys', (select json_agg(k order by i) from (select distinct k, i from keyed) x),
+    'rows', (select json_agg(json_build_array(i, d, round(w::numeric, 2)) order by d) from keyed)
+  )
+$$;

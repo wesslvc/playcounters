@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { artistColor, familyLabel } from '@/lib/genre';
 import { smoothPath, sampleIdx } from '@/lib/curve';
-import { Seg } from './ui';
+import { Seg, Delta } from './ui';
 
 const W = 720;
 const H = 200;
@@ -115,7 +115,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!chart) return <p className="note" style={{ padding: '12px 2px' }}>추이를 불러오는 중…</p>;
 
-  const { buckets, lines, peak, x, y, ry, rankLines } = chart;
+  const { buckets, lines, peak, x, y, ry, ranks, rankLines } = chart;
   const ranked = view === 'rank';
   const ticks = axisTicks(buckets);
   const pickDay = (e) => {
@@ -198,14 +198,24 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         ))}
       </div>
 
-      {/* the day under the finger, read out in the list below rather than over the lines */}
+      {/* the day under the finger (or the last day), read out in the list below
+          rather than over the lines: each one's place among these and how it
+          moved over the week before */}
       <p className="trend-day" aria-live="polite">
-        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 그날 순위</> : '그래프를 누르거나 훑으면 그날 기준으로 바뀌어요'}
+        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 순위는 7일 전 대비</> : <>지금 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
       </p>
       <ol className="trend-key">
-        {lines.map((s, i) => (
+        {lines.map((s, i) => {
+          const day = hover ?? buckets.length - 1;
+          const then = Math.max(0, day - 7);
+          const now = ranks[i][day];
+          const before = ranks[i][then];
+          // ▲ climbed, ▼ fell, NEW when it hadn't been played a week before
+          const move = now == null ? null : before == null ? (day > 0 ? undefined : null) : before - now;
+          return (
           <li key={i} data-zero={(hover != null && !s.cum[hover]) || undefined}>
-            {hover != null && <u>{[...lines].sort((a, b) => b.cum[hover] - a.cum[hover]).indexOf(s) + 1}</u>}
+            <u>{now ?? '–'}</u>
+            <span className="trend-move"><Delta value={move} /></span>
             <i style={{ background: colorOf(s) }} />
             <b>{s.track ?? s.artist}</b>
             <span>
@@ -214,7 +224,8 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
             </span>
             <em>{estimate && s.yt ? '≈' : ''}{(hover != null ? Math.round(s.cum[hover]) : s.total).toLocaleString()}회</em>
           </li>
-        ))}
+          );
+        })}
       </ol>
     </div>
   );

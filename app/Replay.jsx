@@ -201,7 +201,8 @@ export default function Replay({ source, estimate, calendar, version, onSelect, 
           </div>
 
           {no1 && (
-            <button className="replay-no1" onClick={() => onSelect(target(no1))}>
+            <button className="replay-no1 spot" onClick={() => onSelect(target(no1))}>
+              {heroImg && <span className="spot-bg" aria-hidden="true" style={{ backgroundImage: `url(${heroImg})` }} />}
               <Cover src={heroImg} size={168} />
               <span>
                 <em>이번 분기의 노래</em>
@@ -241,8 +242,11 @@ export default function Replay({ source, estimate, calendar, version, onSelect, 
               <Section title="Top Artists" sub={topGenre} />
               <div className="artist-grid">
                 {artists.slice(0, 10).map((a, i) => (
-                  <button key={a.artist_key} className={i === 0 ? 'artist-tile first' : 'artist-tile'}
+                  <button key={a.artist_key} className={i === 0 ? 'artist-tile first spot' : 'artist-tile'}
                           onClick={() => onSelect(target(a))}>
+                    {i === 0 && coverOf(artistCovers, 'artists', a) && (
+                      <span className="spot-bg" aria-hidden="true" style={{ backgroundImage: `url(${coverOf(artistCovers, 'artists', a)})` }} />
+                    )}
                     <Cover src={coverOf(artistCovers, 'artists', a)} size={i === 0 ? 132 : 76} round />
                     <span className="artist-rk">{i + 1}</span>
                     <b>{a.artist}</b>

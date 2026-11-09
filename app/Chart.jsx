@@ -5,7 +5,7 @@ import { rowKey } from '@/lib/keys';
 import { artistColor, familyLabel } from '@/lib/genre';
 import { computeRanks, computeRanksBy } from '@/lib/rank';
 import { yearsFromCalendar } from '@/lib/calendar';
-import { useCredits, artistLine, artistNames, fillStyle } from './useCredits';
+import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import Trend from './Trend';
@@ -163,7 +163,7 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst }) {
       </button>
       <div className="runners">
         {rest.map((r, i) => (
-          <button key={rowKey(r)} className="runner" onClick={() => onSelect(target(r))}>
+          <button key={rowKey(r)} className="runner wash" style={washStyle(r)} onClick={() => onSelect(target(r))}>
             <span className="runner-rk">{ranks[i + 1]}</span>
             <Cover src={coverOf(covers, mode, r)} size={52} round={mode === 'artists'} />
             <span className="runner-text">

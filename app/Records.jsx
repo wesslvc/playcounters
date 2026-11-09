@@ -177,7 +177,8 @@ function Club({ mode, members, covers, onSelect, kicker, when, sub, short, lead,
   const round = mode === 'artists';
   return (
     <div className="club">
-      <button className="replay-no1 club-lead" onClick={() => onSelect(target(latest))}>
+      <button className="replay-no1 club-lead spot" onClick={() => onSelect(target(latest))}>
+        {pic(latest) && <span className="spot-bg" aria-hidden="true" style={{ backgroundImage: `url(${pic(latest)})` }} />}
         <Cover src={pic(latest)} size={168} round={round} />
         <span>
           <em>{kicker}</em>

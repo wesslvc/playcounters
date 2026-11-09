@@ -1136,3 +1136,66 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
   .pl-head h1 { font-size:20px }
   .pl-artists li { grid-template-columns:minmax(0,7em) minmax(0,1fr) 8.5em }
 }
+
+
+/* ==========================================================================
+   Upgrade layer: navigation, spotlight cards, touch feedback, small screens
+   ========================================================================== */
+
+/* tabs: the open one is a pill; the strip fades where it scrolls on */
+.tabs { gap:4px; margin:0 -20px; padding:0 20px 10px;
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 28px), transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 28px), transparent) }
+.tabs a { padding:7px 13px; border-radius:999px; font-size:14.5px; transition:color .15s, background .15s }
+.tabs a:hover { color:var(--ink); background:var(--sunk) }
+.tabs a[aria-current="page"] { color:var(--bg); background:var(--ink) }
+.tabs a[aria-current="page"]::after { display:none }
+
+/* a view arrives, it doesn't blink in */
+.view { animation:view-in .28s cubic-bezier(.2,.7,.2,1) }
+@keyframes view-in { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+
+/* things you press give a little */
+.no1, .runner, .leader, .rr-card, .radio-hero, .pl-card, .replay-no1, .artist-tile, .album, .month-card, .radio-chan, .btn, .chip, .pill, .toggle {
+  transition:transform .16s ease, background .15s, border-color .15s, color .15s, opacity .15s }
+:is(.no1, .runner, .leader, .rr-card, .radio-hero, .pl-card, .replay-no1, .artist-tile, .album, .radio-chan, .btn, .chip, .pill, .toggle):active:not(:disabled) { transform:scale(.975) }
+.row:active:not(:disabled), .season-row:active, .gp-cal-row:active { background-color:var(--sunk) }
+
+/* artwork that hasn't come (or never will): a quiet note, not a hole */
+.cover:not(:has(img)) {
+  background:var(--sunk) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 17.5V6.2l9-1.9v10.9' fill='none' stroke='%23888' stroke-opacity='.45' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='6.8' cy='17.5' r='2.3' fill='%23888' fill-opacity='.45'/%3E%3Ccircle cx='15.8' cy='15.2' r='2.3' fill='%23888' fill-opacity='.45'/%3E%3C/svg%3E") center / 46% no-repeat }
+
+/* spotlight cards: the quarter's song, its artist, a club's newest member — lit by their own picture */
+.spot { position:relative; isolation:isolate; overflow:hidden; background:#141416 !important; border-color:transparent !important; color:#fff }
+.spot-bg { position:absolute; inset:-60px; z-index:-2; background-size:cover; background-position:center; filter:blur(48px) saturate(1.6); opacity:.75; transform:scale(1.1) }
+.spot::after { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(110deg, rgba(0,0,0,.5), rgba(0,0,0,.18)) }
+.spot .cover { box-shadow:0 14px 34px -10px rgba(0,0,0,.6) }
+.spot .cover::after { box-shadow:inset 0 0 0 1px rgba(255,255,255,.1) }
+.spot em, .spot i, .spot.artist-tile.first::before { color:rgba(255,255,255,.72) !important }
+.spot span span, .spot .club-when, .spot.artist-tile.first > span:last-child { color:rgba(255,255,255,.8) !important }
+.spot b { color:#fff }
+
+/* second and third: tinted by who they are */
+.runner { position:relative; overflow:hidden }
+.highlights { gap:10px; background:none !important; border:none !important; border-radius:0 !important; overflow:visible !important }
+.highlights > div { border-radius:16px; border:1px solid var(--hair) }
+
+/* chip rows that scroll fade at the edge instead of being cut */
+.quarters, .jump {
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 28px), transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 28px), transparent) }
+
+/* projected and live rows: the place and its move don't touch */
+.proj-list { grid-template-columns:26px 30px minmax(0,1fr) auto }
+.proj-pos, .live-pos { font-variant-numeric:tabular-nums }
+
+@media (max-width:560px) {
+  .tabs a { padding:6px 11px; font-size:14px }
+  /* standings on a phone: picture, name and the three figures that matter */
+  .season-list { gap:4px 6px; grid-template-columns:20px minmax(0,1fr) 40px 26px 30px 8px }
+  .season-list .nm3 .cover { display:inline-block; width:30px !important; height:30px !important }
+  .season-cols > :nth-child(6), .season-cols > :nth-child(7),
+  .season-row > :nth-child(6), .season-row > :nth-child(7) { display:none }
+  .season-cols span:nth-child(2) { padding-left:0 }
+  .season-row .pos { font-size:13.5px }
+}

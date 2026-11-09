@@ -107,6 +107,13 @@ export default function App({ initialTab = 'chart' }) {
   }
 
   const closeDetail = useCallback(() => setDetail(null), []);
+  // the tab strip scrolls on a phone: keep the tab that's open in sight
+  const tabsEl = useRef(null);
+  useEffect(() => {
+    const el = tabsEl.current?.querySelector('[aria-current="page"]');
+    const box = tabsEl.current;
+    if (el && box) box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
+  }, [tab]);
 
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -201,7 +208,7 @@ export default function App({ initialTab = 'chart' }) {
             </div>
           </div>
         </div>
-        <nav className="tabs" aria-label="보기">
+        <nav className="tabs" aria-label="보기" ref={tabsEl}>
           {TABS.map(([k, label, path]) => (
             <a
               key={k} href={path} aria-current={tab === k ? 'page' : undefined}
@@ -229,7 +236,7 @@ export default function App({ initialTab = 'chart' }) {
         )}
       </div>}
 
-      <main>
+      <main key={tab} className="view">
         {tab === 'chart' && <Chart {...shared} />}
         {tab === 'season' && <Championship {...shared} year={seasonYear} onYear={setSeasonYear} />}
         {tab === 'radio' && <Radio {...shared} pin={radioPin} />}

@@ -205,8 +205,13 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
         {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 순위는 7일 전 대비</> : <>지금 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
       </p>
       <ol className="trend-key">
-        {lines.map((s, i) => {
+        {(() => {
+          // the songs themselves move: listed in the order they stood that day
           const day = hover ?? buckets.length - 1;
+          return lines.map((s, i) => i)
+            .sort((p, q) => (ranks[p][day] ?? 99) - (ranks[q][day] ?? 99) || p - q)
+            .map((i) => [lines[i], i, day]);
+        })().map(([s, i, day]) => {
           const then = Math.max(0, day - 7);
           const now = ranks[i][day];
           const before = ranks[i][then];

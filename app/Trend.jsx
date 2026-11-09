@@ -217,12 +217,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
             <u>{now ?? '–'}</u>
             <span className="trend-move"><Delta value={move} /></span>
             <i style={{ background: colorOf(s) }} />
-            <b>{s.track ?? s.artist}</b>
-            <span>
-              {s.track ? s.artist : ''}
-              {genreOf(s) && <em className="rowgenre">{genreOf(s)}</em>}
+            <span className="trend-nm">
+              <b>{s.track ?? s.artist}</b>
+              <small>{[s.track ? s.artist : null, genreOf(s)].filter(Boolean).join(' · ')}</small>
             </span>
-            <em>{estimate && s.yt ? '≈' : ''}{(hover != null ? Math.round(s.cum[hover]) : s.total).toLocaleString()}회</em>
+            <em>{estimate && s.yt ? '≈' : ''}{(hover != null ? Math.round(s.cum[hover]) : s.total).toLocaleString()}<small>회</small></em>
           </li>
           );
         })}

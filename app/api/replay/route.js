@@ -41,7 +41,7 @@ export async function GET(req) {
     ...base, p_from: iso(a), p_to: iso(b), p_mode: mode, p_limit: limit, p_days: false, p_estimate: estimate,
   });
 
-  const [tracks, artists, prev, daily, debuts, debutArtists, artistCount, trackCount, ...months] = await Promise.all([
+  const [tracks, artists, prev, daily, debuts, debutArtists, artistCount, trackCount, races] = await Promise.all([
     top(from, to, 'tracks', 100),
     top(from, to, 'artists', 25),
     top(prevFrom, from, 'tracks', 200),
@@ -50,7 +50,8 @@ export async function GET(req) {
     db.rpc('window_debuts', { ...base, p_from: iso(from), p_to: iso(to), p_mode: 'artists', p_limit: 3 }),
     db.rpc('item_count', { ...base, p_from: iso(from), p_to: iso(to), p_mode: 'artists' }),
     db.rpc('item_count', { ...base, p_from: iso(from), p_to: iso(to), p_mode: 'tracks' }),
-    ...[0, 1, 2].map((i) => top(monthStart(year, m0 + i), monthStart(year, m0 + i + 1), 'tracks', 1)),
+    // each month's number one is its Grand Prix winner: the same race, the same rule
+    rpcAll('season_races', { ...base, p_from: iso(from), p_to: iso(to), p_mode: 'tracks', p_estimate: estimate }, 200),
   ]);
   const failed = [tracks, artists, daily].find((r) => r.error);
   if (failed) return NextResponse.json({ error: failed.error.message }, { status: 500 });
@@ -93,7 +94,10 @@ export async function GET(req) {
     albums: [...albums.values()].sort((a, b) => b.plays - a.plays).slice(0, 5)
       .map(({ cover, ...a }) => ({ ...a, track: cover.track })),
     prevRank,
-    months: months.map((r, i) => ({ month: m0 + i, top: r.data?.[0] ?? null })),
+    months: [0, 1, 2].map((i) => ({
+      month: m0 + i,
+      top: (races.data ?? []).find((r) => r.yr === year && r.mo === m0 + i && r.place === 1) ?? null,
+    })),
     debuts: {
       total: Number(debuts.data?.[0]?.total ?? 0),
       top: debuts.data ?? [],

@@ -658,7 +658,8 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
 .chart-wrap { position:relative; padding:8px 0 4px }
 .chart-svg { display:block; overflow:visible; touch-action:pan-y }
-.chart-dot { cursor:pointer; transition:r .12s }
+.chart-dot { transition:r .12s }
+.chart-svg { cursor:crosshair }
 .sc-info { display:flex; align-items:center; gap:14px; min-height:52px; margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--sunk) }
 .sc-info > i { flex:0 0 auto; width:4px; align-self:stretch; border-radius:2px }
 .sc-info-who { display:flex; flex-direction:column; min-width:0; flex:1 1 auto }

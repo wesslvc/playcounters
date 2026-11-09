@@ -455,13 +455,30 @@ function SeasonChart({ labels, series, view }) {
   const lead = points ? lines[0] : null;
   const leadPath = lead?.segs[0]?.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
 
+  // no need to hit a dot: wherever the chart is touched, the nearest round, and
+  // on it the line nearest the finger
+  const pickAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    const py = ((e.clientY - r.top) / r.height) * H;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((px - P.l) / Math.max(1, W - P.l - P.r)) * (n - 1))));
+    let best = null;
+    for (const sr of lines) {
+      const v = val(sr.pts[i]);
+      if (v == null) continue;
+      const d = Math.abs(y(v) - py);
+      if (!best || d < best.d) best = { key: sr.key, d };
+    }
+    if (best && (pick?.key !== best.key || pick?.i !== i)) setPick({ key: best.key, i });
+  };
   const picked = pick && lines.find((s) => s.key === pick.key);
   const pp = picked?.pts[pick.i];
 
   return (
     <div className="chart-wrap" ref={box}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="chart-svg" role="img"
-           aria-label={points ? '누적 포인트 추이' : '챔피언십 순위 추이'} onClick={(e) => { if (e.target === e.currentTarget) setPick(null); }}>
+           aria-label={points ? '누적 포인트 추이' : '챔피언십 순위 추이'}
+           onPointerDown={pickAt} onPointerMove={(e) => { if (e.pointerType === 'mouse' || e.buttons) pickAt(e); }}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} className="chart-grid" />
@@ -499,7 +516,7 @@ function SeasonChart({ labels, series, view }) {
           <circle key={`${s.key}-d${i}`} cx={x(i)} cy={y(val(p))} r={pick?.key === s.key && pick.i === i ? 6 : n > 14 ? 2.75 : 3.75}
                   fill={pick?.key === s.key && pick.i === i ? s.color : 'var(--surface)'} stroke={s.color} strokeWidth="2" strokeDasharray={i === liveAt ? '2.5 2' : undefined}
                   opacity={pick && pick.key !== s.key ? 0.25 : 1} className="chart-dot"
-                  onMouseEnter={() => setPick({ key: s.key, i })} onClick={() => setPick({ key: s.key, i })} />
+                  pointerEvents="none" />
         ))))}
       </svg>
 
@@ -514,14 +531,14 @@ function SeasonChart({ labels, series, view }) {
             </span>
             <span className="sc-info-fig">
               <small>{pp.live ? '이대로 끝나면' : '챔피언십'}</small>
-              <b>P{pp.pos} · {pp.cum.toLocaleString()}pt</b>
+              <b>{pp.pos ? `P${pp.pos} · ${pp.cum.toLocaleString()}pt` : '아직 포인트 없음'}</b>
             </span>
             <span className="sc-info-fig">
               <small>{pp.live ? '지금 순위' : '이 라운드'}</small>
               <b>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트권 밖'}</b>
             </span>
           </>
-        ) : <span className="sc-info-hint">점을 누르면 그 라운드 기록이 여기 나와요</span>}
+        ) : <span className="sc-info-hint">그래프를 누르거나 밀면 가장 가까운 선의 그 라운드 기록이 나와요</span>}
       </div>
     </div>
   );

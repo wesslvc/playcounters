@@ -651,12 +651,15 @@ button.pill:disabled { color:var(--ink-3); background:transparent; border-color:
 .chart-wrap { position:relative; padding:8px 0 4px }
 .chart-svg { display:block; overflow:visible; touch-action:pan-y }
 .chart-dot { cursor:pointer; transition:r .12s }
-.sc-tip { transform:translate(-50%, -100%); min-width:150px }
-.sc-tip.tip-start { transform:translate(-14px, -100%) }
-.sc-tip.tip-end { transform:translate(calc(-100% + 14px), -100%) }
-.sc-tip strong { display:block; max-width:210px; margin-bottom:6px; font-size:13.5px; font-weight:750; letter-spacing:-.015em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.sc-tip li { gap:14px }
-.sc-tip li span { color:var(--ink-3) }
+.sc-info { display:flex; align-items:center; gap:14px; min-height:52px; margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--sunk) }
+.sc-info > i { flex:0 0 auto; width:4px; align-self:stretch; border-radius:2px }
+.sc-info-who { display:flex; flex-direction:column; min-width:0; flex:1 1 auto }
+.sc-info-who b { font-size:14px; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.sc-info small { font-size:11.5px; color:var(--ink-3) }
+.sc-info-fig { display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap }
+.sc-info-fig b { font-size:13.5px; font-weight:700; font-variant-numeric:tabular-nums }
+.sc-info-hint { font-size:12.5px; color:var(--ink-3) }
+@media (max-width:560px) { .sc-info { flex-wrap:wrap; gap:6px 14px } .sc-info-who { flex-basis:calc(100% - 20px) } .sc-info-fig { align-items:flex-start } }
 .chart-grid { stroke:var(--line); stroke-width:1; stroke-dasharray:2 4 }
 .chart-card { padding:14px 14px 16px; border-radius:20px; background:var(--surface); border:1px solid var(--hair) }
 .chart-ytext { fill:var(--ink-3); font-size:10.5px; font-weight:600; font-family:inherit; font-variant-numeric:tabular-nums }

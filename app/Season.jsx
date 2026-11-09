@@ -496,24 +496,33 @@ function SeasonChart({ labels, series, view }) {
                     opacity={pick && pick.key !== s.key ? 0.2 : 0.85} />
         ))}
         {[...lines].reverse().map((s) => s.pts.map((p, i) => (val(p) == null ? null : (
-          <circle key={`${s.key}-d${i}`} cx={x(i)} cy={y(val(p))} r={pick?.key === s.key && pick.i === i ? 6 : 3.75}
+          <circle key={`${s.key}-d${i}`} cx={x(i)} cy={y(val(p))} r={pick?.key === s.key && pick.i === i ? 6 : n > 14 ? 2.75 : 3.75}
                   fill={pick?.key === s.key && pick.i === i ? s.color : 'var(--surface)'} stroke={s.color} strokeWidth="2" strokeDasharray={i === liveAt ? '2.5 2' : undefined}
                   opacity={pick && pick.key !== s.key ? 0.25 : 1} className="chart-dot"
                   onMouseEnter={() => setPick({ key: s.key, i })} onClick={() => setPick({ key: s.key, i })} />
         ))))}
       </svg>
 
-      {pp && (
-        <div className={`chart-tip sc-tip${x(pick.i) / W < 0.3 ? ' tip-start' : x(pick.i) / W > 0.7 ? ' tip-end' : ''}`}
-             style={{ left: `${x(pick.i)}px`, top: `${Math.max(0, y(val(pp)) - 12)}px` }}>
-          <b>{labels[pick.i]} GP{pp.live ? ' · 진행 중' : ''}</b>
-          <strong style={{ color: picked.color }}>{picked.label}</strong>
-          <ul>
-            <li><span>{pp.live ? '이대로 끝나면' : '챔피언십'}</span><em>P{pp.pos} · {pp.cum.toLocaleString()}pt</em></li>
-            <li><span>{pp.live ? '지금 순위' : '이 라운드'}</span><em>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트권 밖'}</em></li>
-          </ul>
-        </div>
-      )}
+      {/* the picked round, read out under the plot rather than over it, so no line is hidden */}
+      <div className="sc-info" aria-live="polite">
+        {pp ? (
+          <>
+            <i style={{ background: picked.color }} />
+            <span className="sc-info-who">
+              <b>{picked.label}</b>
+              <small>{labels[pick.i]} GP{pp.live ? ' · 진행 중' : ''}</small>
+            </span>
+            <span className="sc-info-fig">
+              <small>{pp.live ? '이대로 끝나면' : '챔피언십'}</small>
+              <b>P{pp.pos} · {pp.cum.toLocaleString()}pt</b>
+            </span>
+            <span className="sc-info-fig">
+              <small>{pp.live ? '지금 순위' : '이 라운드'}</small>
+              <b>{pp.rank ? `P${pp.rank} · +${pp.gained}pt` : '포인트권 밖'}</b>
+            </span>
+          </>
+        ) : <span className="sc-info-hint">점을 누르면 그 라운드 기록이 여기 나와요</span>}
+      </div>
     </div>
   );
 }

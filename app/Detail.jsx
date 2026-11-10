@@ -459,6 +459,10 @@ function Versus({ target, source, estimate, career, mine }) {
   const sa = judged.filter((r) => r.win === 'a').length;
   const sb = judged.filter((r) => r.win === 'b').length;
   const lead = !theirs ? null : sa > sb ? 'a' : sb > sa ? 'b' : null;
+  // the card split in nine unseen slots: one each to start, one per line won,
+  // a tied line half to each — the winner takes more of the card
+  const ties = judged.length - sa - sb;
+  const share = !theirs ? 0.5 : (1 + sa + ties / 2) / (2 + judged.length);
   const picA = coverOf(covers, mode, target);
   const picB = coverOf(covers, mode, other);
   const side = (t, pic, score, me) => (
@@ -472,9 +476,9 @@ function Versus({ target, source, estimate, career, mine }) {
 
   return (
     <div className="vs">
-      <div className="vs-card">
-        {picA && <span className="vs-bg a" aria-hidden="true" style={{ backgroundImage: `url(${picA})` }} />}
-        {picB && <span className="vs-bg b" aria-hidden="true" style={{ backgroundImage: `url(${picB})` }} />}
+      <div className="vs-card" style={{ '--p': `${(share * 100).toFixed(2)}%` }}>
+        <span className="vs-half a" aria-hidden="true">{picA && <span className="vs-bg" style={{ backgroundImage: `url(${picA})` }} />}</span>
+        <span className="vs-half b" aria-hidden="true">{picB && <span className="vs-bg" style={{ backgroundImage: `url(${picB})` }} />}</span>
         {side(target, picA, sa, 'a')}
         {side(other, picB, sb, 'b')}
       </div>

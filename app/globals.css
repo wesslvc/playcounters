@@ -1303,13 +1303,18 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .vs-hits .nm > span { font-size:12px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .vs-hits em { font-style:normal; font-size:12.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
 /* the fight card: two covers split on a slant, VS in the cut */
-.vs-card { position:relative; isolation:isolate; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:28px;
-  align-items:start; padding:20px 12px 18px; border-radius:22px; background:#111113; color:#fff }
-.vs-bg { position:absolute; inset:-30px; z-index:-2; background-size:cover; background-position:center; filter:blur(26px) saturate(1.5); opacity:.75 }
-.vs-bg.a { clip-path:polygon(0 0, 55% 0, 45% 100%, 0 100%) }
-.vs-bg.b { clip-path:polygon(56.5% 0, 100% 0, 100% 100%, 46.5% 100%) }
+.vs-card { position:relative; isolation:isolate; overflow:hidden; display:grid; grid-template-columns:var(--p) minmax(0,1fr);
+  transition:grid-template-columns .6s cubic-bezier(.2,.7,.2,1), --p .6s cubic-bezier(.2,.7,.2,1);
+  align-items:start; padding:20px 0 18px; border-radius:22px; background:#111113; color:#fff }
+@property --p { syntax:'<percentage>'; inherits:true; initial-value:50% }
+/* each half its own cover, cut on a slant at --p, a thin dark seam between */
+.vs-half { position:absolute; inset:0; z-index:-2; overflow:hidden }
+.vs-half.a { clip-path:polygon(0 0, calc(var(--p) + 4%) 0, calc(var(--p) - 4%) 100%, 0 100%) }
+.vs-half.b { clip-path:polygon(calc(var(--p) + 5.5%) 0, 100% 0, 100% 100%, calc(var(--p) - 2.5%) 100%) }
+.vs-bg { position:absolute; inset:-30px; background-size:cover; background-position:center; filter:blur(26px) saturate(1.5); opacity:.75 }
 .vs-card::after { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.6)) }
-.vs-side { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; text-align:center }
+.vs-side { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; padding:0 12px; text-align:center }
+.vs-side .cover { width:min(76px, 100%) !important; height:auto !important; aspect-ratio:1 }
 .vs-side .cover { margin-bottom:8px; box-shadow:0 12px 26px -10px rgba(0,0,0,.7) }
 .vs-side b { max-width:100%; font-size:14.5px; font-weight:750; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all }
 .vs-side small { max-width:100%; font-size:11.5px; color:rgba(255,255,255,.7); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }

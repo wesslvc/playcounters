@@ -151,8 +151,8 @@ function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio })
         sub: podium[0].track ? artistLine(podium[0]) : null,
         image: coverOf(covers, mode, podium[0]),
         round: mode === 'artists',
-        stats: [[`${podium[0].plays.toLocaleString()}`, '재생'], ['25', 'PTS'], [`+${(podium[0].plays - podium[1].plays).toLocaleString()}`, '2위와 차이']],
-        list: items.slice(0, 5).map((t) => ({ rank: `P${t.rank}`, title: t.track ?? t.artist, sub: t.track ? t.artist : '', value: `${t.points}pt`, image: coverOf(covers, mode, t) })),
+        stats: [[`${podium[0].plays.toLocaleString()}회`, '이달 재생'], [`+${(podium[0].plays - podium[1].plays).toLocaleString()}회`, '2위와 차이']],
+        list: items.slice(0, 5).map((t) => ({ rank: t.rank, title: t.track ?? t.artist, sub: t.track ? t.artist : '', value: `${t.plays.toLocaleString()}회`, image: coverOf(covers, mode, t) })),
         foot: `playcounters 그랑프리 · ${year}년 ${month}월 최종 순위`,
       }, `gp-${year}-${month}`)}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 7l4-4 4 4M4 12v4h12v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>

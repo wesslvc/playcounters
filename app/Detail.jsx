@@ -294,32 +294,62 @@ function gpOf(career, t) {
  * plays, then read the totals, the championship records, the months they met
  * in the top ten and who finished ahead, and their running totals as two lines.
  */
+/**
+ * A song's bare title: what's left once the brackets, the " - " or " | "
+ * tails and the 8D / sped-up / remix tags are cut, so its re-uploads and
+ * edits land on one name.
+ */
+export function baseTitle(track) {
+  return String(track ?? '').toLowerCase()
+    .split(/\s[-|–]\s|\s?[([（【|]/)[0]
+    .replace(/\b(in\s)?8d(\saudio)?\b|\b(sped up|slowed|remix|ver\.?|version|edit|live|audio)\b/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/** Same-titled rows as one, under the most played of them. */
+function foldTitles(rows) {
+  const by = new Map();
+  for (const r of rows) {
+    const k = r.track ? `t|${baseTitle(r.track) || r.track_key}` : `a|${r.artist_key}`;
+    const g = by.get(k);
+    // first place in the list stays (the search's own order); the most played version stands in it
+    if (!g) by.set(k, { ...r, fold: k, versions: 1 });
+    else if ((r.plays ?? 0) > (g.plays ?? 0)) Object.assign(g, r, { versions: g.versions + 1 });
+    else g.versions += 1;
+  }
+  return [...by.values()];
+}
+
 function Versus({ target, source, estimate, career, mine }) {
   const isTrack = Boolean(target.track);
+  const mode = isTrack ? 'tracks' : 'artists';
   const [q, setQ] = useState('');
-  const [hits, setHits] = useState([]);
+  const [hits, setHits] = useState(null);
   const [other, setOther] = useState(null);
   const [theirs, setTheirs] = useState(null);
+  const cache = useRef(new Map());
   useEffect(() => { setOther(null); setTheirs(null); setQ(''); }, [target]);
+  // as you type, from your own plays; before typing, what you play most
   useEffect(() => {
     const term = q.trim();
-    if (!term) { setHits([]); return undefined; }
+    const key = `${mode}|${term}`;
+    const keep = (rows) => {
+      const mineK = isTrack ? `t|${baseTitle(target.track) || target.track_key}` : `a|${target.artist_key}`;
+      const out = foldTitles(rows).filter((r) => r.fold !== mineK && r.track_key !== target.track_key);
+      setHits(out);
+    };
+    if (cache.current.has(key)) { keep(cache.current.get(key)); return undefined; }
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      fetch(`/api/recommend/search?q=${encodeURIComponent(term)}`, { signal: ctl.signal })
+      const qs = new URLSearchParams({ q: term, limit: '20' });
+      if (!isTrack) qs.set('mode', 'artists');
+      fetch(`/api/recommend/search?${qs}`, { signal: ctl.signal })
         .then((r) => r.json())
-        .then((j) => {
-          const rows = j.items ?? [];
-          if (isTrack) { setHits(rows.filter((r) => !(r.artist_key === target.artist_key && r.track_key === target.track_key))); return; }
-          // artists: each one once, from the songs that matched
-          const seen = new Map();
-          for (const r of rows) if (r.artist_key !== target.artist_key && !seen.has(r.artist_key)) seen.set(r.artist_key, { artist: r.artist, artist_key: r.artist_key, track: null, track_key: null, plays: null });
-          setHits([...seen.values()]);
-        })
+        .then((j) => { const rows = j.items ?? []; cache.current.set(key, rows); keep(rows); })
         .catch(() => {});
-    }, 140);
+    }, term ? 90 : 0);
     return () => { clearTimeout(t); ctl.abort(); };
-  }, [q, isTrack, target]);
+  }, [q, isTrack, mode, target]);
   useEffect(() => {
     if (!other) return undefined;
     const ctl = new AbortController();
@@ -332,20 +362,36 @@ function Versus({ target, source, estimate, career, mine }) {
     fetch(`/api/item?${qs}`, { signal: ctl.signal }).then((r) => r.json()).then((j) => { if (!j.error) setTheirs(j); }).catch(() => {});
     return () => ctl.abort();
   }, [other, source, estimate]);
+  const shown = (hits ?? []).slice(0, 10);
+  const covers = useCovers(mode, useMemo(() => [target, ...(other ? [other] : []), ...(hits ?? []).slice(0, 10)], [target, other, hits]));
 
   const name = (t) => t.track ?? t.artist;
   if (!other) {
     return (
       <div className="vs-pick">
-        <p className="note">누구와 붙여 볼까요? {isTrack ? '곡' : '가수'} 이름 일부를 입력하세요.</p>
-        <input className="vs-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={isTrack ? '곡이나 가수 이름 일부' : '가수 이름 일부'} />
-        <ul className="vs-hits">
-          {hits.slice(0, 8).map((h) => (
-            <li key={`${h.artist_key}|${h.track_key}`}>
-              <button onClick={() => setOther(h)}><b>{name(h)}</b>{h.track && <span>{h.artist}</span>}{h.plays != null && <em>{h.plays.toLocaleString()}회</em>}</button>
-            </li>
-          ))}
-        </ul>
+        <div className="vs-pick-me">
+          <Cover src={coverOf(covers, mode, target)} size={44} round={!isTrack} />
+          <span><small>도전자를 고르세요</small><b>{name(target)}</b></span>
+          <i>VS</i>
+        </div>
+        <input className="vs-input" value={q} autoFocus enterKeyHint="go"
+               onChange={(e) => setQ(e.target.value)}
+               onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) setOther(shown[0]); }}
+               placeholder={isTrack ? '곡이나 가수 이름 일부' : '가수 이름 일부'} aria-label="상대 찾기" />
+        <p className="vs-pick-k">{q.trim() ? '들었던 것 중에서' : isTrack ? '많이 들은 곡' : '많이 들은 가수'}</p>
+        {hits && !shown.length ? <p className="note">맞는 {isTrack ? '곡' : '가수'}이 없어요</p> : (
+          <ul className="vs-hits">
+            {shown.map((h) => (
+              <li key={`${h.artist_key}|${h.track_key}`}>
+                <button onClick={() => setOther(h)}>
+                  <Cover src={coverOf(covers, mode, h)} size={40} round={!isTrack} />
+                  <span className="nm"><b>{name(h)}</b>{h.track && <span>{h.artist}{h.versions > 1 ? ` · 같은 제목 ${h.versions - 1}개 묶음` : ''}</span>}</span>
+                  {h.plays != null && <em>{h.plays.toLocaleString()}회</em>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   }
@@ -384,27 +430,50 @@ function Versus({ target, source, estimate, career, mine }) {
   const W = 600, H = 180;
   const path = (pts) => (pts.length ? `M0,${H} ` + pts.map(([t, v]) => `L${(((t - t0) / Math.max(1, t1 - t0)) * W).toFixed(1)},${(H - (v / top) * (H - 8)).toFixed(1)}`).join(' ') + ` L${W},${(H - ((pts.at(-1)[1]) / top) * (H - 8)).toFixed(1)}` : '');
 
+  // a round to whoever leads each line, ties to no one
+  const fmt = (v) => (v == null ? '–' : Number(v).toLocaleString());
+  const judged = rows.map(([label, va, vb, f = fmt]) => ({
+    label, va, vb, f, win: va != null && vb != null && va !== vb ? (va > vb ? 'a' : 'b') : null,
+  }));
+  const sa = judged.filter((r) => r.win === 'a').length;
+  const sb = judged.filter((r) => r.win === 'b').length;
+  const lead = !theirs ? null : sa > sb ? 'a' : sb > sa ? 'b' : null;
+  const picA = coverOf(covers, mode, target);
+  const picB = coverOf(covers, mode, other);
+  const side = (t, pic, score, me) => (
+    <div className="vs-side" data-lead={lead === me || undefined}>
+      <Cover src={pic} size={76} round={!isTrack} />
+      <b>{name(t)}</b>
+      {t.track && <small>{artistLine(t)}</small>}
+      <strong>{theirs ? score : '–'}</strong>
+    </div>
+  );
+
   return (
     <div className="vs">
-      <div className="vs-head">
-        <span style={{ '--c': ca }}><i />{name(target)}</span>
-        <b>VS</b>
-        <span style={{ '--c': cb }}><i />{name(other)}</span>
-        <button className="linkish" onClick={() => setOther(null)}>바꾸기</button>
+      <div className="vs-card">
+        {picA && <span className="vs-bg a" aria-hidden="true" style={{ backgroundImage: `url(${picA})` }} />}
+        {picB && <span className="vs-bg b" aria-hidden="true" style={{ backgroundImage: `url(${picB})` }} />}
+        {side(target, picA, sa, 'a')}
+        <div className="vs-mid"><i>VS</i></div>
+        {side(other, picB, sb, 'b')}
+      </div>
+      <div className="vs-verdict">
+        <span>{!theirs ? '불러오는 중…' : lead ? <><b>{name(lead === 'a' ? target : other)}</b><em>{`우세 ${Math.max(sa, sb)}:${Math.min(sa, sb)}`}</em></> : <em>{`${sa}:${sb} 팽팽해요`}</em>}</span>
+        <button className="linkish" onClick={() => setOther(null)}>상대 바꾸기</button>
       </div>
       <ul className="vs-rows">
-        {rows.map(([label, va, vb, f = (v) => (v == null ? '–' : Number(v).toLocaleString())]) => {
-          const win = va != null && vb != null && va !== vb ? (va > vb ? 'a' : 'b') : null;
+        {judged.map(({ label, va, vb, f, win }) => {
           const total = Math.abs(va ?? 0) + Math.abs(vb ?? 0);
           const share = label === '최고 순위' || !total ? 50 : (Math.abs(va ?? 0) / total) * 100;
           return (
             <li key={label}>
-              <b data-win={win === 'a' || undefined}>{f(va)}</b>
+              <b data-win={win === 'a' || undefined} style={{ '--c': ca }}>{f(va)}</b>
               <span>
                 <small>{label}</small>
                 <i className="vs-bar"><i style={{ width: `${share}%`, background: ca }} /><i style={{ width: `${100 - share}%`, background: cb }} /></i>
               </span>
-              <b data-win={win === 'b' || undefined}>{f(vb)}</b>
+              <b data-win={win === 'b' || undefined} style={{ '--c': cb }}>{f(vb)}</b>
             </li>
           );
         })}

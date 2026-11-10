@@ -1215,22 +1215,15 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .pod.p1 .pod-card b { font-size:15.5px }
 .pod-card span { max-width:100%; font-size:11.5px; color:rgba(255,255,255,.72); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .pod-card em { margin-top:3px; font-style:normal; font-size:11.5px; font-weight:600; color:rgba(255,255,255,.72) }
-/* the step: a dark block under the card, the place number in metal and a
-   thin metal edge where the card meets it */
-.pod-step { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:3px; padding-top:10px;
-  border-radius:0 0 18px 18px; overflow:hidden; color:#fff;
-  background:radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--m2) 22%, transparent), transparent 70%),
-             linear-gradient(180deg, #1d1d20, #0c0c0e) }
-.pod-step::before { content:''; position:absolute; left:0; right:0; top:0; height:1.5px;
-  background:linear-gradient(90deg, transparent, var(--m1) 30%, var(--m2) 50%, var(--m1) 70%, transparent) }
-.pod-step .pod-n { font-size:30px; font-weight:900; line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums;
-  background:linear-gradient(180deg, var(--m1) 10%, var(--m2) 55%, var(--m3) 100%); -webkit-background-clip:text; background-clip:text;
-  color:transparent !important; overflow:visible; filter:drop-shadow(0 2px 6px rgba(0,0,0,.45)) }
-.pod.p1 .pod-step .pod-n { font-size:40px }
-.pod-step small { font-size:10px; font-weight:700; letter-spacing:.12em; color:rgba(255,255,255,.5) }
-.pod-step[data-tier="1"] { --m1:#FFF0C2; --m2:#DDB25A; --m3:#946A22; height:92px }
-.pod-step[data-tier="2"] { --m1:#FFFFFF; --m2:#C5CAD3; --m3:#7B818B; height:70px }
-.pod-step[data-tier="3"] { --m1:#FFDDBF; --m2:#C98654; --m3:#7A4623; height:62px }
+/* the step: the app's own sunk surface, the place in its tier colour */
+.pod-step { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:2px; padding-top:9px;
+  border-radius:0 0 18px 18px; background:var(--sunk); border:1px solid var(--hair); border-top:none }
+.pod-step .pod-n { font-size:26px; font-weight:850; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--tier) !important; overflow:visible }
+.pod.p1 .pod-step .pod-n { font-size:34px }
+.pod-step small { font-size:10px; font-weight:700; letter-spacing:.1em; color:var(--ink-3) }
+.pod-step[data-tier="1"] { --tier:var(--gold); height:84px }
+.pod-step[data-tier="2"] { --tier:var(--silver); height:64px }
+.pod-step[data-tier="3"] { --tier:var(--bronze); height:52px }
 .gp-sub { display:flex; justify-content:space-between; align-items:baseline }
 .gp-sub span { font-size:12px; font-weight:500; color:var(--ink-3) }
 .classif { display:flex; flex-direction:column; border-radius:16px; background:var(--sunk); padding:4px 12px; margin-bottom:8px }
@@ -1294,22 +1287,47 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .review-line small { font-size:11px; color:var(--ink-3) }
 
 /* ---------- head to head ---------- */
-.vs-input { width:100%; height:44px; margin-top:10px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); font:inherit; font-size:15px; color:var(--ink); outline:none }
-.vs-hits { margin-top:6px }
-.vs-hits button { display:flex; align-items:baseline; gap:8px; width:100%; padding:10px 4px; border-bottom:1px solid var(--hair); text-align:left }
-.vs-hits b { font-size:14.5px; font-weight:650 }
-.vs-hits span { font-size:12.5px; color:var(--ink-3) }
-.vs-hits em { margin-left:auto; font-style:normal; font-size:12px; color:var(--ink-3) }
-.vs-head { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:10px; margin-bottom:14px }
-.vs-head > span { display:flex; align-items:center; gap:7px; min-width:0; font-size:15px; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.vs-head > span:nth-child(3) { justify-content:flex-end }
-.vs-head > span i { flex:0 0 auto; width:14px; height:4px; border-radius:2px; background:var(--c) }
-.vs-head > b { font-size:13px; font-weight:900; letter-spacing:.1em; color:var(--ink-3) }
-.vs-head .linkish { grid-column:1 / -1; justify-self:center; font-size:12px }
+/* head-to-head: pick a challenger, fast */
+.vs-pick-me { display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:12px; align-items:center; padding:12px 14px; border-radius:16px; background:var(--sunk) }
+.vs-pick-me span { display:flex; flex-direction:column; min-width:0 }
+.vs-pick-me small { font-size:11.5px; font-weight:600; color:var(--ink-3) }
+.vs-pick-me b { font-size:15px; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-pick-me i { font-style:italic; font-size:22px; font-weight:900; letter-spacing:-.02em; color:var(--ink-3) }
+.vs-input { width:100%; height:46px; margin-top:10px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); font:inherit; font-size:15px; color:var(--ink); outline:none }
+.vs-input:focus { border-color:var(--ink-3) }
+.vs-pick-k { margin:14px 2px 4px; font-size:11.5px; font-weight:600; color:var(--ink-3) }
+.vs-hits button { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:12px; align-items:center; width:100%; padding:7px 4px; border-radius:12px; text-align:left }
+.vs-hits button:hover { background:var(--sunk) }
+.vs-hits .nm { display:flex; flex-direction:column; min-width:0 }
+.vs-hits .nm b { font-size:14.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-hits .nm > span { font-size:12px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-hits em { font-style:normal; font-size:12.5px; font-weight:600; color:var(--ink-2); font-variant-numeric:tabular-nums }
+/* the fight card: two covers split on a slant, VS in the cut */
+.vs-card { position:relative; isolation:isolate; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr);
+  align-items:start; padding:20px 12px 18px; border-radius:22px; background:#111113; color:#fff }
+.vs-bg { position:absolute; inset:-30px; z-index:-2; background-size:cover; background-position:center; filter:blur(26px) saturate(1.5); opacity:.75 }
+.vs-bg.a { clip-path:polygon(0 0, 55% 0, 45% 100%, 0 100%) }
+.vs-bg.b { clip-path:polygon(56.5% 0, 100% 0, 100% 100%, 46.5% 100%) }
+.vs-card::after { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.6)) }
+.vs-side { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; text-align:center }
+.vs-side .cover { margin-bottom:8px; box-shadow:0 12px 26px -10px rgba(0,0,0,.7) }
+.vs-side b { max-width:100%; font-size:14.5px; font-weight:750; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all }
+.vs-side small { max-width:100%; font-size:11.5px; color:rgba(255,255,255,.7); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-side strong { margin-top:8px; font-size:40px; font-weight:900; line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums; color:rgba(255,255,255,.45) }
+.vs-side[data-lead] strong { color:#fff }
+.vs-mid { align-self:center; display:flex; justify-content:center; padding-bottom:28px }
+.vs-mid i { font-style:italic; font-size:30px; font-weight:900; letter-spacing:-.04em; color:#fff; text-shadow:0 4px 18px rgba(0,0,0,.6) }
+.vs-verdict { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:12px 2px 6px }
+.vs-verdict > span { display:flex; align-items:baseline; gap:6px; min-width:0; font-size:13.5px; font-weight:700; color:var(--ink) }
+.vs-verdict > span b { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-verdict > span em { flex:0 0 auto; font-style:normal; color:var(--ink-2) }
+.vs-verdict .linkish { flex:0 0 auto; font-size:12.5px; white-space:nowrap }
 .vs-rows li { display:grid; grid-template-columns:72px minmax(0,1fr) 72px; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--hair) }
 .vs-rows b { font-size:16px; font-weight:750; color:var(--ink-3); font-variant-numeric:tabular-nums }
 .vs-rows b:last-child { text-align:right }
 .vs-rows b[data-win] { color:var(--ink) }
+.vs-rows b[data-win]::after { content:''; display:block; width:16px; height:3px; margin-top:4px; border-radius:2px; background:var(--c) }
+.vs-rows b:last-child[data-win]::after { margin-left:auto }
 .vs-rows span { display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0 }
 .vs-rows small { font-size:11.5px; color:var(--ink-3) }
 .vs-bar { display:flex; width:100%; height:5px; border-radius:3px; overflow:hidden; background:var(--sunk) }

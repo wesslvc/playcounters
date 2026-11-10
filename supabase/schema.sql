@@ -2081,3 +2081,19 @@ as $$
     'tops', (select coalesce(json_agg(json_build_object('hour', hr, 'artist', artist, 'track', track, 'artist_key', artist_key, 'track_key', track_key, 'plays', plays) order by hr), '[]'::json) from songs where n = 1)
   )
 $$;
+
+-- ---------- artists you've played, by part of a name ----------
+create or replace function search_played_artists(p_user uuid, p_q text, p_limit int default 8)
+returns table (artist text, artist_key text, plays bigint, last_at timestamptz)
+language sql stable
+set search_path = public, pg_temp
+as $$
+  select mode() within group (order by p.artist), p.artist_key, count(*), max(p.played_at)
+  from plays p
+  where p.user_id = p_user
+    and (p.ms_played >= 30000 or p.source = 'youtube')
+    and (p_q = '' or p.artist ilike '%' || p_q || '%')
+  group by p.artist_key
+  order by (bool_or(p.artist ilike p_q || '%')) desc, count(*) desc
+  limit p_limit
+$$;

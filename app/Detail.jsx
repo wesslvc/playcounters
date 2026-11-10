@@ -41,7 +41,7 @@ function DailyChart({ daily }) {
 const SCOPES = [['year', '연'], ['month', '월'], ['all', '통산']];
 
 /** The sheet's sections, one at a time rather than one long scroll. */
-const TABS = [['overview', '개요'], ['ranks', '순위'], ['awards', '기록'], ['career', '챔피언십'], ['versus', '맞대결']];
+const TABS = [['overview', '개요'], ['ranks', '순위'], ['awards', '기록'], ['career', '챔피언십'], ['versus', 'VS']];
 
 const periodLabel = (scope, d) => {
   const [y, m] = String(d).split('-');

@@ -9,6 +9,7 @@ import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './use
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import { Section, Cover, Seg, Count } from './ui';
+import { shareCard } from './share';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -142,6 +143,21 @@ function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio })
           );
         })}
       </div>
+    )}
+    {podium.length === 3 && (
+      <button className="share-btn quiet" onClick={() => shareCard({
+        kicker: `${year} ${month}월 그랑프리 · 우승`,
+        title: podium[0].track ?? podium[0].artist,
+        sub: podium[0].track ? artistLine(podium[0]) : null,
+        image: coverOf(covers, mode, podium[0]),
+        round: mode === 'artists',
+        stats: [[`${podium[0].plays.toLocaleString()}`, '재생'], ['25', 'PTS'], [`+${(podium[0].plays - podium[1].plays).toLocaleString()}`, '2위와 차이']],
+        list: items.slice(0, 5).map((t) => ({ rank: `P${t.rank}`, title: t.track ?? t.artist, sub: t.track ? t.artist : '', value: `${t.points}pt`, image: coverOf(covers, mode, t) })),
+        foot: `playcounters 그랑프리 · ${year}년 ${month}월 최종 순위`,
+      }, `gp-${year}-${month}`)}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 7l4-4 4 4M4 12v4h12v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        결과 이미지로 공유
+      </button>
     )}
     <p className="gp-sub">{live ? '현재 순위' : '최종 순위'}<span>{live ? '잠정' : `${items.length}곡 완주`}</span></p>
     <ol className="classif">
@@ -369,6 +385,65 @@ function LiveRace({ m, round, allTime, mode, source, estimate, drivers, construc
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A finished season in one place: the records it set — most wins, the
+ * longest run of wins, most podiums, the widest winning margin, the biggest
+ * month — and every round's winner along a timeline.
+ */
+function SeasonReview({ year, rounds, drivers, mode, covers, onOpen }) {
+  const winners = rounds.map((m) => ({ m, w: m.top.find((t) => t.rank === 1) ?? m.top[0], r2: m.top.find((t) => t.rank === 2) }));
+  const name = (t) => t.track ?? t.artist;
+  const mostWins = [...drivers].sort((a, b) => b.wins - a.wins || b.points - a.points)[0];
+  const mostPods = [...drivers].sort((a, b) => b.podiums - a.podiums || b.points - a.points)[0];
+  // the longest run of consecutive round wins
+  let streak = { n: 0 };
+  let run = { key: null, n: 0, from: null };
+  for (const { m, w } of winners) {
+    const k = normRowKey(w);
+    run = run.key === k ? { ...run, n: run.n + 1, to: m } : { key: k, n: 1, from: m, to: m, t: w };
+    if (run.n > streak.n) streak = { ...run };
+  }
+  const margin = winners.filter((x) => x.r2).map((x) => ({ ...x, gap: Number(x.w.plays) - Number(x.r2.plays) })).sort((a, b) => b.gap - a.gap)[0];
+  const biggest = [...winners].sort((a, b) => Number(b.w.plays) - Number(a.w.plays))[0];
+  const tiles = [
+    mostWins && { k: '최다 우승', v: `${mostWins.wins}승`, t: mostWins },
+    streak.n >= 2 && { k: '최장 연승', v: `${streak.n}연승`, t: streak.t, d: `${streak.from.month}–${streak.to.month}월` },
+    mostPods && { k: '최다 포디움', v: `${mostPods.podiums}회`, t: mostPods },
+    margin && { k: '최대 격차 우승', v: `+${margin.gap.toLocaleString()}회`, t: margin.w, d: `${margin.m.month}월` },
+    biggest && { k: '한 달 최다 재생 우승', v: `${Number(biggest.w.plays).toLocaleString()}회`, t: biggest.w, d: `${biggest.m.month}월` },
+  ].filter(Boolean);
+  return (
+    <section className="review">
+      <div className="review-head">
+        <span>Season Review</span>
+        <b>{year} 시즌 결산</b>
+      </div>
+      <div className="review-tiles">
+        {tiles.map((x) => (
+          <button key={x.k} className="review-tile" onClick={() => onOpen(x.t)}>
+            <small>{x.k}</small>
+            <b>{x.v}</b>
+            <span>{name(x.t)}{x.d ? ` · ${x.d}` : ''}</span>
+          </button>
+        ))}
+      </div>
+      <p className="review-k">라운드별 우승</p>
+      <ol className="review-line">
+        {winners.map(({ m, w }) => (
+          <li key={`${m.year}-${m.month}`}>
+            <button onClick={() => onOpen(w)}>
+              <span className="review-mo">R{m.round} · {m.month}월</span>
+              <Cover src={coverOf(covers, mode, w)} size={72} round={mode === 'artists'} />
+              <b>{name(w)}</b>
+              <small>{Number(w.plays).toLocaleString()}회</small>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -787,6 +862,11 @@ export default function Season({ mode, source, estimate, year, allTime, onSelect
             />
           )}
         </div>
+      )}
+
+      {complete && !allTime && results.length >= 3 && (
+        <SeasonReview year={year} rounds={[...results].reverse()} drivers={drivers} mode={mode}
+                      covers={winnerCovers} onOpen={open} />
       )}
 
       {liveRace && (

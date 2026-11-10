@@ -6,6 +6,7 @@ import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import { familyLabel } from '@/lib/genre';
 import { Seg, Section, Cover, Stat, Delta, Count, dayLabel } from './ui';
+import { shareCard } from './share';
 
 const KST = 9 * 3600e3;
 const Q_MONTHS = { 1: '1–3월', 2: '4–6월', 3: '7–9월', 4: '10–12월' };
@@ -197,6 +198,18 @@ export default function Replay({ source, estimate, calendar, version, onSelect, 
                 <Stat value={s.artists?.toLocaleString() ?? '—'} label="가수" />
                 <Stat value={`${s.days}`} label={`들은 날 / ${s.span}일`} />
               </div>
+              <button className="share-btn" onClick={() => shareCard({
+                kicker: `Replay · ${data.year} Q${data.q}`,
+                title: no1?.track ?? `${data.year} Q${data.q}`,
+                sub: no1 ? `이번 분기의 노래 · ${artistLine(no1)}` : null,
+                image: heroImg,
+                stats: [[`${Math.round(s.minutes / 60).toLocaleString()}`, '시간'], [s.plays.toLocaleString(), '재생'], [s.tracks.toLocaleString(), '곡']],
+                list: tracks.slice(0, 5).map((t, i) => ({ rank: i + 1, title: t.track, sub: t.artist, value: `${Number(t.plays).toLocaleString()}회`, image: coverOf(songCovers, 'tracks', t) })),
+                foot: `${data.year}년 ${Q_MONTHS[data.q]} 재생 기록`,
+              }, `replay-${data.year}-q${data.q}`)}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 7l4-4 4 4M4 12v4h12v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                이미지로 공유
+              </button>
             </div>
           </div>
 

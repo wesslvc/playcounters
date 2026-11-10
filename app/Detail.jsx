@@ -268,10 +268,12 @@ function Career({ target, career }) {
 }
 
 /** One side's championship record: wins, podiums, points, best finish, and its place each month. */
-function gpOf(career, t) {
+function gpOf(career, t, from = null) {
   const out = { wins: 0, podiums: 0, points: 0, best: null, at: new Map() };
+  const since = from ? Number(from.slice(0, 4)) * 12 + Number(from.slice(5, 7)) : 0;
   for (const m of career?.months ?? []) {
     if (m.live) continue;
+    if (m.year * 12 + m.month < since) continue;
     for (const r of m.top) {
       const hit = t.track
         ? r.artist_key === t.artist_key && r.track_key === t.track_key
@@ -329,6 +331,8 @@ function Versus({ target, source, estimate, career, mine }) {
   const [hits, setHits] = useState(null);
   const [other, setOther] = useState(null);
   const [theirs, setTheirs] = useState(null);
+  // from the day the later of the two was first played, or all of history
+  const [even, setEven] = useState(true);
   const cache = useRef(new Map());
   useEffect(() => { setOther(null); setTheirs(null); setQ(''); }, [target]);
   // as you type, from your own plays; before typing, what you play most
@@ -398,10 +402,20 @@ function Versus({ target, source, estimate, career, mine }) {
     );
   }
 
-  const a = mine?.summary;
-  const b = theirs?.summary;
-  const ga = gpOf(career, target);
-  const gb = gpOf(career, other);
+  // the same starting line: both counted only from the day the later one was first played
+  const firstA = mine?.daily?.[0]?.day ?? null;
+  const firstB = theirs?.daily?.[0]?.day ?? null;
+  const start = even && firstA && firstB ? (firstA > firstB ? firstA : firstB) : null;
+  const later = start ? (firstA > firstB ? 'a' : firstB > firstA ? 'b' : null) : null;
+  const da = (mine?.daily ?? []).filter((d) => !start || d.day >= start);
+  const db = (theirs?.daily ?? []).filter((d) => !start || d.day >= start);
+  const tally = (days, summary) => (!summary ? null : start
+    ? { plays: Math.round(days.reduce((n, d) => n + Number(d.plays), 0)), days: days.length }
+    : summary);
+  const a = tally(da, mine?.summary);
+  const b = tally(db, theirs?.summary);
+  const ga = gpOf(career, target, start);
+  const gb = gpOf(career, other, start);
   // the months both made the top ten, and who finished ahead
   // month by month, who was played more — from each one's own day-by-day
   // plays, so every month counts, not only the ones both made the top ten
@@ -410,8 +424,8 @@ function Versus({ target, source, estimate, career, mine }) {
     for (const d of daily ?? []) m.set(d.day.slice(0, 7), (m.get(d.day.slice(0, 7)) ?? 0) + Number(d.plays));
     return m;
   };
-  const ma = byMonth(mine?.daily);
-  const mb = byMonth(theirs?.daily);
+  const ma = byMonth(da);
+  const mb = byMonth(db);
   const monthsBoth = theirs ? [...new Set([...ma.keys(), ...mb.keys()])] : [];
   const aheadA = theirs ? monthsBoth.filter((k) => Math.round(ma.get(k) ?? 0) > Math.round(mb.get(k) ?? 0)).length : null;
   const aheadB = theirs ? monthsBoth.filter((k) => Math.round(mb.get(k) ?? 0) > Math.round(ma.get(k) ?? 0)).length : null;
@@ -439,8 +453,8 @@ function Versus({ target, source, estimate, career, mine }) {
     let run = 0;
     return (daily ?? []).map((d) => [Date.parse(d.day), (run += Number(d.plays))]);
   };
-  const la = cum(mine?.daily);
-  const lb = cum(theirs?.daily);
+  const la = cum(da);
+  const lb = cum(db);
   const t0 = Math.min(la[0]?.[0] ?? Infinity, lb[0]?.[0] ?? Infinity);
   const t1 = Math.max(la.at(-1)?.[0] ?? 0, lb.at(-1)?.[0] ?? 0, Date.now());
   const top = Math.max(1, la.at(-1)?.[1] ?? 0, lb.at(-1)?.[1] ?? 0);
@@ -478,6 +492,12 @@ function Versus({ target, source, estimate, career, mine }) {
       <div className="vs-verdict">
         <span>{!theirs ? '불러오는 중…' : lead ? <><b>{name(lead === 'a' ? target : other)}</b><em>{`우세 ${Math.max(sa, sb)}:${Math.min(sa, sb)}`}</em></> : <em>{`${sa}:${sb} 팽팽해요`}</em>}</span>
         <button className="linkish" onClick={() => setOther(null)}>상대 바꾸기</button>
+      </div>
+      <div className="vs-span">
+        <Seg size="sm" label="비교 기간" options={[[true, '같은 출발선'], [false, '전체 기간']]} value={even} onChange={setEven} />
+        {theirs && <small>{start
+          ? `${dayLabel(start)}부터 · ${later ? `${name(later === 'a' ? target : other)} 첫 재생일` : '둘 다 처음 들은 날'}`
+          : `${dayLabel(firstA && firstB ? (firstA < firstB ? firstA : firstB) : firstA ?? firstB)}부터 전부`}</small>}
       </div>
       <ul className="vs-rows">
         {judged.map(({ label, va, vb, f, win }) => {

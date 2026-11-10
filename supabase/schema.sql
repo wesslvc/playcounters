@@ -2047,3 +2047,37 @@ as $$
     'rows', (select json_agg(json_build_array(i, d, round(w::numeric, 2)) order by d) from keyed)
   )
 $$;
+
+create or replace function play_clock(
+  p_user uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_source text, p_estimate boolean
+) returns json
+language sql stable
+set search_path = public, pg_temp
+as $$
+  -- when in the week and the day the plays fall: every weekday x hour cell,
+  -- and each hour's most played song
+  with p as (
+    select extract(isodow from p.played_at at time zone p_tz)::int as dow,
+           extract(hour from p.played_at at time zone p_tz)::int as hr,
+           p.artist, p.track, p.artist_key, p.track_key,
+           case when p_estimate then p.est_plays else 1 end as w
+    from plays p
+    where p.user_id = p_user
+      and p.played_at >= p_from and p.played_at < p_to
+      and (p.ms_played >= 30000 or p.source = 'youtube')
+      and (p_source = 'all'
+           or (p_source = 'youtube' and p.source = 'youtube')
+           or (p_source = 'spotify' and p.source <> 'youtube'))
+  ),
+  grid as (select dow, hr, round(sum(w))::bigint as plays from p group by dow, hr),
+  songs as (
+    select hr, artist_key, track_key, mode() within group (order by artist) as artist, mode() within group (order by track) as track,
+           round(sum(w))::bigint as plays,
+           row_number() over (partition by hr order by sum(w) desc, artist_key, track_key) as n
+    from p group by hr, artist_key, track_key
+  )
+  select json_build_object(
+    'grid', (select coalesce(json_agg(json_build_array(dow, hr, plays)), '[]'::json) from grid),
+    'tops', (select coalesce(json_agg(json_build_object('hour', hr, 'artist', artist, 'track', track, 'artist_key', artist_key, 'track_key', track_key, 'plays', plays) order by hr), '[]'::json) from songs where n = 1)
+  )
+$$;

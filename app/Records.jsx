@@ -6,6 +6,7 @@ import { artistLine, useCredits } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
 import { Cover, Stat, dayLabel } from './ui';
+import { ListenCalendar, ListenClock } from './Patterns';
 
 const ym = (d) => {
   const [y, m] = String(d).split('-');
@@ -254,7 +255,7 @@ function ClubRoster({ def, list, covers, onSelect }) {
  * The listening records come from one query over all of history; the Grand
  * Prix ones from the all-time championship.
  */
-export default function Records({ source, estimate, version, onSelect, onContext }) {
+export default function Records({ source, estimate, version, calendar, onSelect, onContext }) {
   // one group at a time, the 1000 Club first, rather than one long scroll
   const [group, setGroup] = useState(AWARD_GROUPS[0].key);
   useEffect(() => { onContext?.({ view: 'records', label: 'Awards' }); }, [onContext]);
@@ -298,6 +299,9 @@ export default function Records({ source, estimate, version, onSelect, onContext
                 sub={me.busiest_day ? dayLabel(me.busiest_day.from) : null} />
         </div>
       </div>
+
+      <ListenCalendar calendar={calendar} source={source} estimate={estimate} onSelect={onSelect} />
+      <ListenClock source={source} estimate={estimate} onSelect={onSelect} />
 
       <nav className="jump" aria-label="부문">
         {AWARD_GROUPS.map((g) => (

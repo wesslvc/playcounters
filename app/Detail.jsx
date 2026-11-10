@@ -41,7 +41,7 @@ function DailyChart({ daily }) {
 const SCOPES = [['year', '연'], ['month', '월'], ['all', '통산']];
 
 /** The sheet's sections, one at a time rather than one long scroll. */
-const TABS = [['overview', '개요'], ['ranks', '순위'], ['awards', '기록'], ['career', '챔피언십']];
+const TABS = [['overview', '개요'], ['ranks', '순위'], ['awards', '기록'], ['career', '챔피언십'], ['versus', '맞대결']];
 
 const periodLabel = (scope, d) => {
   const [y, m] = String(d).split('-');
@@ -267,6 +267,159 @@ function Career({ target, career }) {
   );
 }
 
+/** One side's championship record: wins, podiums, points, best finish, and its place each month. */
+function gpOf(career, t) {
+  const out = { wins: 0, podiums: 0, points: 0, best: null, at: new Map() };
+  for (const m of career?.months ?? []) {
+    if (m.live) continue;
+    for (const r of m.top) {
+      const hit = t.track
+        ? r.artist_key === t.artist_key && r.track_key === t.track_key
+        : (r.credits ?? [{ key: r.artist_key }]).some((c) => c.key === t.artist_key);
+      if (!hit) continue;
+      const k = `${m.year}-${m.month}`;
+      if (out.at.has(k) && out.at.get(k) <= r.rank) continue;
+      out.at.set(k, r.rank);
+      if (r.rank === 1) out.wins += 1;
+      if (r.rank <= 3) out.podiums += 1;
+      out.points += r.points;
+      out.best = out.best == null ? r.rank : Math.min(out.best, r.rank);
+    }
+  }
+  return out;
+}
+
+/**
+ * Two songs (or two artists) side by side: pick the other one from your own
+ * plays, then read the totals, the championship records, the months they met
+ * in the top ten and who finished ahead, and their running totals as two lines.
+ */
+function Versus({ target, source, estimate, career, mine }) {
+  const isTrack = Boolean(target.track);
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState([]);
+  const [other, setOther] = useState(null);
+  const [theirs, setTheirs] = useState(null);
+  useEffect(() => { setOther(null); setTheirs(null); setQ(''); }, [target]);
+  useEffect(() => {
+    const term = q.trim();
+    if (!term) { setHits([]); return undefined; }
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/recommend/search?q=${encodeURIComponent(term)}`, { signal: ctl.signal })
+        .then((r) => r.json())
+        .then((j) => {
+          const rows = j.items ?? [];
+          if (isTrack) { setHits(rows.filter((r) => !(r.artist_key === target.artist_key && r.track_key === target.track_key))); return; }
+          // artists: each one once, from the songs that matched
+          const seen = new Map();
+          for (const r of rows) if (r.artist_key !== target.artist_key && !seen.has(r.artist_key)) seen.set(r.artist_key, { artist: r.artist, artist_key: r.artist_key, track: null, track_key: null, plays: null });
+          setHits([...seen.values()]);
+        })
+        .catch(() => {});
+    }, 140);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [q, isTrack, target]);
+  useEffect(() => {
+    if (!other) return undefined;
+    const ctl = new AbortController();
+    setTheirs(null);
+    const qs = new URLSearchParams({ artist: other.artist, source });
+    if (other.track) qs.set('track', other.track);
+    if (other.artist_key) qs.set('artist_key', other.artist_key);
+    if (other.track_key) qs.set('track_key', other.track_key);
+    if (estimate) qs.set('estimate', '1');
+    fetch(`/api/item?${qs}`, { signal: ctl.signal }).then((r) => r.json()).then((j) => { if (!j.error) setTheirs(j); }).catch(() => {});
+    return () => ctl.abort();
+  }, [other, source, estimate]);
+
+  const name = (t) => t.track ?? t.artist;
+  if (!other) {
+    return (
+      <div className="vs-pick">
+        <p className="note">누구와 붙여 볼까요? {isTrack ? '곡' : '가수'} 이름 일부를 입력하세요.</p>
+        <input className="vs-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={isTrack ? '곡이나 가수 이름 일부' : '가수 이름 일부'} />
+        <ul className="vs-hits">
+          {hits.slice(0, 8).map((h) => (
+            <li key={`${h.artist_key}|${h.track_key}`}>
+              <button onClick={() => setOther(h)}><b>{name(h)}</b>{h.track && <span>{h.artist}</span>}{h.plays != null && <em>{h.plays.toLocaleString()}회</em>}</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const a = mine?.summary;
+  const b = theirs?.summary;
+  const ga = gpOf(career, target);
+  const gb = gpOf(career, other);
+  // the months both made the top ten, and who finished ahead
+  const met = [...ga.at].filter(([k]) => gb.at.has(k)).map(([k, ra]) => ({ k, ra, rb: gb.at.get(k) }));
+  const aheadA = met.filter((x) => x.ra < x.rb).length;
+  const aheadB = met.filter((x) => x.rb < x.ra).length;
+  const ca = artistColor(target.artist);
+  let cb = artistColor(other.artist);
+  if (cb === ca) cb = 'var(--ink-2)';
+  const rows = [
+    ['재생', a?.plays, b?.plays],
+    ['들은 날', a?.days, b?.days],
+    ['GP 우승', ga.wins, gb.wins],
+    ['포디움', ga.podiums, gb.podiums],
+    ['GP 포인트', ga.points, gb.points],
+    ['최고 순위', ga.best ? -ga.best : null, gb.best ? -gb.best : null, (v) => (v == null ? '–' : `P${-v}`)],
+    ['맞붙은 달 앞선 횟수', aheadA, aheadB],
+  ];
+
+  // running totals, day by day, over the span both cover
+  const cum = (daily) => {
+    let run = 0;
+    return (daily ?? []).map((d) => [Date.parse(d.day), (run += Number(d.plays))]);
+  };
+  const la = cum(mine?.daily);
+  const lb = cum(theirs?.daily);
+  const t0 = Math.min(la[0]?.[0] ?? Infinity, lb[0]?.[0] ?? Infinity);
+  const t1 = Math.max(la.at(-1)?.[0] ?? 0, lb.at(-1)?.[0] ?? 0, Date.now());
+  const top = Math.max(1, la.at(-1)?.[1] ?? 0, lb.at(-1)?.[1] ?? 0);
+  const W = 600, H = 180;
+  const path = (pts) => (pts.length ? `M0,${H} ` + pts.map(([t, v]) => `L${(((t - t0) / Math.max(1, t1 - t0)) * W).toFixed(1)},${(H - (v / top) * (H - 8)).toFixed(1)}`).join(' ') + ` L${W},${(H - ((pts.at(-1)[1]) / top) * (H - 8)).toFixed(1)}` : '');
+
+  return (
+    <div className="vs">
+      <div className="vs-head">
+        <span style={{ '--c': ca }}><i />{name(target)}</span>
+        <b>VS</b>
+        <span style={{ '--c': cb }}><i />{name(other)}</span>
+        <button className="linkish" onClick={() => setOther(null)}>바꾸기</button>
+      </div>
+      <ul className="vs-rows">
+        {rows.map(([label, va, vb, f = (v) => (v == null ? '–' : Number(v).toLocaleString())]) => {
+          const win = va != null && vb != null && va !== vb ? (va > vb ? 'a' : 'b') : null;
+          const total = Math.abs(va ?? 0) + Math.abs(vb ?? 0);
+          const share = label === '최고 순위' || !total ? 50 : (Math.abs(va ?? 0) / total) * 100;
+          return (
+            <li key={label}>
+              <b data-win={win === 'a' || undefined}>{f(va)}</b>
+              <span>
+                <small>{label}</small>
+                <i className="vs-bar"><i style={{ width: `${share}%`, background: ca }} /><i style={{ width: `${100 - share}%`, background: cb }} /></i>
+              </span>
+              <b data-win={win === 'b' || undefined}>{f(vb)}</b>
+            </li>
+          );
+        })}
+      </ul>
+      {met.length > 0 && <p className="note">TOP 10에서 {met.length}번 만나 {aheadA}번 앞서고 {aheadB}번 뒤졌어요</p>}
+      {theirs ? (
+        <svg className="vs-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="누적 재생 비교">
+          <path d={path(lb)} fill="none" stroke={cb} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          <path d={path(la)} fill="none" stroke={ca} strokeWidth="3" vectorEffect="non-scaling-stroke" />
+        </svg>
+      ) : <div className="skeleton"><i /></div>}
+    </div>
+  );
+}
+
 /**
  * Everything about one song or artist, from any tab: its counts across all
  * of history, its listening by day, its championship career, and every
@@ -425,6 +578,10 @@ export default function Detail({ target, source, estimate, onClose }) {
 
         <div className="sheet-panel" hidden={tab !== 'career'}>
           <Career target={target} career={career} />
+        </div>
+
+        <div className="sheet-panel" hidden={tab !== 'versus'}>
+          {tab === 'versus' && <Versus target={target} source={source} estimate={estimate} career={career} mine={data} />}
         </div>
       </div>
     </>

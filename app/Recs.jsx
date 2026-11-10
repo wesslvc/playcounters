@@ -214,8 +214,52 @@ export default function Recs() {
               </li>
             ))}
           </ol>
+          <SaveRecs key={res.items.map((x) => x.id).join(',')} items={res.items} seeds={seeds} />
         </>
       )}
+    </div>
+  );
+}
+
+/** Puts the recommendations into a new Spotify playlist. */
+function SaveRecs({ items, seeds }) {
+  const [state, setState] = useState(null);
+  async function save() {
+    setState({ busy: true });
+    try {
+      const now = new Date();
+      const date = `${now.getMonth() + 1}월 ${now.getDate()}일`;
+      const from = seeds.slice(0, 3).map((s) => s.track).filter(Boolean).join(', ');
+      const res = await fetch('/api/playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `playcounters 추천 · ${date}`,
+          description: `${from ? `${from}에서 출발한 ` : ''}추천 ${items.length}곡 · playcounters`,
+          items: items.map((x) => ({ artist: x.artist, track: x.title })),
+        }),
+      });
+      const j = await res.json();
+      if (j.reauth) return setState({ reauth: true });
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      setState({ done: j });
+    } catch (e) {
+      setState({ error: e.message });
+    }
+  }
+  return (
+    <div className="export rec-save">
+      <button className="btn" onClick={save} disabled={state?.busy || state?.done}>
+        {state?.busy ? '만드는 중…' : state?.done ? '저장됨' : `${items.length}곡 Spotify 플레이리스트로 저장`}
+      </button>
+      {state?.done && (
+        <p className="export-msg">
+          {state.done.added}곡 저장됨 · <a href={state.done.url} target="_blank" rel="noreferrer">Spotify에서 열기</a>
+          {state.done.missing?.length > 0 && <span> · {state.done.missing.length}곡 못 찾음</span>}
+        </p>
+      )}
+      {state?.reauth && <p className="export-msg">권한이 필요해요 · <a href="/api/auth/login">Spotify 다시 연결</a></p>}
+      {state?.error && <p className="export-msg err">{state.error}</p>}
     </div>
   );
 }

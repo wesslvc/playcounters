@@ -1283,3 +1283,68 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .review-line .cover { border-radius:12px }
 .review-line b { max-width:96px; margin-top:6px; font-size:12.5px; font-weight:700; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all }
 .review-line small { font-size:11px; color:var(--ink-3) }
+
+/* ---------- head to head ---------- */
+.vs-input { width:100%; height:44px; margin-top:10px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); font:inherit; font-size:15px; color:var(--ink); outline:none }
+.vs-hits { margin-top:6px }
+.vs-hits button { display:flex; align-items:baseline; gap:8px; width:100%; padding:10px 4px; border-bottom:1px solid var(--hair); text-align:left }
+.vs-hits b { font-size:14.5px; font-weight:650 }
+.vs-hits span { font-size:12.5px; color:var(--ink-3) }
+.vs-hits em { margin-left:auto; font-style:normal; font-size:12px; color:var(--ink-3) }
+.vs-head { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:10px; margin-bottom:14px }
+.vs-head > span { display:flex; align-items:center; gap:7px; min-width:0; font-size:15px; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vs-head > span:nth-child(3) { justify-content:flex-end }
+.vs-head > span i { flex:0 0 auto; width:14px; height:4px; border-radius:2px; background:var(--c) }
+.vs-head > b { font-size:13px; font-weight:900; letter-spacing:.1em; color:var(--ink-3) }
+.vs-head .linkish { grid-column:1 / -1; justify-self:center; font-size:12px }
+.vs-rows li { display:grid; grid-template-columns:72px minmax(0,1fr) 72px; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--hair) }
+.vs-rows b { font-size:16px; font-weight:750; color:var(--ink-3); font-variant-numeric:tabular-nums }
+.vs-rows b:last-child { text-align:right }
+.vs-rows b[data-win] { color:var(--ink) }
+.vs-rows span { display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0 }
+.vs-rows small { font-size:11.5px; color:var(--ink-3) }
+.vs-bar { display:flex; width:100%; height:5px; border-radius:3px; overflow:hidden; background:var(--sunk) }
+.vs-bar i { display:block; height:100% }
+.vs-chart { display:block; width:100%; height:160px; margin-top:14px; border-radius:14px; background:var(--sunk) }
+
+/* ---------- the listening calendar and clock ---------- */
+[data-l="0"] { --l:var(--sunk) }
+[data-l="1"] { --l:color-mix(in oklab, var(--viz) 22%, var(--sunk)) }
+[data-l="2"] { --l:color-mix(in oklab, var(--viz) 42%, var(--sunk)) }
+[data-l="3"] { --l:color-mix(in oklab, var(--viz) 62%, var(--sunk)) }
+[data-l="4"] { --l:color-mix(in oklab, var(--viz) 82%, var(--sunk)) }
+[data-l="5"] { --l:var(--viz) }
+.cal-wrap { padding:14px; border-radius:18px; background:var(--surface); border:1px solid var(--hair); overflow-x:auto }
+.cal-months, .cal { display:grid; gap:2px; min-width:620px }
+.cal-months { margin-bottom:4px; font-size:10px; color:var(--ink-3) }
+.cal { grid-auto-flow:column; grid-template-rows:repeat(7, 1fr) }
+.cal > i, .cal-d { aspect-ratio:1; border-radius:2.5px }
+.cal-d { background:var(--l) }
+.cal-d[aria-pressed="true"] { outline:2px solid var(--ink); outline-offset:1px }
+.cal-legend { display:flex; align-items:center; justify-content:flex-end; gap:3px; margin-top:8px; font-size:10.5px; color:var(--ink-3) }
+.cal-legend i { width:10px; height:10px; border-radius:2px; background:var(--l) }
+.cal-legend span { margin:0 4px }
+.cal-day { margin-top:10px; padding:12px 14px; border-radius:16px; background:var(--sunk) }
+.cal-day > p { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; font-size:14px }
+.cal-day > p span { font-size:13px; color:var(--ink-2) }
+.cal-day button { display:grid; grid-template-columns:16px 40px minmax(0,1fr) auto; gap:10px; align-items:center; width:100%; padding:6px 0; text-align:left }
+.cal-rk { font-size:13px; font-weight:800; color:var(--ink-3) }
+.cal-nm { display:flex; flex-direction:column; min-width:0 }
+.cal-nm b { font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.cal-nm small { font-size:12px; color:var(--ink-3) }
+.cal-day em { font-style:normal; font-size:12.5px; font-weight:650; color:var(--ink-2) }
+.clock { padding:14px; border-radius:18px; background:var(--surface); border:1px solid var(--hair) }
+.clock-grid { display:grid; grid-template-columns:22px repeat(24, minmax(0,1fr)); gap:2px; align-items:center }
+.clock-row { display:contents }
+.clock-h { font-size:9.5px; color:var(--ink-3); text-align:left }
+.clock-d { font-size:11px; font-weight:600; color:var(--ink-3) }
+.clock-c { aspect-ratio:1; border-radius:3px; background:var(--l) }
+.clock-c[aria-pressed="true"] { box-shadow:inset 0 0 0 1.5px var(--ink) }
+.clock-song { display:grid; grid-template-columns:48px minmax(0,1fr); gap:12px; align-items:center; width:100%; margin-top:14px; padding-top:12px; border-top:1px solid var(--hair); text-align:left }
+.clock-song span { display:flex; flex-direction:column; min-width:0 }
+.clock-song small { font-size:11.5px; font-weight:600; color:var(--ink-3) }
+.clock-song b { font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.clock-song em { font-style:normal; font-size:12px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.rec-save { margin-top:14px; display:flex; flex-direction:column; align-items:stretch }
+.rec-save .btn { width:100% }
+.rec-save .export-msg { text-align:center }

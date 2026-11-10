@@ -277,14 +277,16 @@ function gpOf(career, t) {
         ? r.artist_key === t.artist_key && r.track_key === t.track_key
         : (r.credits ?? [{ key: r.artist_key }]).some((c) => c.key === t.artist_key);
       if (!hit) continue;
+      // an artist scores every song's points; its place that month is its best song's
       const k = `${m.year}-${m.month}`;
-      if (out.at.has(k) && out.at.get(k) <= r.rank) continue;
-      out.at.set(k, r.rank);
-      if (r.rank === 1) out.wins += 1;
-      if (r.rank <= 3) out.podiums += 1;
       out.points += r.points;
-      out.best = out.best == null ? r.rank : Math.min(out.best, r.rank);
+      if (!out.at.has(k) || r.rank < out.at.get(k)) out.at.set(k, r.rank);
     }
+  }
+  for (const rank of out.at.values()) {
+    if (rank === 1) out.wins += 1;
+    if (rank <= 3) out.podiums += 1;
+    out.best = out.best == null ? rank : Math.min(out.best, rank);
   }
   return out;
 }
@@ -401,9 +403,21 @@ function Versus({ target, source, estimate, career, mine }) {
   const ga = gpOf(career, target);
   const gb = gpOf(career, other);
   // the months both made the top ten, and who finished ahead
+  // month by month, who was played more — from each one's own day-by-day
+  // plays, so every month counts, not only the ones both made the top ten
+  const byMonth = (daily) => {
+    const m = new Map();
+    for (const d of daily ?? []) m.set(d.day.slice(0, 7), (m.get(d.day.slice(0, 7)) ?? 0) + Number(d.plays));
+    return m;
+  };
+  const ma = byMonth(mine?.daily);
+  const mb = byMonth(theirs?.daily);
+  const monthsBoth = theirs ? [...new Set([...ma.keys(), ...mb.keys()])] : [];
+  const aheadA = theirs ? monthsBoth.filter((k) => Math.round(ma.get(k) ?? 0) > Math.round(mb.get(k) ?? 0)).length : null;
+  const aheadB = theirs ? monthsBoth.filter((k) => Math.round(mb.get(k) ?? 0) > Math.round(ma.get(k) ?? 0)).length : null;
   const met = [...ga.at].filter(([k]) => gb.at.has(k)).map(([k, ra]) => ({ k, ra, rb: gb.at.get(k) }));
-  const aheadA = met.filter((x) => x.ra < x.rb).length;
-  const aheadB = met.filter((x) => x.rb < x.ra).length;
+  const gpA = met.filter((x) => x.ra < x.rb).length;
+  const gpB = met.filter((x) => x.rb < x.ra).length;
   const ca = artistColor(target.artist);
   let cb = artistColor(other.artist);
   if (cb === ca) cb = 'var(--ink-2)';
@@ -414,7 +428,7 @@ function Versus({ target, source, estimate, career, mine }) {
     ['포디움', ga.podiums, gb.podiums],
     ['GP 포인트', ga.points, gb.points],
     ['최고 순위', ga.best ? -ga.best : null, gb.best ? -gb.best : null, (v) => (v == null ? '–' : `P${-v}`)],
-    ['맞붙은 달 앞선 횟수', aheadA, aheadB],
+    ['더 많이 들은 달', aheadA, aheadB],
   ];
 
   // running totals, day by day, over the span both cover
@@ -478,7 +492,7 @@ function Versus({ target, source, estimate, career, mine }) {
           );
         })}
       </ul>
-      {met.length > 0 && <p className="note">TOP 10에서 {met.length}번 만나 {aheadA}번 앞서고 {aheadB}번 뒤졌어요</p>}
+      {theirs && <p className="note">들은 {monthsBoth.length}개월 중 {aheadA}달 더 많이 듣고 {aheadB}달 덜 들었어요{met.length > 0 ? ` · 같은 달 TOP 10에서 ${met.length}번 만나 ${gpA}번 앞섰어요` : ''}</p>}
       {theirs ? (
         <svg className="vs-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="누적 재생 비교">
           <path d={path(lb)} fill="none" stroke={cb} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />

@@ -38,6 +38,37 @@ function cover(ctx, img, x, y, w, h, r = 0) {
   ctx.restore();
 }
 
+/**
+ * The background picture, blurred. Safari's canvas ignores ctx.filter, so
+ * the blur comes from shrinking the picture to a few dozen pixels and
+ * scaling it back up in steps, which looks the same everywhere.
+ */
+function soften(ctx, img) {
+  const steps = [[9, 16], [36, 64], [135, 240], [540, 960]];
+  let src = img;
+  let sw = img.width;
+  let sh = img.height;
+  steps.forEach(([w, h], i) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = true;
+    x.imageSmoothingQuality = 'high';
+    if (i === 0) cover(x, src, -2, -2, w + 4, h + 4);
+    else x.drawImage(src, 0, 0, sw, sh, 0, 0, w, h);
+    src = c;
+    sw = w;
+    sh = h;
+  });
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.globalAlpha = 0.9;
+  ctx.drawImage(src, -60, -60, W + 120, H + 120);
+  ctx.restore();
+}
+
 /** Text cut to fit a width, with an ellipsis. */
 function fit(ctx, text, max) {
   let t = String(text ?? '');
@@ -80,16 +111,11 @@ export async function drawCard(card) {
   // the background: the lead picture, huge and soft, under a dark wash
   ctx.fillStyle = '#121214';
   ctx.fillRect(0, 0, W, H);
-  if (lead) {
-    ctx.save();
-    ctx.filter = 'blur(80px) saturate(1.5)';
-    cover(ctx, lead, -200, -200, W + 400, H + 400);
-    ctx.restore();
-  }
+  if (lead) soften(ctx, lead);
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, 'rgba(0,0,0,.25)');
-  g.addColorStop(0.55, 'rgba(0,0,0,.45)');
-  g.addColorStop(1, 'rgba(0,0,0,.8)');
+  g.addColorStop(0, 'rgba(0,0,0,.35)');
+  g.addColorStop(0.55, 'rgba(0,0,0,.55)');
+  g.addColorStop(1, 'rgba(0,0,0,.85)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 

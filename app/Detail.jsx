@@ -374,7 +374,6 @@ function Versus({ target, source, estimate, career, mine }) {
         <div className="vs-pick-me">
           <Cover src={coverOf(covers, mode, target)} size={44} round={!isTrack} />
           <span><small>도전자를 고르세요</small><b>{name(target)}</b></span>
-          <i>VS</i>
         </div>
         <input className="vs-input" value={q} autoFocus enterKeyHint="go"
                onChange={(e) => setQ(e.target.value)}
@@ -477,7 +476,6 @@ function Versus({ target, source, estimate, career, mine }) {
         {picA && <span className="vs-bg a" aria-hidden="true" style={{ backgroundImage: `url(${picA})` }} />}
         {picB && <span className="vs-bg b" aria-hidden="true" style={{ backgroundImage: `url(${picB})` }} />}
         {side(target, picA, sa, 'a')}
-        <div className="vs-mid"><i>VS</i></div>
         {side(other, picB, sb, 'b')}
       </div>
       <div className="vs-verdict">

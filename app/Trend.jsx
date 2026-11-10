@@ -119,8 +119,14 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
     return { buckets, lines, peak, x, y, ry, ranks, rankLines, rankTicks };
   }, [data]);
 
-  // the list's songs slide to their places as the picked day moves
-  useFlip(keyList, `${hover}|${view}`);
+  // the list follows the picked day once the finger rests on it, not every
+  // point it passes through: one calm reorder instead of a shuffle
+  const [settled, setSettled] = useState(null);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(hover), hover == null ? 0 : 220);
+    return () => clearTimeout(t);
+  }, [hover]);
+  useFlip(keyList, `${settled}|${view}`);
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!chart) return <p className="note" style={{ padding: '12px 2px' }}>추이를 불러오는 중…</p>;
 
@@ -158,7 +164,11 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       <div className="trend-plot">
         {ranked && (
           <div className="trend-yaxis" aria-hidden="true">
-            {rankTicks.map((t) => <span key={t} style={{ top: `${(ry(t) / H) * 100}%` }}>{t.toLocaleString()}위</span>)}
+            {rankTicks.map((t) => {
+              const at = (ry(t) / H) * 100;
+              // the top label sits under its line so it never runs into the dates above
+              return <span key={t} style={{ top: `${at}%`, transform: at < 10 ? 'translateY(15%)' : undefined }}>{t.toLocaleString()}위</span>;
+            })}
           </div>
         )}
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="trend-svg" role="img"
@@ -216,12 +226,12 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           rather than over the lines: each one's place among these and how it
           moved over the week before */}
       <p className="trend-day" aria-live="polite">
-        {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 전체 곡 중 순위 · 7일 전 대비</> : <>지금 전체 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
+        {settled != null && buckets[settled] ? <><b>{buckets[settled].replaceAll('-', '.')}</b> 기준 누적 · 전체 곡 중 순위 · 7일 전 대비</> : <>지금 전체 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
       </p>
       <ol className="trend-key" ref={keyList}>
         {(() => {
           // the songs themselves move: listed in the order they stood that day
-          const day = hover ?? buckets.length - 1;
+          const day = settled ?? buckets.length - 1;
           return lines.map((s, i) => i)
             .sort((p, q) => (ranks[p][day] ?? 99) - (ranks[q][day] ?? 99) || p - q)
             .map((i) => [lines[i], i, day]);
@@ -232,7 +242,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           // ▲ climbed, ▼ fell, NEW when it hadn't been played a week before
           const move = now == null ? null : before == null ? (day > 0 ? undefined : null) : before - now;
           return (
-          <li key={i} data-k={i} data-zero={(hover != null && !s.cum[hover]) || undefined}>
+          <li key={i} data-k={i} data-zero={(settled != null && !s.cum[settled]) || undefined}>
             <u>{now ?? '–'}</u>
             <span className="trend-move"><Delta value={move} /></span>
             <i style={{ background: colorOf(s) }} />
@@ -240,7 +250,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
               <b>{s.track ?? s.artist}</b>
               <small>{[s.track ? s.artist : null, genreOf(s)].filter(Boolean).join(' · ')}</small>
             </span>
-            <em>{estimate && s.yt ? '≈' : ''}{(hover != null ? Math.round(s.cum[hover]) : s.total).toLocaleString()}<small>회</small></em>
+            <em>{estimate && s.yt ? '≈' : ''}{(settled != null ? Math.round(s.cum[settled] ?? 0) : s.total).toLocaleString()}<small>회</small></em>
           </li>
           );
         })}

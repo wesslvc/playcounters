@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+
 /**
  * Small pieces every view is built from, so the four tabs share one
  * vocabulary: a segmented control, a section heading, a cover tile, a
@@ -81,3 +83,56 @@ export const shortDay = (d) => {
   const [, m, day] = String(d).slice(0, 10).split('-');
   return `${Number(m)}.${Number(day)}`;
 };
+
+/**
+ * A number that counts up to its value the first time it's shown (and from
+ * the old value when it changes), quickly, easing out. Plain text for
+ * anyone who prefers less motion.
+ */
+export function Count({ value, prefix = '', duration = 700 }) {
+  const target = Math.round(Number(value) || 0);
+  const [shown, setShown] = useState(target);
+  const from = useRef(0);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setShown(target); return undefined; }
+    const start = performance.now();
+    const a = from.current;
+    let raf;
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const e = 1 - (1 - t) ** 3;
+      setShown(Math.round(a + (target - a) * e));
+      if (t < 1) raf = requestAnimationFrame(step);
+      else from.current = target;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return <>{prefix}{shown.toLocaleString()}</>;
+}
+
+/**
+ * Rows that slide to their new places when a list reorders, instead of
+ * jumping: each child carries data-k; after a change, any that moved is
+ * played back from where it was.
+ */
+export function useFlip(ref, dep) {
+  const prev = useRef(new Map());
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const now = new Map();
+    for (const c of el.children) now.set(c.dataset.k, c.getBoundingClientRect().top);
+    const still = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!still) {
+      for (const c of el.children) {
+        const was = prev.current.get(c.dataset.k);
+        const is = now.get(c.dataset.k);
+        if (was != null && Math.abs(was - is) > 1) {
+          c.animate([{ transform: `translateY(${was - is}px)` }, { transform: 'none' }], { duration: 280, easing: 'cubic-bezier(.2,.7,.2,1)' });
+        }
+      }
+    }
+    prev.current = now;
+  }, [dep]); // eslint-disable-line react-hooks/exhaustive-deps
+}

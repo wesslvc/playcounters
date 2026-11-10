@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { artistColor, familyLabel } from '@/lib/genre';
 import { smoothPath, sampleIdx } from '@/lib/curve';
-import { Seg, Delta } from './ui';
+import { Seg, Delta, useFlip } from './ui';
 
 const W = 720;
 const H = 200;
@@ -52,6 +52,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
   const [hover, setHover] = useState(null);
   // 누적: running totals; 순위: where each stood among these on each day
   const [view, setView] = useState('cum');
+  const keyList = useRef(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -118,6 +119,8 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
     return { buckets, lines, peak, x, y, ry, ranks, rankLines, rankTicks };
   }, [data]);
 
+  // the list's songs slide to their places as the picked day moves
+  useFlip(keyList, `${hover}|${view}`);
   if (error) return <p className="err" style={{ padding: '12px 2px' }}>{error}</p>;
   if (!chart) return <p className="note" style={{ padding: '12px 2px' }}>추이를 불러오는 중…</p>;
 
@@ -215,7 +218,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
       <p className="trend-day" aria-live="polite">
         {hover != null ? <><b>{buckets[hover].replaceAll('-', '.')}</b> 기준 누적 · 전체 곡 중 순위 · 7일 전 대비</> : <>지금 전체 순위 · 7일 전 대비 · 그래프를 누르면 그날 기준으로 바뀌어요</>}
       </p>
-      <ol className="trend-key">
+      <ol className="trend-key" ref={keyList}>
         {(() => {
           // the songs themselves move: listed in the order they stood that day
           const day = hover ?? buckets.length - 1;
@@ -229,7 +232,7 @@ export default function Trend({ mode, source, estimate, from, to, limit = 5, gen
           // ▲ climbed, ▼ fell, NEW when it hadn't been played a week before
           const move = now == null ? null : before == null ? (day > 0 ? undefined : null) : before - now;
           return (
-          <li key={i} data-zero={(hover != null && !s.cum[hover]) || undefined}>
+          <li key={i} data-k={i} data-zero={(hover != null && !s.cum[hover]) || undefined}>
             <u>{now ?? '–'}</u>
             <span className="trend-move"><Delta value={move} /></span>
             <i style={{ background: colorOf(s) }} />

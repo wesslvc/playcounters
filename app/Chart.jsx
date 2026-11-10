@@ -10,7 +10,7 @@ import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import Trend from './Trend';
 import Picker from './Picker';
-import { Seg, Cover, Stat, Delta, dayLabel } from './ui';
+import { Seg, Cover, Stat, Delta, Count, dayLabel } from './ui';
 
 const SORTS = [
   ['plays', '재생 횟수', '회'],
@@ -158,7 +158,7 @@ function TopThree({ rows, ranks, mode, covers, sort, unit, onSelect, isEst }) {
           </span>
           <b>{first.track ?? first.artist}</b>
           {first.track && <span className="no1-a">{artistLine(first)}</span>}
-          <span className="no1-v">{isEst(first) ? '≈' : ''}{fmt(first[sort], sort)}<small>{sort === 'minutes' ? '' : unit}</small></span>
+          <span className="no1-v">{sort === 'minutes' ? <>{isEst(first) ? '≈' : ''}{fmt(first[sort], sort)}</> : <Count value={first[sort]} prefix={isEst(first) ? '≈' : ''} />}<small>{sort === 'minutes' ? '' : unit}</small></span>
         </span>
       </button>
       <div className="runners">

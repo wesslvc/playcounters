@@ -7,7 +7,7 @@ import { artistColor } from '@/lib/genre';
 import { artistLine } from './useCredits';
 import { useCovers, coverOf } from './useCovers';
 import { loadCareer, loadRecords } from './data';
-import { Cover, Delta, Seg, Stat, dayLabel } from './ui';
+import { Cover, Count, Delta, Seg, Stat, dayLabel } from './ui';
 
 const DAY = 864e5;
 
@@ -327,15 +327,26 @@ export default function Detail({ target, source, estimate, onClose }) {
     ? data.daily.reduce((a, b) => (Number(b.plays) > Number(a.plays) ? b : a)) : null;
   const hours = s ? s.minutes / 60 : 0;
   const est = Boolean(data?.estimate && s?.yt) ? '≈' : '';
+  // its championship line for the hero: wins and points across every Grand Prix
+  const champ = (() => {
+    const list = target.track ? career?.drivers : career?.constructors;
+    const i = (list ?? []).findIndex((r) => (target.track
+      ? r.artist_key === target.artist_key && r.track_key === target.track_key
+      : r.artist_key === target.artist_key));
+    return i >= 0 ? { pos: i + 1, ...list[i] } : null;
+  })();
+  const pic = coverOf(covers, mode, target);
 
   return (
     <>
       <button className="sheet-scrim" aria-label="닫기" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={target.track ?? target.artist}
            style={{ '--acc': artistColor(target.artist) }}>
+        <div className="sheet-hero">
+        {pic && <span className="sheet-hero-bg" aria-hidden="true" style={{ backgroundImage: `url(${pic})` }} />}
         <div className="sheet-grip" aria-hidden="true" />
         <div className="sheet-head">
-          <Cover src={coverOf(covers, mode, target)} size={84} round={!target.track} />
+          <Cover src={pic} size={96} round={!target.track} />
           <div className="sheet-title">
             <b>{target.track ?? target.artist}</b>
             {target.track && <span>{artistLine(target)}</span>}
@@ -344,6 +355,15 @@ export default function Detail({ target, source, estimate, onClose }) {
           <button className="icon-btn" onClick={onClose} aria-label="닫기">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           </button>
+        </div>
+        {s && (
+          <div className="sheet-big">
+            <span><b><Count value={s.plays} prefix={est} /></b><small>재생</small></span>
+            <span><b><Count value={s.days} /></b><small>들은 날</small></span>
+            <span><b>{champ ? <Count value={champ.wins} /> : '–'}</b><small>GP 우승</small></span>
+            <span><b>{champ ? `${champ.pos}위` : '–'}</b><small>통산 {target.track ? '드라이버' : '컨스트럭터'}</small></span>
+          </div>
+        )}
         </div>
 
         {error && <p className="err">{error}</p>}

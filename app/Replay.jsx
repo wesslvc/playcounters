@@ -5,7 +5,7 @@ import { artistLine, useCredits } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
 import { familyLabel } from '@/lib/genre';
-import { Seg, Section, Cover, Stat, Delta, dayLabel } from './ui';
+import { Seg, Section, Cover, Stat, Delta, Count, dayLabel } from './ui';
 
 const KST = 9 * 3600e3;
 const Q_MONTHS = { 1: '1–3월', 2: '4–6월', 3: '7–9월', 4: '10–12월' };
@@ -189,7 +189,7 @@ export default function Replay({ source, estimate, calendar, version, onSelect, 
               <p className="replay-k">Replay · {data.year}년 {Q_MONTHS[data.q]}{data.live ? ' · 진행 중' : ''}</p>
               <h1>{data.year}<span> Q{data.q}</span></h1>
               <p className="replay-big">
-                <b>{Math.round(s.minutes / 60).toLocaleString()}</b>시간
+                <b><Count value={Math.round(s.minutes / 60)} /></b>시간
               </p>
               <div className="stats on-dark">
                 <Stat value={`${estimate ? '≈' : ''}${s.plays.toLocaleString()}`} label="재생" />

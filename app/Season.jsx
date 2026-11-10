@@ -8,7 +8,7 @@ import { smoothPath } from '@/lib/curve';
 import { useCredits, artistLine, artistNames, fillStyle, washStyle } from './useCredits';
 import { useGenres, seedGenres } from './useGenres';
 import { useCovers, coverOf } from './useCovers';
-import { Section, Cover, Seg } from './ui';
+import { Section, Cover, Seg, Count } from './ui';
 
 /** Standings shown before 펼치기 reveals the rest — enough to read as a real
     grid without the page opening on a scroll of forty names. */
@@ -104,7 +104,8 @@ function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio })
   useCredits(detail?.items);
   // a finished race opens on its podium, big
   const podium = !live && detail ? detail.items.filter((t) => t.rank <= 3).slice(0, 3) : [];
-  const covers = useCovers(mode, podium.length ? podium : null);
+  const [all, setAll] = useState(false);
+  const covers = useCovers(mode, detail ? detail.items.slice(0, 30) : null);
   if (error) return <p className="err" style={{ padding: '6px 8px' }}>{error}</p>;
   if (!detail) return <p className="note" style={{ padding: '6px 8px' }}>불러오는 중…</p>;
   const { items, leaders, days } = detail;
@@ -121,34 +122,47 @@ function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio })
     {leaders?.length > 0 && <RaceLeaders stints={leaders} days={days} live={live} />}
     {podium.length === 3 && (
       <div className="podium">
-        {[podium[1], podium[0], podium[2]].map((t) => (
-          <div key={rowKey(t)} className={`pod p${t.rank}`}>
-            <span className="pod-rk" data-tier={t.rank}>P{t.rank}</span>
-            <Cover src={coverOf(covers, mode, t)} size={t.rank === 1 ? 112 : 80} round={mode === 'artists'}
-                   />
-            <b>{t.track ?? t.artist}</b>
-            {t.track && <span>{artistLine(t)}</span>}
-            <em>{t.points}pt · {t.plays.toLocaleString()}회</em>
-          </div>
-        ))}
+        {[podium[1], podium[0], podium[2]].map((t) => {
+          const pic = coverOf(covers, mode, t);
+          return (
+            <div key={rowKey(t)} className={`pod p${t.rank}`}>
+              <div className="pod-card">
+                {pic && <span className="pod-bg" aria-hidden="true" style={{ backgroundImage: `url(${pic})` }} />}
+                <Cover src={pic} size={t.rank === 1 ? 112 : 80} round={mode === 'artists'} />
+                <b>{t.track ?? t.artist}</b>
+                {t.track && <span>{artistLine(t)}</span>}
+                <em>{t.plays.toLocaleString()}회</em>
+              </div>
+              {/* the step it stands on: P1 highest, with the points it took */}
+              <div className="pod-step" data-tier={t.rank}>
+                <span>P{t.rank}</span>
+                <small>{t.points}pt</small>
+              </div>
+            </div>
+          );
+        })}
       </div>
     )}
-    <p className="gp-sub">{live ? '현재 순위' : '최종 순위'}</p>
-    <ol className="gp-history result">
-      {items.filter((t) => podium.length !== 3 || t.rank > 3).map((t) => (
-        <li className="gph-row" key={rowKey(t)}>
-          <span className="gph-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>
-            {t.rank <= 10 ? `P${t.rank}` : t.rank}
-          </span>
-          <span className="gph-nm">
-            <b>{t.track ?? t.artist}</b>
-            {t.track && <span> · {artistLine(t)}</span>}
-          </span>
-          <span className="gph-pt">
-            {!live && t.points > 0 ? `${t.points}pt · ` : ''}{t.plays.toLocaleString()}회
-          </span>
-        </li>
-      ))}
+    <p className="gp-sub">{live ? '현재 순위' : '최종 순위'}<span>{live ? '잠정' : `${items.length}곡 완주`}</span></p>
+    <ol className="classif">
+      {items.filter((t) => (podium.length !== 3 || t.rank > 3) && (all || t.rank <= 20)).map((t) => {
+        const gap = items[0] ? Number(items[0].plays) - Number(t.plays) : 0;
+        return (
+          <li key={rowKey(t)} data-out={t.rank > 10 || undefined}>
+            <span className="cl-rk" data-tier={t.rank <= 3 ? t.rank : undefined}>{t.rank <= 10 ? `P${t.rank}` : t.rank}</span>
+            <Cover src={coverOf(covers, mode, t)} size={32} round={mode === 'artists'} />
+            <span className="cl-nm">
+              <b>{t.track ?? t.artist}</b>
+              {t.track && <small>{artistLine(t)}</small>}
+            </span>
+            <span className="cl-gap">{t.rank === 1 ? `${t.plays.toLocaleString()}회` : `+${gap.toLocaleString()}회`}</span>
+            <span className="cl-pt">{!live && t.points > 0 ? `${t.points}` : ''}</span>
+          </li>
+        );
+      })}
+      {items.length > 20 && (
+        <li className="classif-tail"><button className="classif-more" onClick={() => setAll((v) => !v)}>{all ? '접기' : `전체 보기 · ${items.length}곡`}</button></li>
+      )}
     </ol>
     </>
   );
@@ -251,9 +265,9 @@ function LeaderCard({ tag, name, sub, points, wins, podiums, color, cover, round
         </span>
       </span>
       <span className="leader-stats">
-        <span><b>{points.toLocaleString()}</b><small>PTS</small></span>
-        <span><b>{wins}</b><small>{wins === 1 ? 'WIN' : 'WINS'}</small></span>
-        <span><b>{podiums}</b><small>PODIUMS</small></span>
+        <span><b><Count value={points} /></b><small>PTS</small></span>
+        <span><b><Count value={wins} /></b><small>{wins === 1 ? 'WIN' : 'WINS'}</small></span>
+        <span><b><Count value={podiums} /></b><small>PODIUMS</small></span>
       </span>
     </button>
   );

@@ -337,7 +337,7 @@ function Versus({ target, source, estimate, career, mine }) {
     const key = `${mode}|${term}`;
     const keep = (rows) => {
       const mineK = isTrack ? `t|${baseTitle(target.track) || target.track_key}` : `a|${target.artist_key}`;
-      const out = foldTitles(rows).filter((r) => r.fold !== mineK && r.track_key !== target.track_key);
+      const out = foldTitles(rows).filter((r) => r.fold !== mineK && !(isTrack && r.track_key === target.track_key));
       setHits(out);
     };
     if (cache.current.has(key)) { keep(cache.current.get(key)); return undefined; }
@@ -419,8 +419,11 @@ function Versus({ target, source, estimate, career, mine }) {
   const gpA = met.filter((x) => x.ra < x.rb).length;
   const gpB = met.filter((x) => x.rb < x.ra).length;
   const ca = artistColor(target.artist);
+  // the second side keeps its own colour unless it sits too close to the first's hue
   let cb = artistColor(other.artist);
-  if (cb === ca) cb = 'var(--ink-2)';
+  const hue = (c) => Number(c.match(/(\d+(?:\.\d+)?)\)$/)?.[1] ?? 0);
+  const gap = Math.abs(hue(ca) - hue(cb)) % 360;
+  if (Math.min(gap, 360 - gap) < 60) cb = cb.replace(/(\d+(?:\.\d+)?)\)$/, `${(hue(ca) + 180) % 360})`);
   const rows = [
     ['재생', a?.plays, b?.plays],
     ['들은 날', a?.days, b?.days],

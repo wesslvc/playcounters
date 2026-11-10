@@ -1215,13 +1215,22 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .pod.p1 .pod-card b { font-size:15.5px }
 .pod-card span { max-width:100%; font-size:11.5px; color:rgba(255,255,255,.72); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .pod-card em { margin-top:3px; font-style:normal; font-size:11.5px; font-weight:600; color:rgba(255,255,255,.72) }
-.pod-step { display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:0 0 12px 12px; color:#111;
-  background:linear-gradient(180deg, color-mix(in oklab, var(--tier) 100%, #fff 25%), var(--tier)) }
-.pod-step span { font-size:18px; font-weight:900; letter-spacing:.02em; line-height:1; color:#111 !important; white-space:nowrap }
-.pod-step small { font-size:11px; font-weight:700; opacity:.7 }
-.pod-step[data-tier="1"] { --tier:var(--gold); height:64px }
-.pod-step[data-tier="2"] { --tier:var(--silver); height:44px }
-.pod-step[data-tier="3"] { --tier:var(--bronze); height:32px }
+/* the step: a dark block under the card, the place number in metal and a
+   thin metal edge where the card meets it */
+.pod-step { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:3px; padding-top:10px;
+  border-radius:0 0 18px 18px; overflow:hidden; color:#fff;
+  background:radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--m2) 22%, transparent), transparent 70%),
+             linear-gradient(180deg, #1d1d20, #0c0c0e) }
+.pod-step::before { content:''; position:absolute; left:0; right:0; top:0; height:1.5px;
+  background:linear-gradient(90deg, transparent, var(--m1) 30%, var(--m2) 50%, var(--m1) 70%, transparent) }
+.pod-step .pod-n { font-size:30px; font-weight:900; line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg, var(--m1) 10%, var(--m2) 55%, var(--m3) 100%); -webkit-background-clip:text; background-clip:text;
+  color:transparent !important; overflow:visible; filter:drop-shadow(0 2px 6px rgba(0,0,0,.45)) }
+.pod.p1 .pod-step .pod-n { font-size:40px }
+.pod-step small { font-size:10px; font-weight:700; letter-spacing:.12em; color:rgba(255,255,255,.5) }
+.pod-step[data-tier="1"] { --m1:#FFF0C2; --m2:#DDB25A; --m3:#946A22; height:92px }
+.pod-step[data-tier="2"] { --m1:#FFFFFF; --m2:#C5CAD3; --m3:#7B818B; height:70px }
+.pod-step[data-tier="3"] { --m1:#FFDDBF; --m2:#C98654; --m3:#7A4623; height:62px }
 .gp-sub { display:flex; justify-content:space-between; align-items:baseline }
 .gp-sub span { font-size:12px; font-weight:500; color:var(--ink-3) }
 .classif { display:flex; flex-direction:column; border-radius:16px; background:var(--sunk); padding:4px 12px; margin-bottom:8px }

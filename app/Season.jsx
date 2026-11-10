@@ -136,8 +136,8 @@ function GrandPrixResult({ year, month, mode, source, estimate, live, onRadio })
               </div>
               {/* the step it stands on: P1 highest, with the points it took */}
               <div className="pod-step" data-tier={t.rank}>
-                <span>P{t.rank}</span>
-                <small>{t.points}pt</small>
+                <span className="pod-n">{t.rank}</span>
+                <small>{t.points} PTS</small>
               </div>
             </div>
           );

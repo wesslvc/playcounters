@@ -1488,3 +1488,10 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .col-src-nm small { font-size:11.5px; color:var(--ink-3) }
 .col-auto { margin-top:4px; font-size:13px; color:var(--ink-2) }
 .col-auto small { color:var(--ink-3) }
+.ro-fast { flex-basis:100%; display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:650; color:var(--ink); cursor:pointer }
+.ro-fast input { width:17px; height:17px; flex:0 0 auto; accent-color:var(--ink) }
+.ro-fast small { font-weight:500; color:var(--ink-3) }
+.ro-fast[data-off] { color:var(--ink-3); cursor:default }
+.ro-pending { margin:0 0 14px; padding:12px; border-radius:14px; background:var(--sunk) }
+.ro-pending p { margin:0; font-size:13px; line-height:1.55; color:var(--ink) }
+.ro-pending .ro-actions { align-items:center; flex-wrap:wrap }

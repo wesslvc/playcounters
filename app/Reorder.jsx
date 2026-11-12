@@ -20,6 +20,10 @@ const ANY_SIZE = ['group', 'plays'];
 const undoKey = (id) => `pc-plundo-${id}`;
 const readUndo = (id) => { try { return JSON.parse(localStorage.getItem(undoKey(id)) ?? 'null'); } catch { return null; } };
 const writeUndo = (id, v) => { try { if (v) localStorage.setItem(undoKey(id), JSON.stringify(v)); else localStorage.removeItem(undoKey(id)); } catch { /* private mode */ } };
+// a save that didn't finish (closed, timed out): kept so the page can carry on with it
+const pendingKey = (id) => `pc-plsave-${id}`;
+const readPending = (id) => { try { return JSON.parse(localStorage.getItem(pendingKey(id)) ?? 'null'); } catch { return null; } };
+const writePending = (id, v) => { try { if (v) localStorage.setItem(pendingKey(id), JSON.stringify(v)); else localStorage.removeItem(pendingKey(id)); } catch { /* private mode */ } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function post(url, body, signal) {
@@ -130,6 +134,10 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
   const before = useMemo(() => smoothness(base.map((i) => bySong.get(i))), [base, bySong]);
   const after = useMemo(() => smoothness(seq.map((i) => bySong.get(i))), [seq, bySong]);
   const n = seq.length;
+  // rewriting the whole order is a handful of calls; moving one by one keeps added dates but is slow when much moves
+  const canFast = plan.entries.every((e) => /^spotify:(track|episode):/.test(e.uri));
+  const [fast, setFast] = useState(null);
+  useEffect(() => { if (fast == null && changed) setFast(movedCount > 60); }, [fast, changed, movedCount]);
 
   // where the lifted row would land: past every other row whose middle is above its own middle
   const update = () => {
@@ -229,10 +237,16 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
         <div>
           <button className="btn ghost" onClick={onCancel}>취소</button>
           {kind === 'ai' && <button className="btn ghost" onClick={onRedo}>다시 짜기</button>}
-          <button className="btn" disabled={!changed} onClick={() => onSave([...seq, ...rest].map((x) => plan.entries[x].uri))}>저장</button>
+          <button className="btn" disabled={!changed} onClick={() => onSave([...seq, ...rest].map((x) => plan.entries[x].uri), fast && canFast)}>저장</button>
         </div>
+        {changed && (
+          <label className="ro-fast" data-off={canFast ? undefined : ''}>
+            <input type="checkbox" checked={fast && canFast} disabled={!canFast} onChange={(e) => setFast(e.target.checked)} />
+            <span>빠르게 저장 <small>{canFast ? '몇 초면 끝나요 · 대신 곡마다 추가된 날짜가 오늘로 바뀌어요' : '로컬 파일이 있어서 쓸 수 없어요'}</small></span>
+          </label>
+        )}
       </div>
-      <p className="ro-sub">저장하면 Spotify에 적용돼요. 곡마다 추가된 날짜는 그대로이고, 바꾸기 전 순서는 이 기기에 남겨 둬요.{n > 300 ? ' 곡이 많으면 저장에 몇 분 걸릴 수 있어요.' : ''}</p>
+      <p className="ro-sub">저장하면 Spotify에 적용돼요. 바꾸기 전 순서는 이 기기에 남겨 둬요.{changed && !(fast && canFast) && movedCount > 60 ? ' 날짜를 지키며 옮기면 한 곡씩 옮겨서 몇 분 걸릴 수 있어요.' : ''}</p>
     </div>
   );
 }
@@ -256,7 +270,8 @@ export default function Reorder({ id, estimate }) {
   const [saved, setSaved] = useState(false);
   const ctl = useRef(null);
 
-  useEffect(() => { setUndo(readUndo(id)); return () => ctl.current?.abort(); }, [id]);
+  const [pending, setPending] = useState(null);
+  useEffect(() => { setUndo(readUndo(id)); setPending(readPending(id)); return () => ctl.current?.abort(); }, [id]);
   const fresh = () => { ctl.current?.abort(); ctl.current = new AbortController(); return ctl.current.signal; };
   const fail = (e) => { if (e.name !== 'AbortError') { setError(e); setPhase('error'); } };
   const url = (what) => `/api/playlists/${encodeURIComponent(id)}/${what}`;
@@ -304,24 +319,41 @@ export default function Reorder({ id, estimate }) {
     } catch (e) { fail(e); }
   }
 
-  async function save(target) {
+  async function save(target, fast, resume = null) {
     const signal = fresh();
     setError(null);
-    // what to come back to: the playlist as it stood when the editor opened
-    const kept = { uris: plan.entries.map((x) => x.uri), at: new Date().toISOString() };
-    writeUndo(id, kept);
-    setUndo(kept);
+    if (!resume) {
+      // what to come back to: the playlist as it stood when the editor opened
+      const kept = { uris: plan.entries.map((x) => x.uri), at: new Date().toISOString() };
+      writeUndo(id, kept);
+      setUndo(kept);
+    }
+    const job = resume ?? { target, fast, from: 0, at: new Date().toISOString() };
+    writePending(id, job);
+    setPending(job);
     setPhase('applying');
-    setProgress({ done: 0, total: null });
+    setProgress({ done: 0, total: null, fast: job.fast });
     try {
+      let state = { from: job.from ?? 0 };
       let done = 0;
-      for (let round = 0; round < 40; round += 1) {
-        const j = await post(url('apply'), { target }, signal);
-        done += j.done ?? 0;
-        setProgress({ done, total: done + (j.left ?? 0) });
+      for (let round = 0; round < 200; round += 1) {
+        const j = await post(url('apply'), job.fast
+          ? { target: job.target, mode: 'replace', from: state.from }
+          : { target: job.target, mode: 'move', current: state.current, snapshot: state.snapshot }, signal);
+        if (job.fast) {
+          state = { from: j.from };
+          writePending(id, { ...job, from: j.from });
+          setProgress({ done: j.total - j.left, total: j.total, fast: true });
+        } else {
+          state = { current: j.current, snapshot: j.snapshot };
+          done += j.done ?? 0;
+          setProgress({ done, total: done + (j.left ?? 0), wait: j.wait ?? null });
+        }
         if (!j.left) break;
         if (j.wait) await sleep(j.wait * 1000);
       }
+      writePending(id, null);
+      setPending(null);
       setSaved(true);
       setPhase('idle');
     } catch (e) { fail(e); }
@@ -331,6 +363,19 @@ export default function Reorder({ id, estimate }) {
     return (
       <div className="ro">
         {saved && <p className="ro-ok">새 순서를 Spotify에 저장했어요.</p>}
+        {pending && (
+          <div className="ro-pending">
+            <p>{pending.fast && pending.from > 0
+              ? `빠르게 저장하다 멈춰서 지금 플리에 ${pending.from.toLocaleString()}곡만 들어 있어요. 이어서 저장하면 나머지 ${(pending.target.length - pending.from).toLocaleString()}곡이 들어가요.`
+              : `저장이 끝나지 않았어요 (${pending.target.length.toLocaleString()}곡). 이어서 저장할까요?`}</p>
+            <div className="ro-actions">
+              <button className="btn" onClick={() => save(pending.target, pending.fast, pending)}>이어서 저장</button>
+              {!pending.fast && <button className="btn ghost" onClick={() => save(pending.target, true, { ...pending, fast: true, from: 0 })}>빠르게 저장으로 마치기</button>}
+              {/* a fast save cut off partway has left only part of the playlist: it has to be finished */}
+              {!(pending.fast && pending.from > 0) && <button className="linkish" onClick={() => { writePending(id, null); setPending(null); }}>버리기</button>}
+            </div>
+          </div>
+        )}
         <button className="ro-open" onClick={analyse}>
           <span><b>AI로 순서 바꾸기</b><small>곡마다 템포·에너지·조성을 보고 순서를 다시 짜요</small></span>
           <i aria-hidden="true">›</i>
@@ -366,7 +411,9 @@ export default function Reorder({ id, estimate }) {
       <div className="ro">
         <p className="ro-k">{label}</p>
         <div className="ro-bar"><i style={{ width: of ? `${Math.min(100, (at / of) * 100)}%` : '8%' }} /></div>
-        <p className="ro-sub">{of ? `${(at ?? 0).toLocaleString()} / ${of.toLocaleString()}${phase === 'analysing' ? '곡' : '번 이동'}` : '잠시만요…'}
+        <p className="ro-sub">{of ? `${(at ?? 0).toLocaleString()} / ${of.toLocaleString()}${phase === 'analysing' ? '곡' : p.fast ? '곡' : '번 이동'}` : '잠시만요…'}
+          {phase === 'applying' && p.wait ? ` · Spotify가 잠깐 쉬어 가래요 (${p.wait}초)` : ''}
+          {phase === 'applying' && ' · 창을 닫아도 다음에 이어서 저장할 수 있어요'}
           {phase === 'analysing' && ' · 처음 한 번만 오래 걸려요'}</p>
         <div className="ro-actions">
           {phase === 'analysing' && <button className="btn ghost" onClick={() => { ctl.current?.abort(); setPhase('pick'); }}>건너뛰고 바로 짜기</button>}

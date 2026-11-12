@@ -42,14 +42,15 @@ const pct = (v) => (v == null ? null : Math.round(Number(v) * 100));
 /**
  * POST /api/playlists/:id/order  { mode, prompt?, estimate? }
  * A new order for the playlist, not yet applied: by plays straight from the
- * counts, or by the model from each song's numbers. Comes back as indices
+ * counts, by the model from each song's numbers, or as it stands ('current')
+ * for editing by hand. Comes back as indices
  * into the playlist's entries, with how smoothly the old and new orders run.
  */
 export async function POST(req, { params }) {
   const userId = currentUserId();
   if (!userId) return NextResponse.json({ error: 'not signed in' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
-  const mode = ['flow', 'rise', 'calm', 'group', 'plays', 'custom'].includes(body?.mode) ? body.mode : 'flow';
+  const mode = ['flow', 'rise', 'calm', 'group', 'plays', 'custom', 'current'].includes(body?.mode) ? body.mode : 'flow';
   const prompt = String(body?.prompt ?? '').trim().slice(0, 200);
   if (mode === 'custom' && !prompt) return NextResponse.json({ error: '어떻게 짤지 적어 주세요.' }, { status: 400 });
 
@@ -89,7 +90,11 @@ export async function POST(req, { params }) {
 
   let songOrder;
   let note;
-  if (mode === 'plays') {
+  if (mode === 'current') {
+    // the playlist as it stands, to edit by hand
+    songOrder = songs.map((s) => s.i);
+    note = '';
+  } else if (mode === 'plays') {
     songOrder = [...songs].sort((a, b) => b.plays - a.plays).map((s) => s.i);
     note = '많이 들은 곡부터 차례로 놓았어요.';
   } else {

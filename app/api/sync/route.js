@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { syncUser, USER_COLUMNS } from '@/lib/sync';
 import { findCredits } from '@/lib/credits';
+import { collectNew } from '@/lib/collect';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -31,7 +32,14 @@ export async function GET(req) {
   for (const user of users) {
     try {
       const { added } = await syncUser(user);
-      report.push({ user: user.spotify_id, added });
+      // the gathering playlist, for those who turned it on: best effort, never fails the sync
+      let collected = null;
+      try {
+        collected = (await collectNew(user.id))?.added ?? null;
+      } catch (e) {
+        console.error('collect failed for', user.spotify_id, e.message);
+      }
+      report.push({ user: user.spotify_id, added, ...(collected != null ? { collected } : {}) });
     } catch (e) {
       console.error('sync failed for', user.spotify_id, e);
       report.push({ user: user.spotify_id, error: String(e.message || e) });

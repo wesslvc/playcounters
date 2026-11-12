@@ -5,6 +5,7 @@ import { useGenres } from './useGenres';
 import { familyLabel, artistColor } from '@/lib/genre';
 import { Seg, Section, Cover, Stat } from './ui';
 import Reorder from './Reorder';
+import Collect from './Collect';
 
 const DAY = 864e5;
 const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
@@ -337,6 +338,7 @@ export default function Playlists({ source, estimate, onSelect, onContext }) {
       <Section title="플레이리스트" sub="골라서 실제 재생 기록과 맞춰 보세요">
         <Seg size="sm" label="플리 종류" options={[['mine', '내 플리'], ['others', '팔로우']]} value={whose} onChange={setWhose} />
       </Section>
+      {whose === 'mine' && <Collect lists={lists} />}
       {shown.length ? (
         <div className="pl-grid">
           {shown.map((p) => (

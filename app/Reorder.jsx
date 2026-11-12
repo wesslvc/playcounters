@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Cover } from './ui';
 import { smoothness, tempoGap } from '@/lib/reorder';
 
@@ -12,6 +12,10 @@ const MODES = [
   ['plays', '많이 들은 순', '내 재생 횟수가 많은 곡부터 (AI 없이)'],
   ['custom', '직접 쓰기', '원하는 순서를 말로 적어서'],
 ];
+
+// one model call orders up to this many songs; past it only grouping and by-plays work (as on the server)
+const ONE_CALL = 400;
+const ANY_SIZE = ['group', 'plays'];
 
 const undoKey = (id) => `pc-plundo-${id}`;
 const readUndo = (id) => { try { return JSON.parse(localStorage.getItem(undoKey(id)) ?? 'null'); } catch { return null; } };
@@ -67,11 +71,48 @@ function Curve({ before, after }) {
   );
 }
 
+const Grip = () => (
+  <svg viewBox="0 0 12 20" aria-hidden="true">{[4, 10, 16].flatMap((y) => [<circle key={`a${y}`} cx="3" cy={y} r="1.6" />, <circle key={`b${y}`} cx="9" cy={y} r="1.6" />])}</svg>
+);
+
+/**
+ * One row, redrawn only when something it shows changes: a playlist of two
+ * thousand songs re-rendering every row on every pointer move would stutter.
+ */
+const Row = memo(function Row({ s, j, moved, prev, group, offset, lifted, on }) {
+  const gap = tempoGap(prev?.tempo, s.tempo);
+  return (
+    <li data-lifted={lifted || undefined}
+        style={offset != null ? { transform: `translateY(${offset}px)`, transition: lifted ? 'none' : undefined } : undefined}>
+      {group && <p className="ro-gh"><b>{group.name}</b><small>{group.count}곡 · {group.about}</small></p>}
+      <div className="ro-row">
+        <span className="ro-n">
+          {j + 1}
+          {moved !== 0 && <small data-up={moved > 0 || undefined} data-down={moved < 0 || undefined}>{moved > 0 ? '▲' : '▼'}{Math.abs(moved)}</small>}
+        </span>
+        <Cover src={s.image} size={36} />
+        <span className="ro-nm"><b>{s.track}</b><small>{s.artist}</small></span>
+        <span className="ro-bpm" data-jump={gap != null && gap > JUMP ? '' : undefined} title={gap != null ? `앞 곡과 ${gap} BPM 차이` : undefined}>
+          {s.tempo ?? '–'}<small>BPM</small>
+        </span>
+        <span className="ro-tone" data-mix={keysMix(prev?.key, s.key) ? '' : undefined} data-none={s.key ? undefined : ''}>
+          {s.keyName ?? '–'}{s.key && <small>{s.key}</small>}
+        </span>
+        <button className="ro-grip" aria-label={`${s.track} 옮기기`}
+                onPointerDown={(e) => on.start(e, j)} onPointerMove={on.move} onPointerUp={on.end} onPointerCancel={on.end}>
+          <Grip />
+        </button>
+      </div>
+    </li>
+  );
+});
+
 /**
  * An order to look over and change by hand before anything happens: rows are
  * dragged by their handle (the rest of the row still scrolls the page), the
  * energy curve and the jumps between neighbours follow the edits, and only
- * the save button puts it on Spotify.
+ * the save button puts it on Spotify. Grouped orders show each group's name
+ * where it starts.
  */
 function Editor({ plan, kind, onSave, onCancel, onRedo }) {
   const bySong = useMemo(() => new Map(plan.songs.map((s) => [s.i, s])), [plan]);
@@ -79,43 +120,48 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
   const [seq, setSeq] = useState(() => plan.order.filter((i) => bySong.has(i)));
   const [drag, setDrag] = useState(null);
   const d = useRef(null);
+  const list = useRef(null);
   useEffect(() => () => cancelAnimationFrame(d.current?.raf), []);
 
   const rest = plan.order.filter((i) => !bySong.has(i));
   const place = useMemo(() => new Map(base.map((i, j) => [i, j])), [base]);
   const changed = seq.some((i, j) => i !== base[j]);
   const movedCount = seq.filter((i, j) => place.get(i) !== j).length;
-  const before = smoothness(base.map((i) => bySong.get(i)));
-  const after = smoothness(seq.map((i) => bySong.get(i)));
+  const before = useMemo(() => smoothness(base.map((i) => bySong.get(i))), [base, bySong]);
+  const after = useMemo(() => smoothness(seq.map((i) => bySong.get(i))), [seq, bySong]);
   const n = seq.length;
 
+  // where the lifted row would land: past every other row whose middle is above its own middle
   const update = () => {
     const x = d.current;
     if (!x) return;
     const dy = x.y - x.y0 + (window.scrollY - x.s0);
-    const to = Math.max(0, Math.min(n - 1, x.from + Math.round(dy / x.h)));
+    const mid = x.rects[x.from].top + x.rects[x.from].h / 2 + dy;
+    let to = 0;
+    for (let k = 0; k < n; k += 1) if (k !== x.from && x.rects[k].top + x.rects[k].h / 2 < mid) to += 1;
     x.to = to;
-    setDrag({ from: x.from, to, dy, h: x.h });
+    setDrag({ from: x.from, to, dy, h: x.rects[x.from].h });
   };
-  const start = (e, j) => {
+  const api = useRef({});
+  api.current.start = (e, j) => {
     e.preventDefault();
-    const h = e.currentTarget.closest('li').getBoundingClientRect().height;
     e.currentTarget.setPointerCapture(e.pointerId);
-    d.current = { from: j, to: j, y0: e.clientY, y: e.clientY, s0: window.scrollY, h, raf: 0 };
-    setDrag({ from: j, to: j, dy: 0, h });
+    const rects = [...list.current.children].map((li) => { const r = li.getBoundingClientRect(); return { top: r.top + window.scrollY, h: r.height }; });
+    d.current = { from: j, to: j, y0: e.clientY, y: e.clientY, s0: window.scrollY, rects, raf: 0 };
+    setDrag({ from: j, to: j, dy: 0, h: rects[j].h });
     // near the top or bottom of the screen the page scrolls along
     const tick = () => {
       const x = d.current;
       if (!x) return;
-      if (x.y < 110) window.scrollBy(0, -10);
-      else if (x.y > window.innerHeight - 110) window.scrollBy(0, 10);
+      if (x.y < 110) window.scrollBy(0, -12);
+      else if (x.y > window.innerHeight - 110) window.scrollBy(0, 12);
       update();
       x.raf = requestAnimationFrame(tick);
     };
     d.current.raf = requestAnimationFrame(tick);
   };
-  const move = (e) => { if (d.current) { d.current.y = e.clientY; update(); } };
-  const end = () => {
+  api.current.move = (e) => { if (d.current) { d.current.y = e.clientY; update(); } };
+  api.current.end = () => {
     const x = d.current;
     if (!x) return;
     cancelAnimationFrame(x.raf);
@@ -123,19 +169,37 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
     setDrag(null);
     if (x.to !== x.from) setSeq((s) => { const a = [...s]; const [v] = a.splice(x.from, 1); a.splice(x.to, 0, v); return a; });
   };
-  const shift = (j) => {
-    if (!drag || j === drag.from) return 0;
+  const on = useMemo(() => ({
+    start: (e, j) => api.current.start(e, j),
+    move: (e) => api.current.move(e),
+    end: () => api.current.end(),
+  }), []);
+  const offset = (j) => {
+    if (!drag) return null;
+    if (j === drag.from) return drag.dy;
     if (drag.from < drag.to && j > drag.from && j <= drag.to) return -drag.h;
     if (drag.to < drag.from && j >= drag.to && j < drag.from) return drag.h;
     return 0;
   };
 
+  const groups = plan.groups ?? null;
+  const groupAt = (j) => {
+    if (!groups) return null;
+    const g = bySong.get(seq[j])?.g;
+    if (g == null || (j > 0 && bySong.get(seq[j - 1])?.g === g)) return null;
+    return groups[g] ?? null;
+  };
   const title = kind === 'ai' ? '새 순서' : kind === 'undo' ? '바꾸기 전 순서' : '지금 순서';
   const better = (a, b) => (a != null && b != null ? `${a} → ${b}` : null);
   return (
     <div className="ro">
       <p className="ro-k">{title}</p>
-      {kind === 'ai' && plan.note && <p className="ro-note">{plan.note}</p>}
+      {kind === 'ai' && plan.note && !groups && <p className="ro-note">{plan.note}</p>}
+      {groups && (
+        <ol className="ro-groups">
+          {groups.map((g) => <li key={g.name}><b>{g.name}</b><span>{g.count}곡</span></li>)}
+        </ol>
+      )}
       {kind === 'undo' && <p className="ro-note">바꾸기 전 순서를 불러왔어요. 저장을 눌러야 Spotify에 적용돼요.</p>}
       <p className="ro-sub">오른쪽 손잡이를 끌어서 곡을 옮길 수 있어요.</p>
       {plan.numbers > 0 && (
@@ -154,45 +218,21 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
           </div>
         </>
       )}
-      <ol className="ro-list" data-dragging={drag ? '' : undefined}>
-        {seq.map((i, j) => {
-          const s = bySong.get(i);
-          const moved = place.get(i) - j;
-          const lifted = drag?.from === j;
-          const prev = j > 0 ? bySong.get(seq[j - 1]) : null;
-          const gap = tempoGap(prev?.tempo, s.tempo);
-          return (
-            <li key={i} data-lifted={lifted || undefined}
-                style={drag ? { transform: `translateY(${lifted ? drag.dy : shift(j)}px)`, transition: lifted ? 'none' : undefined } : undefined}>
-              <span className="ro-n">
-                {j + 1}
-                {moved !== 0 && <small data-up={moved > 0 || undefined} data-down={moved < 0 || undefined}>{moved > 0 ? '▲' : '▼'}{Math.abs(moved)}</small>}
-              </span>
-              <Cover src={s.image} size={36} />
-              <span className="ro-nm"><b>{s.track}</b><small>{s.artist}</small></span>
-              <span className="ro-bpm" data-jump={gap != null && gap > JUMP ? '' : undefined} title={gap != null ? `앞 곡과 ${gap} BPM 차이` : undefined}>
-                {s.tempo ?? '–'}<small>BPM</small>
-              </span>
-              <span className="ro-tone" data-mix={keysMix(prev?.key, s.key) ? '' : undefined} data-none={s.key ? undefined : ''}>
-                {s.keyName ?? '–'}{s.key && <small>{s.key}</small>}
-              </span>
-              <button className="ro-grip" aria-label={`${s.track} 옮기기`}
-                      onPointerDown={(e) => start(e, j)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
-                <svg viewBox="0 0 12 20" aria-hidden="true">{[4, 10, 16].flatMap((y) => [<circle key={`a${y}`} cx="3" cy={y} r="1.6" />, <circle key={`b${y}`} cx="9" cy={y} r="1.6" />])}</svg>
-              </button>
-            </li>
-          );
-        })}
+      <ol className="ro-list" ref={list} data-dragging={drag ? '' : undefined}>
+        {seq.map((i, j) => (
+          <Row key={i} s={bySong.get(i)} j={j} moved={place.get(i) - j} prev={j > 0 ? bySong.get(seq[j - 1]) : null}
+               group={groupAt(j)} offset={offset(j)} lifted={drag?.from === j} on={on} />
+        ))}
       </ol>
       <div className="ro-save">
-        <span>{changed ? `${movedCount}곡 자리가 바뀌어요` : '바뀐 곳이 없어요'}</span>
+        <span>{changed ? `${movedCount.toLocaleString()}곡 자리가 바뀌어요` : '바뀐 곳이 없어요'}</span>
         <div>
           <button className="btn ghost" onClick={onCancel}>취소</button>
           {kind === 'ai' && <button className="btn ghost" onClick={onRedo}>다시 짜기</button>}
           <button className="btn" disabled={!changed} onClick={() => onSave([...seq, ...rest].map((x) => plan.entries[x].uri))}>저장</button>
         </div>
       </div>
-      <p className="ro-sub">저장하면 Spotify에 적용돼요. 곡마다 추가된 날짜는 그대로이고, 바꾸기 전 순서는 이 기기에 남겨 둬요.</p>
+      <p className="ro-sub">저장하면 Spotify에 적용돼요. 곡마다 추가된 날짜는 그대로이고, 바꾸기 전 순서는 이 기기에 남겨 둬요.{n > 300 ? ' 곡이 많으면 저장에 몇 분 걸릴 수 있어요.' : ''}</p>
     </div>
   );
 }
@@ -230,6 +270,8 @@ export default function Reorder({ id, estimate }) {
       for (let round = 0; round < 30; round += 1) {
         const j = await post(url('analyze'), {}, signal);
         setProgress(j);
+        // a long playlist can only be grouped or sorted by plays, so grouping is where it starts
+        if (j.total > ONE_CALL) setMode((m) => (ANY_SIZE.includes(m) ? m : 'group'));
         if (!j.pending) break;
       }
       setPhase('pick');
@@ -326,20 +368,25 @@ export default function Reorder({ id, estimate }) {
         <div className="ro-bar"><i style={{ width: of ? `${Math.min(100, (at / of) * 100)}%` : '8%' }} /></div>
         <p className="ro-sub">{of ? `${(at ?? 0).toLocaleString()} / ${of.toLocaleString()}${phase === 'analysing' ? '곡' : '번 이동'}` : '잠시만요…'}
           {phase === 'analysing' && ' · 처음 한 번만 오래 걸려요'}</p>
-        {phase !== 'applying' && <button className="linkish" onClick={() => { ctl.current?.abort(); setPhase('idle'); }}>그만두기</button>}
+        <div className="ro-actions">
+          {phase === 'analysing' && <button className="btn ghost" onClick={() => { ctl.current?.abort(); setPhase('pick'); }}>건너뛰고 바로 짜기</button>}
+          {phase !== 'applying' && <button className="linkish" onClick={() => { ctl.current?.abort(); setPhase('idle'); }}>그만두기</button>}
+        </div>
       </div>
     );
   }
 
   if (phase === 'pick' || phase === 'thinking') {
     const p = progress ?? {};
+    const big = p.total > ONE_CALL;
     return (
       <div className="ro">
         <p className="ro-k">어떻게 짤까요?</p>
         {p.total != null && <p className="ro-sub">{p.total}곡 중 {p.placed ?? p.ready}곡은 템포·에너지 수치가 있어요{p.placed < p.total ? ' · 나머지는 AI가 곡을 보고 판단해요' : ''}</p>}
+        {big && <p className="ro-sub">곡이 {p.total.toLocaleString()}곡이라 '비슷한 곡끼리'와 '많이 들은 순'만 쓸 수 있어요.</p>}
         <div className="ro-modes" role="radiogroup" aria-label="정렬 방식">
           {MODES.map(([k, label, sub]) => (
-            <button key={k} role="radio" aria-checked={mode === k} onClick={() => setMode(k)}>
+            <button key={k} role="radio" aria-checked={mode === k} onClick={() => setMode(k)} disabled={big && !ANY_SIZE.includes(k)}>
               <b>{label}</b><small>{sub}</small>
             </button>
           ))}
@@ -350,7 +397,7 @@ export default function Reorder({ id, estimate }) {
         )}
         <div className="ro-actions">
           <button className="btn" onClick={think} disabled={phase === 'thinking' || (mode === 'custom' && !prompt.trim())}>
-            {phase === 'thinking' ? '순서를 짜는 중…' : '순서 짜기'}
+            {phase === 'thinking' ? (mode === 'group' ? '묶음을 나누는 중… (곡이 많으면 1분쯤)' : '순서를 짜는 중…') : '순서 짜기'}
           </button>
           <button className="btn ghost" onClick={() => setPhase('idle')} disabled={phase === 'thinking'}>닫기</button>
         </div>

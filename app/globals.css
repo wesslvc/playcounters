@@ -1413,7 +1413,17 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .ro-stats b { font-size:16px; font-weight:800; font-variant-numeric:tabular-nums }
 .ro-stats small { font-size:11px; color:var(--ink-3) }
 .ro-list { margin:12px 0 6px }
-.ro-list li { position:relative; display:grid; grid-template-columns:28px 36px minmax(0,1fr) 42px 46px 32px; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--hair); background:var(--surface); transition:transform .18s cubic-bezier(.2,.7,.2,1) }
+.ro-list li { position:relative; border-bottom:1px solid var(--hair); background:var(--surface); transition:transform .18s cubic-bezier(.2,.7,.2,1) }
+.ro-row { display:grid; grid-template-columns:28px 36px minmax(0,1fr) 42px 46px 32px; gap:10px; align-items:center; padding:7px 0 }
+/* where a group starts in a grouped order */
+.ro-gh { display:flex; flex-direction:column; gap:1px; margin:0; padding:16px 2px 6px; border-bottom:1px solid var(--hair) }
+.ro-gh b { font-size:14.5px; font-weight:800 }
+.ro-gh small { font-size:11.5px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.ro-groups { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 10px }
+.ro-groups li { display:flex; align-items:baseline; gap:5px; padding:5px 10px; border-radius:999px; background:var(--sunk); font-size:12.5px }
+.ro-groups b { font-weight:700 }
+.ro-groups span { font-size:11px; color:var(--ink-3) }
+.ro-modes button:disabled { opacity:.38 }
 .ro-list[data-dragging] li { user-select:none; -webkit-user-select:none }
 .ro-list li[data-lifted] { z-index:2; border-radius:12px; box-shadow:0 10px 28px -10px rgba(0,0,0,.45); border-bottom-color:transparent }
 .ro-grip { display:grid; place-items:center; width:32px; height:40px; border-radius:10px; color:var(--ink-3); touch-action:none; cursor:grab }

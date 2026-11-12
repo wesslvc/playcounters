@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { spotifyFor } from '@/lib/spotifyUser';
 import { itemsOf, MAX_SONGS } from '@/lib/playlistItems';
-import { featureKey, storedFeatures, camelot } from '@/lib/features';
+import { featureKey, storedFeatures, camelot, keyName } from '@/lib/features';
 import { smoothness, wholeOrder } from '@/lib/reorder';
 import { ask } from '@/lib/openai';
 
@@ -84,6 +84,7 @@ export async function POST(req, { params }) {
       energy: has && f.energy != null ? Number(f.energy) : null,
       valence: has && f.valence != null ? Number(f.valence) : null,
       key: has ? camelot(f) : null,
+      keyName: has ? keyName(f) : null,
       f: has ? f : null,
     };
   });

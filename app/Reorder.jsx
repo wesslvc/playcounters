@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cover } from './ui';
-import { smoothness } from '@/lib/reorder';
+import { smoothness, tempoGap } from '@/lib/reorder';
 
 const MODES = [
   ['flow', '흐름 좋게', '템포와 에너지가 자연스럽게 이어지게'],
@@ -37,6 +37,17 @@ function orderFrom(entries, uris) {
   }
   entries.forEach((_, i) => { if (!used.has(i)) out.push(i); });
   return out;
+}
+
+const JUMP = 20; // BPM apart (half or double time counts as the same pulse) to call it a jump
+
+/** Two Camelot keys that mix: the same, its relative major/minor, or one step round the wheel. */
+function keysMix(a, b) {
+  if (!a || !b) return false;
+  const [na, la] = [parseInt(a, 10), a.slice(-1)];
+  const [nb, lb] = [parseInt(b, 10), b.slice(-1)];
+  if (na === nb) return true;
+  return la === lb && (Math.abs(na - nb) === 1 || Math.abs(na - nb) === 11);
 }
 
 /** Energy along the list, the playlist's order faint and the edited one bold. */
@@ -127,6 +138,12 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
       {kind === 'ai' && plan.note && <p className="ro-note">{plan.note}</p>}
       {kind === 'undo' && <p className="ro-note">바꾸기 전 순서를 불러왔어요. 저장을 눌러야 Spotify에 적용돼요.</p>}
       <p className="ro-sub">오른쪽 손잡이를 끌어서 곡을 옮길 수 있어요.</p>
+      {plan.numbers > 0 && (
+        <p className="ro-key-legend">
+          <span><em className="ro-bpm" data-jump="">128</em>앞 곡과 템포가 {JUMP} 넘게 차이</span>
+          <span><em className="ro-tone" data-mix="">Am</em>앞 곡과 잘 어울리는 키</span>
+        </p>
+      )}
       {plan.numbers > 1 && changed && (
         <>
           <Curve before={base.map((i) => bySong.get(i))} after={seq.map((i) => bySong.get(i))} />
@@ -142,14 +159,22 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
           const s = bySong.get(i);
           const moved = place.get(i) - j;
           const lifted = drag?.from === j;
+          const prev = j > 0 ? bySong.get(seq[j - 1]) : null;
+          const gap = tempoGap(prev?.tempo, s.tempo);
           return (
             <li key={i} data-lifted={lifted || undefined}
                 style={drag ? { transform: `translateY(${lifted ? drag.dy : shift(j)}px)`, transition: lifted ? 'none' : undefined } : undefined}>
-              <span className="ro-n">{j + 1}</span>
+              <span className="ro-n">
+                {j + 1}
+                {moved !== 0 && <small data-up={moved > 0 || undefined} data-down={moved < 0 || undefined}>{moved > 0 ? '▲' : '▼'}{Math.abs(moved)}</small>}
+              </span>
               <Cover src={s.image} size={36} />
-              <span className="ro-nm"><b>{s.track}</b><small>{[s.artist, s.tempo && `${s.tempo} BPM`, s.key].filter(Boolean).join(' · ')}</small></span>
-              <span className="ro-mv" data-up={moved > 0 || undefined} data-down={moved < 0 || undefined}>
-                {moved === 0 ? '' : `${moved > 0 ? '▲' : '▼'}${Math.abs(moved)}`}
+              <span className="ro-nm"><b>{s.track}</b><small>{s.artist}</small></span>
+              <span className="ro-bpm" data-jump={gap != null && gap > JUMP ? '' : undefined} title={gap != null ? `앞 곡과 ${gap} BPM 차이` : undefined}>
+                {s.tempo ?? '–'}<small>BPM</small>
+              </span>
+              <span className="ro-tone" data-mix={keysMix(prev?.key, s.key) ? '' : undefined} data-none={s.key ? undefined : ''}>
+                {s.keyName ?? '–'}{s.key && <small>{s.key}</small>}
               </span>
               <button className="ro-grip" aria-label={`${s.track} 옮기기`}
                       onPointerDown={(e) => start(e, j)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>

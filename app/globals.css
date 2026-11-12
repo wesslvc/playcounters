@@ -1461,3 +1461,20 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .col-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px }
 .col-msg { font-size:13px; color:var(--ink-2); margin:10px 0 0 }
 .col-msg a { color:var(--ink); font-weight:600; text-underline-offset:3px }
+.col-warn { display:flex; flex-direction:column; gap:10px; margin:0 0 12px; padding:12px; border-radius:14px; background:var(--sunk) }
+.col-warn p { margin:0; font-size:13px; line-height:1.55; color:var(--ink-2) }
+.col-warn .btn { align-self:flex-start }
+.col-undo { display:block; margin-top:12px; font-size:12.5px; color:var(--ink-2) }
+.col-src-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:10px 2px 6px; font-size:12.5px; font-weight:650; color:var(--ink-2) }
+.col-src-head > span:last-child { display:flex; gap:12px }
+.col-src-head .linkish { font-size:12px }
+.col-src { max-height:360px; overflow:auto; padding:2px 10px; border-radius:12px; background:var(--sunk) }
+.col-src li { border-bottom:1px solid var(--hair) }
+.col-src li:last-child { border-bottom:none }
+.col-src label, .col-auto { display:flex; align-items:center; gap:10px; padding:9px 0; cursor:pointer }
+.col-src input, .col-auto input { width:18px; height:18px; flex:0 0 auto; accent-color:var(--ink) }
+.col-src-nm { display:flex; flex-direction:column; min-width:0 }
+.col-src-nm b { font-size:13.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.col-src-nm small { font-size:11.5px; color:var(--ink-3) }
+.col-auto { margin-top:4px; font-size:13px; color:var(--ink-2) }
+.col-auto small { color:var(--ink-3) }

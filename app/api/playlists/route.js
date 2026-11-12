@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
-import { spotifyFor } from '@/lib/spotifyUser';
+import { spotifyFor, busyMessage } from '@/lib/spotifyUser';
 import { pickImage } from '@/lib/spotify';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +18,7 @@ export async function GET() {
   const lists = [];
   for (let next = '/me/playlists?limit=50'; next && lists.length < 200;) {
     const res = await sp.call(next);
+    if (res.status === 429) return NextResponse.json({ error: busyMessage(sp.waitLeft()), wait: sp.waitLeft() }, { status: 429 });
     if (res.status === 401 || res.status === 403) {
       return NextResponse.json({ error: 'Spotify가 플레이리스트 읽기를 거부했습니다.', reauth: true }, { status: 403 });
     }

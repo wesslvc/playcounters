@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
-import { spotifyFor } from '@/lib/spotifyUser';
-import { itemsOf, MAX_SONGS } from '@/lib/playlistItems';
+import { spotifyFor, busyMessage } from '@/lib/spotifyUser';
+import { itemsCached, MAX_SONGS } from '@/lib/playlistItems';
 import { ensureFeatures } from '@/lib/features';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,8 @@ export async function POST(req, { params }) {
   const sp = await spotifyFor(userId, NEEDS);
   if (!sp.call) return NextResponse.json({ error: sp.error, reauth: sp.reauth ?? false }, { status: sp.status });
 
-  const got = await itemsOf(sp.call, encodeURIComponent(params.id), MAX_SONGS + 100);
+  const got = await itemsCached(sp.call, encodeURIComponent(params.id), { max: MAX_SONGS + 100 });
+  if (got.status === 429) return NextResponse.json({ error: busyMessage(sp.waitLeft()), wait: sp.waitLeft() }, { status: 429 });
   if (got.status === 401 || got.status === 403) return NextResponse.json({ error: 'Spotify가 이 플레이리스트 읽기를 거부했습니다.', reauth: true }, { status: 403 });
   if (!got.items) return NextResponse.json({ error: `playlist failed: ${got.status}` }, { status: 502 });
   const songs = got.items.filter((x) => x.song);

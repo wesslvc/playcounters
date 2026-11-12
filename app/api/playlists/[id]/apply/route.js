@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
-import { spotifyFor } from '@/lib/spotifyUser';
-import { itemsOf, MAX_SONGS } from '@/lib/playlistItems';
+import { spotifyFor, busyMessage } from '@/lib/spotifyUser';
+import { itemsCached, MAX_SONGS } from '@/lib/playlistItems';
 import { tagged, fitTarget, movesFor } from '@/lib/reorder';
 
 export const dynamic = 'force-dynamic';
@@ -41,18 +41,21 @@ export async function POST(req, { params }) {
   if (!sp.call) return NextResponse.json({ error: sp.error, reauth: sp.reauth ?? false }, { status: sp.status });
   const id = encodeURIComponent(params.id);
   const read = async () => {
-    const got = await itemsOf(sp.call, id, MAX_SONGS + 100);
+    const got = await itemsCached(sp.call, id, { max: MAX_SONGS + 100 });
     if (!got.items) return { status: got.status };
     return { uris: got.items.map((x) => x.uri ?? `none:${x.pos}`) };
   };
   const until = Date.now() + BUDGET;
+  const failed = (status) => (status === 429
+    ? NextResponse.json({ error: busyMessage(sp.waitLeft()), wait: sp.waitLeft() }, { status: 429 })
+    : status === 401 || status === 403 ? denied(status) : NextResponse.json({ error: `playlist failed: ${status}` }, { status: 502 }));
 
   if (mode === 'replace') {
     const from = Math.max(0, Math.floor(Number(body?.from) || 0));
     if (from === 0) {
       // only the same songs in a new order: nothing may go missing by being rewritten
       const now = await read();
-      if (!now.uris) return now.status === 401 || now.status === 403 ? denied(now.status) : NextResponse.json({ error: `playlist failed: ${now.status}` }, { status: 502 });
+      if (!now.uris) return failed(now.status);
       if (now.uris.some((u) => !/^spotify:(track|episode):/.test(u))) {
         return NextResponse.json({ error: '로컬 파일이나 지워진 곡이 있어서 빠르게 저장할 수 없어요. 날짜 유지로 저장해 주세요.' }, { status: 400 });
       }
@@ -95,7 +98,7 @@ export async function POST(req, { params }) {
   }
   if (!uris) {
     const now = await read();
-    if (!now.uris) return now.status === 401 || now.status === 403 ? denied(now.status) : NextResponse.json({ error: `playlist failed: ${now.status}` }, { status: 502 });
+    if (!now.uris) return failed(now.status);
     uris = now.uris;
   }
 

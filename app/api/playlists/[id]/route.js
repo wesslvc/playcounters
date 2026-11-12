@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
-import { spotifyFor } from '@/lib/spotifyUser';
+import { spotifyFor, busyMessage } from '@/lib/spotifyUser';
 import { pickImage } from '@/lib/spotify';
-import { itemsOf } from '@/lib/playlistItems';
+import { itemsCached } from '@/lib/playlistItems';
 import { pointsForRank } from '@/lib/rank';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ const DAY = 864e5;
 
 /** A playlist's songs, in order: its entries that are music, as the analysis reads them. */
 async function songsOf(call, id) {
-  const got = await itemsOf(call, id, MAX_TRACKS);
+  const got = await itemsCached(call, id, { max: MAX_TRACKS });
   if (!got.items) return { status: got.status };
   return {
     songs: got.items.filter((x) => x.song).map((x) => ({
@@ -45,6 +45,7 @@ export async function GET(req, { params }) {
     sp.call(`/playlists/${encodeURIComponent(params.id)}?fields=id,name,images,owner(display_name),external_urls`),
     songsOf(sp.call, encodeURIComponent(params.id)),
   ]);
+  if (list.status === 429) return NextResponse.json({ error: busyMessage(sp.waitLeft()), wait: sp.waitLeft() }, { status: 429 });
   if (list.status === 401 || list.status === 403) {
     return NextResponse.json({ error: 'Spotify가 이 플레이리스트 읽기를 거부했습니다.', reauth: true }, { status: 403 });
   }

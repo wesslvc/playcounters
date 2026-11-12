@@ -350,6 +350,8 @@ export default function Reorder({ id, estimate }) {
           setProgress({ done, total: done + (j.left ?? 0), wait: j.wait ?? null });
         }
         if (!j.left) break;
+        // a long hold is sat out with the page closed: the save is kept to carry on with later
+        if (j.wait > 90) throw new Error(`Spotify가 요청이 많다며 잠시 막았어요. 약 ${Math.ceil(j.wait / 60)}분 뒤에 '이어서 저장'을 눌러 주세요.`);
         if (j.wait) await sleep(j.wait * 1000);
       }
       writePending(id, null);

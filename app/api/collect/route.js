@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { currentUserId } from '@/lib/db';
+import { busyMessage } from '@/lib/spotifyUser';
 import { settingsOf, survey, preview, enable, setSources, disable, collectNew, addedCount, undoAdded } from '@/lib/collect';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const fail = (e) => {
+  if (e.status === 429) return NextResponse.json({ error: busyMessage(60) }, { status: 429 });
   console.error('collect failed', e.message);
   const reauth = e.status === 401 || e.status === 403;
   return NextResponse.json({ error: reauth ? 'Spotify가 플레이리스트 수정을 거부했어요. 다시 연결해 주세요.' : '플레이리스트를 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.', reauth }, { status: reauth ? 403 : 502 });

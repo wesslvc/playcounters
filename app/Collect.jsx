@@ -116,7 +116,9 @@ export default function Collect({ lists }) {
   const undo = () => run('undo', async () => {
     const j = await call('POST', { action: 'undo' });
     setView('main');
-    setMsg(`${j.removed.toLocaleString()}곡을 뺐어요. 자동 모으기는 꺼 뒀어요.`);
+    setMsg(j.busy ? '이미 빼는 중이에요. 잠시 뒤 새로고침해 보세요.'
+      : j.already ? `이미 빠져 있어요 (${ago(j.already.at)} ${j.already.count.toLocaleString()}곡을 뺐어요).`
+        : j.removed ? `${j.removed.toLocaleString()}곡을 뺐어요. 자동 모으기는 꺼 뒀어요.` : '뺄 곡이 없어요.');
     await reload();
   });
   const off = () => run('off', async () => { await call('POST', { action: 'disable' }); await reload(); });

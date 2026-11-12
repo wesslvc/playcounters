@@ -3,6 +3,7 @@ import { db, currentUserId } from '@/lib/db';
 import { rpcAll } from '@/lib/rpcPage';
 import { spotifyFor } from '@/lib/spotifyUser';
 import { pickImage } from '@/lib/spotify';
+import { itemsOf } from '@/lib/playlistItems';
 import { pointsForRank } from '@/lib/rank';
 
 export const dynamic = 'force-dynamic';
@@ -12,57 +13,16 @@ const NEEDS = ['playlist-read-private'];
 const MAX_TRACKS = 1000;
 const DAY = 864e5;
 
-/** One page of a playlist as songs. */
-function songsFrom(page) {
-  const out = [];
-  for (const it of page.items ?? []) {
-    const t = it.item ?? it.track;
-    if (!t?.name || t.type === 'episode') continue;
-    const artists = (t.artists ?? []).map((a) => a.name).filter(Boolean);
-    if (!artists.length) continue;
-    out.push({
-      track: t.name,
-      artist: artists[0],
-      artists,
-      album: t.album?.name ?? null,
-      image: pickImage(t.album?.images),
-      added_at: it.added_at ?? null,
-      local: Boolean(it.is_local),
-    });
-  }
-  return out;
-}
-
-/**
- * Every song in a playlist, in order. The first page says how many there
- * are; the rest are fetched a few at a time in parallel rather than one after
- * another. Spotify renamed tracks to items; the old path is the fallback.
- */
+/** A playlist's songs, in order: its entries that are music, as the analysis reads them. */
 async function songsOf(call, id) {
-  let base = `/playlists/${id}/items`;
-  let size = 50;
-  let res = await call(`${base}?limit=${size}&offset=0`);
-  if (res.status === 404 || res.status === 405) {
-    base = `/playlists/${id}/tracks`;
-    size = 100;
-    res = await call(`${base}?limit=${size}&offset=0`);
-  }
-  if (!res.ok) return { status: res.status };
-  const first = await res.json();
-  const total = Math.min(first.total ?? 0, MAX_TRACKS);
-  const offsets = [];
-  for (let o = size; o < total; o += size) offsets.push(o);
-  const pages = [];
-  for (let i = 0; i < offsets.length; i += 6) {
-    const got = await Promise.all(offsets.slice(i, i + 6).map(async (o) => {
-      const r = await call(`${base}?limit=${size}&offset=${o}`);
-      return r.ok ? r.json() : { status: r.status };
-    }));
-    const bad = got.find((g) => g.status);
-    if (bad) return { status: bad.status };
-    pages.push(...got);
-  }
-  return { songs: [first, ...pages].flatMap(songsFrom).slice(0, MAX_TRACKS) };
+  const got = await itemsOf(call, id, MAX_TRACKS);
+  if (!got.items) return { status: got.status };
+  return {
+    songs: got.items.filter((x) => x.song).map((x) => ({
+      track: x.track, artist: x.artist, artists: x.artists, album: x.album,
+      image: x.image, added_at: x.added_at, local: x.local,
+    })),
+  };
 }
 
 /**

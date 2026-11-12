@@ -1375,3 +1375,51 @@ input[type=file] { font:inherit; font-size:13.5px; width:100%; margin-bottom:6px
 .rec-save { margin-top:14px; display:flex; flex-direction:column; align-items:stretch }
 .rec-save .btn { width:100% }
 .rec-save .export-msg { text-align:center }
+
+/* ---------- a playlist reordered by the model ---------- */
+.ro { margin:0 0 22px; padding:16px; border-radius:20px; background:var(--surface); border:1px solid var(--hair) }
+.ro-open { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left }
+.ro-open span { display:flex; flex-direction:column; gap:3px }
+.ro-open b { font-size:15.5px; font-weight:750 }
+.ro-open small { font-size:12.5px; color:var(--ink-3) }
+.ro-open i { font-style:normal; font-size:22px; color:var(--ink-3) }
+.ro-undo { display:block; margin-top:12px; font-size:12.5px }
+.ro-ok { margin:0 0 12px; font-size:13px; font-weight:650; color:var(--ink) }
+.ro-k { font-size:15px; font-weight:750; margin:0 0 6px }
+.ro-sub { font-size:12.5px; color:var(--ink-3); line-height:1.55; margin:8px 0 }
+.ro-note { font-size:14px; color:var(--ink-2); line-height:1.55; margin:0 0 12px }
+.ro-bar { height:6px; border-radius:3px; background:var(--sunk); overflow:hidden; margin:12px 0 4px }
+.ro-bar i { display:block; height:100%; border-radius:3px; background:var(--ink); transition:width .4s ease }
+.ro-modes { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; margin:12px 0 }
+@media (min-width:700px) { .ro-modes { grid-template-columns:repeat(3, minmax(0,1fr)) } }
+.ro-modes button { display:flex; flex-direction:column; gap:3px; padding:11px 12px; border-radius:14px; border:1px solid var(--line); text-align:left; background:var(--bg) }
+.ro-modes button b { font-size:14px; font-weight:700 }
+.ro-modes button small { font-size:11.5px; line-height:1.4; color:var(--ink-3) }
+.ro-modes button[aria-checked="true"] { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink) }
+.ro-prompt { width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:var(--bg); font:inherit; font-size:14.5px; color:var(--ink); resize:vertical; outline:none; margin-bottom:6px }
+.ro-prompt:focus { border-color:var(--ink-3) }
+.ro-actions { display:flex; gap:8px; margin-top:12px }
+.ro-curve { display:block; width:100%; height:110px; border-radius:14px; background:var(--sunk) }
+.ro-curve polyline { fill:none; stroke-linejoin:round; stroke-linecap:round }
+.ro-curve .was { stroke:var(--ink-3); stroke-width:1.5; opacity:.55 }
+.ro-curve .now { stroke:var(--ink); stroke-width:2.5 }
+.ro-legend { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:8px 2px 0; font-size:11.5px; color:var(--ink-3) }
+.ro-legend i { display:inline-block; width:14px; height:3px; border-radius:2px }
+.ro-legend i.was { background:var(--ink-3); opacity:.55 }
+.ro-legend i.now { background:var(--ink); margin-left:8px }
+.ro-stats { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 4px }
+.ro-stats span { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:12px; background:var(--sunk); min-width:0 }
+.ro-stats b { font-size:16px; font-weight:800; font-variant-numeric:tabular-nums }
+.ro-stats small { font-size:11px; color:var(--ink-3) }
+.ro-list { margin:12px 0 6px }
+.ro-list li { display:grid; grid-template-columns:26px 36px minmax(0,1fr) 54px 38px; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--hair) }
+.ro-list li:last-child { border-bottom:none }
+.ro-n { font-size:12.5px; font-weight:700; color:var(--ink-3); text-align:right; font-variant-numeric:tabular-nums }
+.ro-nm { display:flex; flex-direction:column; min-width:0 }
+.ro-nm b { font-size:13.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.ro-nm small { font-size:11.5px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.ro-e { height:4px; border-radius:2px; background:var(--sunk); overflow:hidden }
+.ro-e i { display:block; height:100%; border-radius:2px; background:var(--ink-2) }
+.ro-mv { font-size:11.5px; font-weight:700; text-align:right; color:var(--ink-3); font-variant-numeric:tabular-nums }
+.ro-mv[data-up] { color:var(--pos) }
+.ro-mv[data-down] { color:var(--neg) }

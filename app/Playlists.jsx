@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGenres } from './useGenres';
 import { familyLabel, artistColor } from '@/lib/genre';
 import { Seg, Section, Cover, Stat } from './ui';
+import Reorder from './Reorder';
 
 const DAY = 864e5;
 const target = (r) => ({ artist: r.artist, track: r.track ?? null, artist_key: r.artist_key, track_key: r.track_key ?? null });
@@ -139,7 +140,7 @@ function Pick({ label, t, value, onSelect }) {
 }
 
 /** The analysis of one playlist. */
-function Analysis({ id, source, estimate, onSelect, onBack }) {
+function Analysis({ id, mine, source, estimate, onSelect, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [view, setView] = useState(null);
@@ -207,6 +208,7 @@ function Analysis({ id, source, estimate, onSelect, onBack }) {
           <a href={pl.url} target="_blank" rel="noreferrer">Spotify에서 열기 ↗</a>
         </div>
       </div>
+      {mine && <Reorder id={id} estimate={estimate} />}
 
       <div className="stats compact">
         <Stat value={`${s.played}/${s.songs}`} label="들어본 곡" sub={`${Math.round((s.played / Math.max(1, s.songs)) * 100)}%`} />
@@ -325,7 +327,7 @@ export default function Playlists({ source, estimate, onSelect, onContext }) {
     return () => ctl.abort();
   }, []);
 
-  if (open) return <Analysis id={open} source={source} estimate={estimate} onSelect={onSelect} onBack={() => setOpen(null)} />;
+  if (open) return <Analysis id={open.id} mine={open.mine} source={source} estimate={estimate} onSelect={onSelect} onBack={() => setOpen(null)} />;
   if (error) return error.reauth ? <Reconnect /> : <p className="err">{error.error}</p>;
   if (!lists) return <p className="note" style={{ padding: '18px 0' }}>Spotify 플레이리스트 불러오는 중…</p>;
 
@@ -338,7 +340,7 @@ export default function Playlists({ source, estimate, onSelect, onContext }) {
       {shown.length ? (
         <div className="pl-grid">
           {shown.map((p) => (
-            <button key={p.id} className="pl-card" onClick={() => setOpen(p.id)}>
+            <button key={p.id} className="pl-card" onClick={() => setOpen(p)}>
               <Cover src={p.image} size={140} />
               <b>{p.name}</b>
               <span>{[p.count != null && `${p.count}곡`, !p.mine && p.owner].filter(Boolean).join(' · ')}</span>

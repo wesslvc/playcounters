@@ -2097,3 +2097,26 @@ as $$
   order by (bool_or(p.artist ilike p_q || '%')) desc, count(*) desc
   limit p_limit
 $$;
+
+-- ---------- how a song sounds, for reordering playlists ----------
+-- Tempo, energy, brightness (valence) and the rest, from ReccoBeats: by
+-- Spotify id ('sp:<id>') from its catalogue, or for songs it doesn't carry
+-- from an analysis of the 30-second Deezer preview; local files by name
+-- ('nm:<artist>|<title>'). Shared across users like covers and genres. A song
+-- neither route could place is stored with via = 'none' and tried again after
+-- a fortnight.
+create table if not exists track_features (
+  key        text primary key,
+  tempo      numeric,
+  energy     numeric,
+  danceability numeric,
+  valence    numeric,
+  acousticness numeric,
+  instrumentalness numeric,
+  loudness   numeric,
+  musical_key int,
+  mode       int,
+  via        text not null,               -- 'id' | 'preview' | 'none'
+  fetched_at timestamptz not null default now()
+);
+alter table track_features enable row level security;

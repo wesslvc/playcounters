@@ -1,8 +1,8 @@
 'use client';
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Cover } from './ui';
-import { smoothness, tempoGap } from '@/lib/reorder';
+import { Cover, Seg } from './ui';
+import { smoothness, tempoGap, interleaveMixed } from '@/lib/reorder';
 
 const MODES = [
   ['flow', '흐름 좋게', '템포와 에너지가 자연스럽게 이어지게'],
@@ -47,6 +47,10 @@ function orderFrom(entries, uris) {
   return out;
 }
 
+// one hue per group, spread round the wheel so neighbours differ; shown as a wash behind the group's name
+const GROUP_HUES = [25, 205, 120, 300, 70, 250, 165, 345, 95, 225, 50, 185, 275, 140];
+const groupColor = (g) => `oklch(0.7 0.13 ${GROUP_HUES[g % GROUP_HUES.length]})`;
+
 const JUMP = 20; // BPM apart (half or double time counts as the same pulse) to call it a jump
 
 /** Two Camelot keys that mix: the same, its relative major/minor, or one step round the wheel. */
@@ -83,19 +87,25 @@ const Grip = () => (
  * One row, redrawn only when something it shows changes: a playlist of two
  * thousand songs re-rendering every row on every pointer move would stutter.
  */
-const Row = memo(function Row({ s, j, moved, prev, group, offset, lifted, on }) {
+const Row = memo(function Row({ s, j, moved, prev, group, tag, hot, offset, lifted, on }) {
   const gap = tempoGap(prev?.tempo, s.tempo);
   return (
     <li data-lifted={lifted || undefined}
         style={offset != null ? { transform: `translateY(${offset}px)`, transition: lifted ? 'none' : undefined } : undefined}>
-      {group && <p className="ro-gh"><b>{group.name}</b><small>{group.count}곡 · {group.about}</small></p>}
+      {group && <p className="ro-gh"><b className="ro-gtag" style={{ '--gc': group.color }}>{group.name}</b><small>{group.count}곡 · {group.about}</small></p>}
       <div className="ro-row">
         <span className="ro-n">
           {j + 1}
           {moved !== 0 && <small data-up={moved > 0 || undefined} data-down={moved < 0 || undefined}>{moved > 0 ? '▲' : '▼'}{Math.abs(moved)}</small>}
         </span>
         <Cover src={s.image} size={36} />
-        <span className="ro-nm"><b>{s.track}</b><small>{s.artist}</small></span>
+        <span className="ro-nm">
+          <b>{s.track}</b>
+          <small>
+            {tag && <em className="ro-gtag" style={{ '--gc': tag.color }}>{tag.name}</em>}
+            <span className="ro-who"><span className="ro-plays" data-hot={hot || undefined}>{(s.plays ?? 0).toLocaleString()}회</span> · {s.artist}</span>
+          </small>
+        </span>
         <span className="ro-bpm" data-jump={gap != null && gap > JUMP ? '' : undefined} title={gap != null ? `앞 곡과 ${gap} BPM 차이` : undefined}>
           {s.tempo ?? '–'}<small>BPM</small>
         </span>
@@ -121,7 +131,22 @@ const Row = memo(function Row({ s, j, moved, prev, group, offset, lifted, on }) 
 function Editor({ plan, kind, onSave, onCancel, onRedo }) {
   const bySong = useMemo(() => new Map(plan.songs.map((s) => [s.i, s])), [plan]);
   const base = useMemo(() => plan.songs.map((s) => s.i), [plan]);
-  const [seq, setSeq] = useState(() => plan.order.filter((i) => bySong.has(i)));
+  // a grouped order laid out group after group, or the groups taken in turns a few songs at a time,
+  // with songs played more than most alternating with ones played less
+  const [layout, setLayout] = useState(plan.groups ? 'mix' : 'block');
+  const [per, setPer] = useState(1);
+  const [mixPlays, setMixPlays] = useState(true);
+  const hotLine = useMemo(() => {
+    const p = plan.songs.map((x) => x.plays ?? 0).sort((a, b) => a - b);
+    return p[Math.floor(p.length / 2)] ?? 0;
+  }, [plan]);
+  const isHot = (i) => (bySong.get(i)?.plays ?? 0) > hotLine;
+  const arrange = (how, n, byPlays) => {
+    const grouped = plan.order.filter((i) => bySong.has(i));
+    if (how === 'block' || !plan.groups) return grouped;
+    return interleaveMixed(plan.groups.map((_, g) => grouped.filter((i) => bySong.get(i).g === g)), n, byPlays ? isHot : null);
+  };
+  const [seq, setSeq] = useState(() => arrange(plan.groups ? 'mix' : 'block', 1, true));
   const [drag, setDrag] = useState(null);
   const d = useRef(null);
   const list = useRef(null);
@@ -190,9 +215,10 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
     return 0;
   };
 
-  const groups = plan.groups ?? null;
+  const groups = useMemo(() => (plan.groups ? plan.groups.map((g, k) => ({ ...g, color: groupColor(k) })) : null), [plan]);
+  const relayout = (how, n, byPlays) => { setLayout(how); setPer(n); setMixPlays(byPlays); setSeq(arrange(how, n, byPlays)); };
   const groupAt = (j) => {
-    if (!groups) return null;
+    if (!groups || layout !== 'block') return null;
     const g = bySong.get(seq[j])?.g;
     if (g == null || (j > 0 && bySong.get(seq[j - 1])?.g === g)) return null;
     return groups[g] ?? null;
@@ -204,9 +230,27 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
       <p className="ro-k">{title}</p>
       {kind === 'ai' && plan.note && !groups && <p className="ro-note">{plan.note}</p>}
       {groups && (
-        <ol className="ro-groups">
-          {groups.map((g) => <li key={g.name}><b>{g.name}</b><span>{g.count}곡</span></li>)}
-        </ol>
+        <>
+          <ol className="ro-groups">
+            {groups.map((g) => <li key={g.name}><b className="ro-gtag" style={{ '--gc': g.color }}>{g.name}</b><span>{g.count}곡</span></li>)}
+          </ol>
+          <div className="ro-layout">
+            <Seg size="sm" label="배치" options={[['block', '묶음끼리'], ['mix', '번갈아']]} value={layout} onChange={(v) => relayout(v, per, mixPlays)} />
+            {layout === 'mix' && (
+              <Seg size="sm" label="몇 곡씩" options={[[1, '1곡씩'], [2, '2곡씩'], [3, '3곡씩'], [5, '5곡씩']]} value={per} onChange={(v) => relayout('mix', v, mixPlays)} />
+            )}
+          </div>
+          {layout === 'mix' && (
+            <label className="ro-fast">
+              <input type="checkbox" checked={mixPlays} onChange={(e) => relayout('mix', per, e.target.checked)} />
+              <span>많이 들은 곡과 덜 들은 곡 번갈아 <small>(이 플리에서 {hotLine.toLocaleString()}회보다 많이 들은 곡이 "많이 들은 곡")</small></span>
+            </label>
+          )}
+          <p className="ro-sub">
+            {layout === 'block' ? '묶음마다 모아서 이어 붙였어요.' : `묶음을 ${per}곡씩 번갈아 놓았어요${mixPlays ? '. 많이 들은 곡 다음엔 덜 들은 곡이 와요' : ''}. 곡이 많은 묶음은 더 자주 돌아와요.`}
+            {' '}배치를 바꾸면 손으로 옮긴 건 다시 짜여요.
+          </p>
+        </>
       )}
       {kind === 'undo' && <p className="ro-note">바꾸기 전 순서를 불러왔어요. 저장을 눌러야 Spotify에 적용돼요.</p>}
       <p className="ro-sub">오른쪽 손잡이를 끌어서 곡을 옮길 수 있어요.</p>
@@ -229,7 +273,8 @@ function Editor({ plan, kind, onSave, onCancel, onRedo }) {
       <ol className="ro-list" ref={list} data-dragging={drag ? '' : undefined}>
         {seq.map((i, j) => (
           <Row key={i} s={bySong.get(i)} j={j} moved={place.get(i) - j} prev={j > 0 ? bySong.get(seq[j - 1]) : null}
-               group={groupAt(j)} offset={offset(j)} lifted={drag?.from === j} on={on} />
+               group={groupAt(j)} tag={groups && layout !== 'block' ? groups[bySong.get(i).g] ?? null : null} hot={isHot(i)}
+               offset={offset(j)} lifted={drag?.from === j} on={on} />
         ))}
       </ol>
       <div className="ro-save">

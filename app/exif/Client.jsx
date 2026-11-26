@@ -1,121 +1,54 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { readExif, caption } from './exif';
+import { drawFrame, drawCompare, layout } from './frame';
 
 /**
  * 필름곳간: one person shoots, all three edit the same photo, and the three
  * edits go up together. A post here is that set — who shot it, each
  * member's edit — and comes out as one framed picture per edit, credited
- * ("촬영 A · 보정 B") with the shooting details underneath, plus a slide
- * with the three side by side. Frames are 4:5 for Instagram by default.
- * EXIF comes from the original if given, else from whichever edit still
- * carries it (editing apps often strip it). Plain styling for now.
+ * (shot by on one side, edited by on the other, each with the member's
+ * logo) with the shooting details, plus a first slide with the three
+ * together. The frame itself is in frame.js. EXIF comes from the original
+ * if given, else from whichever edit still carries it (editing apps often
+ * strip it). Logos are kept on the device.
  */
 
 const KEEP = 'pc-exif-members';
-const W = 2160; // 4:5 at twice Instagram's 1080
-const FONT = '-apple-system, "Pretendard Variable", Pretendard, "Helvetica Neue", Arial, sans-serif';
+const LOGOS = 'pc-exif-logos';
 
 const loadImage = (file) => new Promise((resolve, reject) => {
   const im = new Image();
   im.onload = () => resolve(im);
   im.onerror = () => reject(new Error('이 형식은 이 브라우저에서 열 수 없어요. JPEG로 올려 주세요.'));
-  im.src = URL.createObjectURL(file);
+  im.src = typeof file === 'string' ? file : URL.createObjectURL(file);
 });
 
-/** One edit in its frame: the photo, then the details and the credit underneath. */
-function drawFrame(canvas, img, info, frame, ratio) {
-  const ink = frame === 'black' ? '#f2f2f2' : '#111';
-  const soft = frame === 'black' ? '#9a9a9a' : '#777';
-  let w;
-  let h;
-  let pad;
-  let bar;
-  let box;
-  if (ratio === '4:5') {
-    w = W; h = Math.round(W * 1.25); pad = Math.round(W * 0.06); bar = Math.round(W * 0.15);
-    box = { x: pad, y: pad, w: w - pad * 2, h: h - pad - bar };
-  } else {
-    const unit = Math.max(img.naturalWidth, img.naturalHeight) / 100;
-    pad = Math.round(unit * 3); bar = Math.round(unit * 12);
-    w = img.naturalWidth + pad * 2; h = img.naturalHeight + pad + bar;
-    box = { x: pad, y: pad, w: img.naturalWidth, h: img.naturalHeight };
-  }
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = frame === 'black' ? '#111' : '#fff';
-  ctx.fillRect(0, 0, w, h);
-  const s = Math.min(box.w / img.naturalWidth, box.h / img.naturalHeight);
-  const pw = img.naturalWidth * s;
-  const ph = img.naturalHeight * s;
-  const px = box.x + (box.w - pw) / 2;
-  const py = box.y + (box.h - ph) / 2;
-  ctx.drawImage(img, px, py, pw, ph);
-
-  // details under the photo, lined up with its edges
-  const u = w / 100;
-  const top = py + ph + bar * 0.28;
-  ctx.textBaseline = 'middle';
-  const line = (text, x, y, size, weight, color, align) => {
-    ctx.font = `${weight} ${Math.round(size)}px ${FONT}`;
-    ctx.fillStyle = color;
-    ctx.textAlign = align;
-    ctx.fillText(text || '', x, y);
-  };
-  line(info.camera, px, top, u * 2.3, 700, ink, 'left');
-  line(info.lens, px, top + u * 3, u * 1.7, 500, soft, 'left');
-  line(info.settings, px + pw, top, u * 2.1, 600, ink, 'right');
-  line(info.taken, px + pw, top + u * 3, u * 1.7, 500, soft, 'right');
-  line(info.credit, px, top + u * 6.6, u * 1.8, 600, ink, 'left');
-}
-
-/** The three edits on one slide, each with its editor's name. */
-function drawCompare(canvas, edits, channel, frame) {
-  const ink = frame === 'black' ? '#f2f2f2' : '#111';
-  const h = Math.round(W * 1.25);
-  canvas.width = W;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = frame === 'black' ? '#111' : '#fff';
-  ctx.fillRect(0, 0, W, h);
-  const pad = W * 0.06;
-  const label = W * 0.035;
-  const wide = edits[0].img.naturalWidth >= edits[0].img.naturalHeight;
-  const n = edits.length;
-  // landscape photos stacked, portrait ones side by side
-  const cellW = wide ? W - pad * 2 : (W - pad * (n + 1)) / n;
-  const cellH = wide ? (h - pad * (n + 1) - W * 0.06) / n - label : h - pad * 2 - W * 0.06 - label;
-  ctx.textBaseline = 'middle';
-  edits.forEach((e, k) => {
-    const x = wide ? pad : pad + k * (cellW + pad);
-    const y = wide ? pad + k * (cellH + label + pad) : pad;
-    const s = Math.min(cellW / e.img.naturalWidth, cellH / e.img.naturalHeight);
-    const pw = e.img.naturalWidth * s;
-    const ph = e.img.naturalHeight * s;
-    ctx.drawImage(e.img, x + (cellW - pw) / 2, y + (cellH - ph) / 2, pw, ph);
-    ctx.font = `600 ${Math.round(W * 0.018)}px ${FONT}`;
-    ctx.fillStyle = ink;
-    ctx.textAlign = 'center';
-    ctx.fillText(`보정 ${e.name}`, x + cellW / 2, y + cellH + label * 0.6);
-  });
-  ctx.font = `700 ${Math.round(W * 0.022)}px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText(channel, W / 2, h - W * 0.05);
+/** A logo shrunk to 512 px and kept as a data URL, small enough to remember on the device. */
+async function logoData(file) {
+  const im = await loadImage(file);
+  const s = Math.min(1, 512 / Math.max(im.naturalWidth, im.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(im.naturalWidth * s);
+  c.height = Math.round(im.naturalHeight * s);
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL('image/png');
 }
 
 const toFile = (canvas, name) => new Promise((resolve) => canvas.toBlob((b) => resolve(new File([b], name, { type: 'image/jpeg' })), 'image/jpeg', 0.95));
 
 export default function Client() {
-  const [members, setMembers] = useState(['A', 'B', 'C']);
+  const [members, setMembers] = useState(['1.slvc', 'x1x0xn', 'rock__eeeyeee']);
   const [channel, setChannel] = useState('필름곳간');
   const [shooter, setShooter] = useState(0);
   const [edits, setEdits] = useState([null, null, null]); // { img, exif }
   const [original, setOriginal] = useState(null);
   const [lines, setLines] = useState({ camera: '', lens: '', settings: '', taken: '' });
   const [frame, setFrame] = useState('white');
-  const [ratio, setRatio] = useState('4:5');
+  const [no, setNo] = useState('01'); // the post's number, printed on the film edge
+  const [logoData_, setLogoData] = useState({ members: [null, null, null], channel: null });
+  const [logos, setLogos] = useState({ members: [null, null, null], channel: null });
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
   const frames = useRef([]);
@@ -131,6 +64,27 @@ export default function Client() {
   useEffect(() => {
     try { localStorage.setItem(KEEP, JSON.stringify({ members, channel })); } catch { /* private mode */ }
   }, [members, channel]);
+
+  // logos: kept on the device as data URLs, turned into images to draw with
+  useEffect(() => {
+    try { const kept = JSON.parse(localStorage.getItem(LOGOS) ?? 'null'); if (kept) setLogoData(kept); } catch { /* none yet */ }
+  }, []);
+  useEffect(() => {
+    const load = (d) => (d ? loadImage(d).catch(() => null) : Promise.resolve(null));
+    Promise.all([...logoData_.members.map(load), load(logoData_.channel)])
+      .then(([a, b, c, ch]) => setLogos({ members: [a, b, c], channel: ch }));
+  }, [logoData_]);
+  async function pickLogo(which, file) {
+    if (!file) return;
+    try {
+      const d = await logoData(file);
+      const next = which === 'channel'
+        ? { ...logoData_, channel: d }
+        : { ...logoData_, members: logoData_.members.map((x, i) => (i === which ? d : x)) };
+      setLogoData(next);
+      try { localStorage.setItem(LOGOS, JSON.stringify(next)); } catch { setNote('로고가 너무 커서 이 기기에 저장하지 못했어요.'); }
+    } catch (e) { setNote(e.message); }
+  }
 
   // the details: from the original if there is one, else the first edit that still has them
   useEffect(() => {
@@ -155,16 +109,19 @@ export default function Client() {
     try { setOriginal(await read(file)); } catch (e) { setNote(e.message); }
   }
 
-  const ready = edits.map((e, k) => (e ? { ...e, k, name: members[k] } : null)).filter(Boolean);
-  const credit = (k) => `${channel} · 촬영 ${members[shooter]} · 보정 ${members[k]}`;
+  const ready = edits.map((e, k) => (e ? { ...e, k, name: members[k], logo: logos.members[k] } : null)).filter(Boolean);
   const noExif = ready.length > 0 && !lines.camera && !lines.settings;
 
   useEffect(() => {
+    if (!ready.length) return;
+    // every slide the size of the first edit's, so the carousel keeps one shape
+    const L = layout(ready[0].img);
+    const base = { ...lines, shooter: members[shooter], channel, no };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...lines, credit: credit(e.k) }, frame, ratio);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, frameTag: 'ABC'[e.k] }, { shooter: logos.members[shooter], editor: e.logo, channel: logos.channel }, frame, L);
     });
-    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, channel, frame);
+    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos.members[shooter], channel: logos.channel }, frame, L);
   });
 
   async function saveAll() {
@@ -202,11 +159,26 @@ export default function Client() {
                    onChange={(e) => setMembers((ms) => ms.map((x, i) => (i === k ? e.target.value : x)))} />
           ))}
         </div>
+        <div className="ex-logos">
+          {members.map((m, k) => (
+            <label key={k} className="ex-logo">
+              <input type="file" accept="image/png,image/*" onChange={(e) => pickLogo(k, e.target.files?.[0])} />
+              {logoData_.members[k] ? <img src={logoData_.members[k]} alt="" /> : <i>{(m || '?').slice(0, 1).toUpperCase()}</i>}
+              <span>{m} 로고</span>
+            </label>
+          ))}
+          <label className="ex-logo">
+            <input type="file" accept="image/png,image/*" onChange={(e) => pickLogo('channel', e.target.files?.[0])} />
+            {logoData_.channel ? <img src={logoData_.channel} alt="" /> : <i>곳</i>}
+            <span>채널 로고</span>
+          </label>
+        </div>
         <label className="ex-row">채널 이름<input value={channel} onChange={(e) => setChannel(e.target.value)} /></label>
       </section>
 
       <section className="ex-sec">
         <h2>이번 사진</h2>
+        <label className="ex-row">게시물 번호<input value={no} onChange={(e) => setNo(e.target.value.slice(0, 4))} /></label>
         <div className="ex-choice" role="radiogroup" aria-label="촬영">
           <span>촬영</span>
           {members.map((m, k) => (
@@ -244,8 +216,6 @@ export default function Client() {
             <div className="ex-choice">
               <span>프레임</span>
               {[['white', '흰색'], ['black', '검정']].map(([k, l]) => <button key={k} aria-checked={frame === k} onClick={() => setFrame(k)}>{l}</button>)}
-              <span>비율</span>
-              {[['4:5', '4:5 인스타'], ['orig', '원본']].map(([k, l]) => <button key={k} aria-checked={ratio === k} onClick={() => setRatio(k)}>{l}</button>)}
             </div>
           </section>
 

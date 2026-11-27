@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { readExif, caption } from './exif';
-import { drawFrame, drawCompare, layout } from './frame';
+import { drawFrame, drawCompare, layout, makerLogoFile } from './frame';
 
 /**
  * 필름곳간: one person shoots, all three edit the same photo, and the three
@@ -48,6 +48,7 @@ export default function Client() {
   const [lines, setLines] = useState({ make: '', model: '', settings: '', lens: '', taken: '' });
   const [custom, setCustom] = useState([null, null, null]); // logos picked on this device, as data URLs
   const [logos, setLogos] = useState([null, null, null]);
+  const [makerLogo, setMakerLogo] = useState(null); // the camera maker's logo, when we have one
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
   const frames = useRef([]);
@@ -93,6 +94,14 @@ export default function Client() {
     }
   }, [original, edits]);
 
+  const makerSrc = makerLogoFile(lines.make, lines.model);
+  useEffect(() => {
+    let live = true;
+    if (!makerSrc) { setMakerLogo(null); return undefined; }
+    loadImage(makerSrc).then((im) => { if (live) setMakerLogo(im); }).catch(() => { if (live) setMakerLogo(null); });
+    return () => { live = false; };
+  }, [makerSrc]);
+
   async function read(file) {
     const exif = readExif(await file.arrayBuffer());
     return { img: await loadImage(file), exif };
@@ -117,7 +126,7 @@ export default function Client() {
     if (!ready.length) return;
     // every slide the size of the first edit's, so the carousel keeps one shape
     const L = layout(ready[0].img);
-    const base = { ...lines, shooter: members[shooter] };
+    const base = { ...lines, shooter: members[shooter], makerLogo };
     ready.forEach((e) => {
       const c = frames.current[e.k];
       if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter }, { shooter: logos[shooter], editor: e.logo }, L);

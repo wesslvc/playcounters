@@ -1,0 +1,8 @@
+Camera maker logos for the 필름곳간 frame (/exif), the "dark" set (for dark
+backgrounds), trimmed of empty margins and scaled to at most 240 px tall.
+
+Taken from jeonghyeon-net/exif-frame (web/public/maker/dark), which is
+licensed under the GNU General Public License v3.0:
+https://github.com/jeonghyeon-net/exif-frame
+
+The logos themselves are trademarks of their respective camera makers.

@@ -128,8 +128,8 @@ function credits(ctx, x, cy, info, logos, scale = 1) {
 }
 
 /**
- * The camera maker as a wordmark: its name set the way the maker sets it
- * (case, weight, slant, spacing), in plain type rather than the maker's artwork.
+ * For makers we have no logo for, a wordmark: the name set the way the maker
+ * sets it (case, weight, slant, spacing), in plain type.
  */
 const MAKERS = [
   [/fuji/i, 'FUJIFILM', { weight: 800, track: 0.02 }],
@@ -152,6 +152,57 @@ const MAKERS = [
   [/google/i, 'Google', { weight: 500 }],
 ];
 
+/**
+ * The maker's own logo, for makers we have one for (white versions for a dark
+ * ground, in public/exif/makers). Matched on the maker or the model, so a
+ * phone that writes only "iPhone 15" still finds Apple.
+ */
+const LOGO_FILES = [
+  [/apple|iphone/i, 'apple'], [/canon/i, 'canon'], [/contax/i, 'contax'], [/\bdji\b/i, 'dji'],
+  [/epson/i, 'epson'], [/fuji/i, 'fujifilm'], [/goldstar/i, 'goldstar'], [/hasselblad/i, 'hasselblad'],
+  [/leica/i, 'leica'], [/^lg\b|lg electronics/i, 'lg'], [/panasonic|lumix/i, 'lumix'], [/mamiya/i, 'mamiya'],
+  [/nikon/i, 'nikon'], [/om digital|om system/i, 'om'], [/olympus/i, 'olympus'], [/pentax/i, 'pentax'],
+  [/phase ?one/i, 'phaseone'], [/ricoh/i, 'ricoh'], [/samsung/i, 'samsung'], [/sigma/i, 'sigma'], [/sony/i, 'sony'],
+];
+export function makerLogoFile(make, model) {
+  const hit = LOGO_FILES.find(([re]) => re.test(make || '') || re.test(model || ''));
+  return hit ? `/exif/makers/${hit[1]}.png` : null;
+}
+
+/**
+ * How big to draw a maker's logo so it weighs about as much as a wordmark of
+ * the given type size: wide logos come out shorter, square ones taller, up to
+ * a limit so a round badge does not tower over the text.
+ */
+function logoBox(img, size) {
+  const aspect = img.naturalWidth / img.naturalHeight;
+  const h = Math.min(size * 1.25, Math.max(size * 0.6, size * Math.sqrt(3.3 / aspect)));
+  return { w: h * aspect, h };
+}
+
+/** The maker at (x, cy): its logo if we have one, else the wordmark. Returns the width. */
+function maker(ctx, info, x, cy, size, align = 'left', maxW = Infinity) {
+  if (info.makerLogo) {
+    let { w, h } = logoBox(info.makerLogo, size);
+    if (w > maxW) { h *= maxW / w; w = maxW; }
+    ctx.drawImage(info.makerLogo, align === 'right' ? x - w : x, cy - h / 2, w, h);
+    return w;
+  }
+  const wm = wordmark(info.make);
+  if (!wm) return 0;
+  let o = { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size };
+  const w = measure(ctx, wm.text, o);
+  if (w > maxW) o = { ...o, size: size * (maxW / w), track: o.track * (maxW / w) };
+  return text(ctx, wm.text, x, cy, { ...o, align });
+}
+
+function makerSize(ctx, info, size) {
+  if (info.makerLogo) return logoBox(info.makerLogo, size);
+  const wm = wordmark(info.make);
+  if (!wm) return { w: 0, h: 0 };
+  return { w: measure(ctx, wm.text, { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size }), h: size };
+}
+
 export function wordmark(make) {
   const m = (make || '').trim();
   if (!m) return null;
@@ -162,15 +213,11 @@ export function wordmark(make) {
 
 /** The camera at the right end of the bar: maker, model, and (if asked) the settings. */
 function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
-  const wm = wordmark(info.make);
   const rows = [];
-  if (wm) {
-    const size = U * 1.75 * scale;
-    const o = { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size };
-    // a long maker name shrinks to fit rather than running into the credits
-    const w = measure(ctx, wm.text, o);
-    rows.push({ s: wm.text, o: w > room ? { ...o, size: size * (room / w) } : o, h: size * 1.25 });
-  }
+  const size = U * 1.75 * scale;
+  const mk = makerSize(ctx, info, size);
+  // a long maker name shrinks to fit rather than running into the credits
+  if (mk.w) rows.push({ maker: true, h: Math.max(size, mk.h * Math.min(1, room / mk.w)) * 1.25 });
   if (info.model) {
     const o = { size: U * 1.15 * scale, weight: 500, color: C.soft };
     rows.push({ s: fit(ctx, info.model, room, o), o, h: U * 1.6 * scale });
@@ -183,7 +230,8 @@ function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
   const total = rows.reduce((a, r) => a + r.h, 0);
   let y = cy - total / 2;
   rows.forEach((r) => {
-    text(ctx, r.s, right, y + r.h / 2, { ...r.o, color: r.o.color ?? C.ink, align: 'right' });
+    if (r.maker) maker(ctx, info, right, y + r.h / 2, size, 'right', room);
+    else text(ctx, r.s, right, y + r.h / 2, { ...r.o, color: r.o.color ?? C.ink, align: 'right' });
     y += r.h;
   });
 }
@@ -207,41 +255,97 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, info.own);
 }
 
+/** The rows of the details table, leaving out the ones with nothing in them. */
+const specRows = (info) => [
+  ['CAMERA', info.make || info.model ? 'camera' : null],
+  ['LENS', info.lens],
+  ['SETTINGS', info.settings],
+  ['DATE', info.taken],
+].filter(([, v]) => v);
+
+const LABEL = (k) => ({ size: U * 0.78 * k, weight: 700, color: C.soft, track: U * 0.22 * k });
+const VALUE = (k) => ({ size: U * 1.25 * k, weight: 500 });
+const SETTING = (k) => ({ ...VALUE(k), font: MONO, size: U * 1.15 * k });
+const SIDE_ROW = 2.5; // row height, in U, with the label beside the value
+const STACK_ROW = 3.4; // and with the label above it
+const LABEL_COL = 7.2;
+
+/** How wide one row's value is at scale 1. */
+function valueWidth(ctx, info, label, v) {
+  if (v !== 'camera') return measure(ctx, v, label === 'SETTINGS' ? SETTING(1) : VALUE(1));
+  const mw = makerSize(ctx, info, U * 1.45).w;
+  return (mw ? mw + U * 0.9 : 0) + (info.model ? measure(ctx, info.model, VALUE(1)) : 0);
+}
+
 /**
- * Everything about the shot, as a small table: the camera (maker's wordmark
- * and model), lens, settings and when it was taken. Rows with nothing in
- * them are left out. Drawn from (x, y) down; returns the height used.
+ * Everything about the shot, as a table: the camera (maker's wordmark and
+ * model), lens, settings and when it was taken. `stacked` puts each label
+ * above its value (for narrow spaces) instead of beside it.
  */
-function specs(ctx, x, y, w, info, scale = 1) {
-  const rowH = U * 2.5 * scale;
-  const labelW = U * 7.2 * scale;
-  const lo = { size: U * 0.78 * scale, weight: 700, color: C.soft, track: U * 0.22 * scale };
-  const vo = { size: U * 1.25 * scale, weight: 500 };
+function specs(ctx, x, y, w, info, scale = 1, stacked = false) {
+  const rowH = U * (stacked ? STACK_ROW : SIDE_ROW) * scale;
+  const labelW = stacked ? 0 : U * LABEL_COL * scale;
+  const vo = VALUE(scale);
   const room = w - labelW;
-  const rows = [
-    ['CAMERA', info.make || info.model ? 'camera' : null],
-    ['LENS', info.lens],
-    ['SETTINGS', info.settings],
-    ['DATE', info.taken],
-  ].filter(([, v]) => v);
-  rows.forEach(([label, v], i) => {
-    const cy = y + rowH * (i + 0.5);
-    text(ctx, label, x, cy, lo);
+  specRows(info).forEach(([label, v], i) => {
+    const top = y + rowH * i;
+    const vy = stacked ? top + U * 2.15 * scale : top + rowH / 2;
+    text(ctx, label, x, stacked ? top + U * 0.75 * scale : vy, LABEL(scale));
     const vx = x + labelW;
     if (v === 'camera') {
-      const wm = wordmark(info.make);
-      let used = 0;
-      if (wm) {
-        const size = U * 1.45 * scale;
-        used = text(ctx, wm.text, vx, cy, { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size }) + U * 0.9 * scale;
-      }
-      if (info.model) text(ctx, fit(ctx, info.model, room - used, vo), vx + used, cy, { ...vo, color: C.soft });
+      let used = maker(ctx, info, vx, vy, U * 1.45 * scale, 'left', room);
+      if (used) used += U * 0.9 * scale;
+      if (info.model) text(ctx, fit(ctx, info.model, room - used, vo), vx + used, vy, { ...vo, color: C.soft });
       return;
     }
-    const o = label === 'SETTINGS' ? { ...vo, font: MONO, size: vo.size * 0.92 } : vo;
-    text(ctx, fit(ctx, v, room, o), vx, cy, o);
+    const o = label === 'SETTINGS' ? SETTING(scale) : vo;
+    text(ctx, fit(ctx, v, room, o), vx, vy, o);
   });
-  return rowH * rows.length;
+  return rowH * specRows(info).length;
+}
+
+/**
+ * Who shot it and every detail, as large as the box (x, y, w, h) allows.
+ * Three arrangements are measured at scale 1 and the one that can grow the
+ * most is drawn, centred: the credit over the table with labels beside the
+ * values; the same with labels above (narrow boxes); or the credit and the
+ * table side by side (short, wide boxes).
+ */
+function infoBlock(ctx, x, y, w, h, info, logo) {
+  const s = U * 5.2;
+  const creditW = s + U * 1.0 + Math.max(measure(ctx, 'SHOT BY', LABEL(1)), measure(ctx, info.shooter, { size: U * 1.9, weight: 700 }));
+  const creditH = U * 5.6;
+  const rows = specRows(info);
+  const values = rows.map(([label, v]) => valueWidth(ctx, info, label, v));
+  const widest = Math.max(0, ...values) + U * 0.6; // slack for rounded font sizes
+  const labelsW = Math.max(0, ...rows.map(([label]) => measure(ctx, label, LABEL(1))));
+  const head = U * 2.6 + U * 4.2 + U * 1.4; // credit, hairline, gap
+  const ways = [
+    { kind: 'side', w: Math.max(creditW, U * LABEL_COL + widest), h: head + rows.length * U * SIDE_ROW },
+    { kind: 'stack', w: Math.max(creditW, widest, labelsW), h: head + rows.length * U * STACK_ROW },
+    { kind: 'wide', w: creditW + U * 4 + U * LABEL_COL + widest, h: Math.max(creditH, rows.length * U * SIDE_ROW) },
+  ].map((o) => ({ ...o, k: Math.min(3, (w / o.w) * 0.96, (h / o.h) * 0.92) }));
+  const best = ways.reduce((a, b) => (b.k > a.k ? b : a));
+  const k = best.k;
+  const top = y + (h - best.h * k) / 2;
+  const left = x + (w - best.w * k) / 2;
+  ctx.fillStyle = C.line;
+  if (best.kind === 'wide') {
+    const cy = top + (best.h * k) / 2;
+    credit(ctx, left, cy, 'SHOT BY', info.shooter, logo, k);
+    const div = left + (creditW + U * 2) * k;
+    ctx.fillStyle = C.line;
+    ctx.fillRect(div, top, Math.max(2, U * 0.08), best.h * k);
+    const tx = div + U * 2 * k;
+    specs(ctx, tx, cy - (rows.length * U * SIDE_ROW * k) / 2, left + best.w * k - tx, info, k);
+    return;
+  }
+  const credY = top + U * 2.6 * k;
+  credit(ctx, left, credY, 'SHOT BY', info.shooter, logo, k);
+  const lineY = credY + U * 4.2 * k;
+  ctx.fillStyle = C.line;
+  ctx.fillRect(left, lineY, best.w * k, Math.max(2, U * 0.08));
+  specs(ctx, left, lineY + U * 1.4 * k, best.w * k, info, k, best.kind === 'stack');
 }
 
 /**
@@ -300,23 +404,12 @@ export function drawCompare(canvas, edits, info, logos, L) {
   });
 
   if (best.kind === 'grid') {
-    // the fourth cell: who shot it, a hairline, then the details
+    // the fourth cell: who shot it and every detail, filling the cell
     const { x, y } = cell(3);
-    const scale = Math.min(1.25, ph / (U * 22));
-    const credY = y + U * 3.2 * scale;
-    credit(ctx, x, credY, 'SHOT BY', info.shooter, logos.shooter, scale);
-    const lineY = credY + U * 4.2 * scale;
-    ctx.fillStyle = C.line;
-    ctx.fillRect(x, lineY, pw, Math.max(2, U * 0.08));
-    specs(ctx, x, lineY + U * 1.4 * scale, pw, info, scale);
+    infoBlock(ctx, x, y, pw, ph + label, info, logos.shooter);
     return;
   }
-  // a band under the edits: who shot it on the left, the details on the right
+  // a band under the edits with who shot it and every detail
   const bandTop = L.h - under;
-  ctx.fillStyle = C.line;
-  ctx.fillRect(inner.x, bandTop + U * 0.6, inner.w, Math.max(2, U * 0.08));
-  const end = inner.x + credit(ctx, inner.x, bandTop + under / 2, 'SHOT BY', info.shooter, logos.shooter);
-  const sx = Math.max(end + U * 4, inner.x + inner.w * 0.42);
-  const rows = ['make', 'lens', 'settings', 'taken'].filter((k) => info[k] || (k === 'make' && info.model)).length;
-  specs(ctx, sx, bandTop + under / 2 - (U * 2.5 * rows) / 2 + U * 0.3, inner.x + inner.w - sx, info);
+  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w, under - U * 1.6, info, logos.shooter);
 }

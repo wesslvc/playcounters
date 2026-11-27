@@ -230,9 +230,9 @@ export default function Client() {
               <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  f/2  1/250s  ISO200" /></label>
               <label>렌즈<input value={lines.lens} onChange={set('lens')} placeholder="(선택)" /></label>
               <label>날짜<input value={lines.taken} onChange={set('taken')} placeholder="2026.11.27 14:03" /></label>
-              <label className="ex-wide">장소<input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="예: 서울 성수동, 제주 협재해변" /></label>
+              <label className="ex-wide">장소<input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Seongsu, Seoul" /></label>
             </div>
-            <p className="ex-hint">보정본마다 카메라, 기종, 설정값이 들어가요. 첫 장(세 장 모음)에는 장소, 렌즈, 날짜까지 전부 들어가요.</p>
+            <p className="ex-hint">보정본마다 카메라, 기종, 설정값이 들어가요. 첫 장(세 장 모음)에는 장소, 렌즈, 날짜까지 전부 들어가요. 장소는 프레임의 다른 글씨처럼 영어로 적으면 잘 어울려요 (예: Seongsu, Seoul · Hyeopjae Beach, Jeju).</p>
           </section>
 
           <section className="ex-sec">

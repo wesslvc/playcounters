@@ -84,9 +84,12 @@ const trimZero = (n) => String(Math.round(n * 10) / 10).replace(/\.0$/, '');
 /** The lines a frame shows, from what readExif found. */
 export function caption(x) {
   const make = x.make ?? '';
-  const model = x.model ?? '';
+  let model = x.model ?? '';
   // "Apple iPhone 16 Pro" not "Apple Apple iPhone…"; makes often repeat inside the model
   const camera = model && make && !model.toLowerCase().startsWith(make.split(' ')[0].toLowerCase()) ? `${make} ${model}` : (model || make);
+  // the model on its own, for under the maker's name: "Canon EOS R6" -> "EOS R6"
+  const first = make.split(' ')[0];
+  if (first && model.toLowerCase().startsWith(first.toLowerCase())) model = model.slice(first.length).trim();
   const shutter = x.exposureRaw
     ? (x.exposure >= 1 ? `${trimZero(x.exposure)}s` : `1/${Math.round(x.exposureRaw[1] / x.exposureRaw[0])}s`)
     : null;
@@ -97,5 +100,5 @@ export function caption(x) {
     x.iso ? `ISO${x.iso}` : null,
   ].filter(Boolean).join('  ');
   const taken = x.taken ? x.taken.replace(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}).*$/, '$1.$2.$3 $4:$5') : '';
-  return { camera, lens: x.lens ?? '', settings, taken };
+  return { camera, make, model, lens: x.lens ?? '', settings, taken };
 }

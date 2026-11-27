@@ -8,15 +8,17 @@ import { drawFrame, drawCompare, layout } from './frame';
  * 필름곳간: one person shoots, all three edit the same photo, and the three
  * edits go up together. A post here is that set — who shot it, each
  * member's edit — and comes out as one framed picture per edit, credited
- * (shot by on one side, edited by on the other, each with the member's
- * logo) with the shooting details, plus a first slide with the three
+ * with the members' marks and the camera, plus a first slide with the edits
  * together. The frame itself is in frame.js. EXIF comes from the original
  * if given, else from whichever edit still carries it (editing apps often
- * strip it). Logos are kept on the device.
+ * strip it). Each member has a mark built in; one picked here replaces it
+ * on this device only.
  */
 
 const KEEP = 'pc-exif-members';
 const LOGOS = 'pc-exif-logos';
+// the members' own marks, in the order of the default members
+const BUILT_IN = ['/exif/logos/magpie-small.svg', '/exif/logos/pencil-small.svg', '/exif/logos/rock-small.svg'];
 
 const loadImage = (file) => new Promise((resolve, reject) => {
   const im = new Image();
@@ -40,15 +42,12 @@ const toFile = (canvas, name) => new Promise((resolve) => canvas.toBlob((b) => r
 
 export default function Client() {
   const [members, setMembers] = useState(['1.slvc', 'x1x0xn', 'rock__eeeyeee']);
-  const [channel, setChannel] = useState('필름곳간');
   const [shooter, setShooter] = useState(0);
   const [edits, setEdits] = useState([null, null, null]); // { img, exif }
   const [original, setOriginal] = useState(null);
-  const [lines, setLines] = useState({ camera: '', lens: '', settings: '', taken: '' });
-  const [frame, setFrame] = useState('white');
-  const [no, setNo] = useState('01'); // the post's number, printed on the film edge
-  const [logoData_, setLogoData] = useState({ members: [null, null, null], channel: null });
-  const [logos, setLogos] = useState({ members: [null, null, null], channel: null });
+  const [lines, setLines] = useState({ make: '', model: '', settings: '' });
+  const [custom, setCustom] = useState([null, null, null]); // logos picked on this device, as data URLs
+  const [logos, setLogos] = useState([null, null, null]);
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
   const frames = useRef([]);
@@ -58,38 +57,40 @@ export default function Client() {
     try {
       const kept = JSON.parse(localStorage.getItem(KEEP) ?? 'null');
       if (kept?.members?.length === 3) setMembers(kept.members);
-      if (kept?.channel) setChannel(kept.channel);
     } catch { /* first visit or private mode */ }
+    try {
+      const kept = JSON.parse(localStorage.getItem(LOGOS) ?? 'null');
+      if (kept?.members?.length === 3) setCustom(kept.members);
+    } catch { /* none yet */ }
   }, []);
   useEffect(() => {
-    try { localStorage.setItem(KEEP, JSON.stringify({ members, channel })); } catch { /* private mode */ }
-  }, [members, channel]);
+    try { localStorage.setItem(KEEP, JSON.stringify({ members })); } catch { /* private mode */ }
+  }, [members]);
 
-  // logos: kept on the device as data URLs, turned into images to draw with
+  // each member's mark: the one picked on this device, else the built-in one
+  const logoSrc = (k) => custom[k] || BUILT_IN[k];
   useEffect(() => {
-    try { const kept = JSON.parse(localStorage.getItem(LOGOS) ?? 'null'); if (kept) setLogoData(kept); } catch { /* none yet */ }
-  }, []);
-  useEffect(() => {
-    const load = (d) => (d ? loadImage(d).catch(() => null) : Promise.resolve(null));
-    Promise.all([...logoData_.members.map(load), load(logoData_.channel)])
-      .then(([a, b, c, ch]) => setLogos({ members: [a, b, c], channel: ch }));
-  }, [logoData_]);
-  async function pickLogo(which, file) {
+    Promise.all([0, 1, 2].map((k) => loadImage(logoSrc(k)).catch(() => null))).then(setLogos);
+  }, [custom]); // eslint-disable-line react-hooks/exhaustive-deps
+  function keepCustom(next) {
+    setCustom(next);
+    try { localStorage.setItem(LOGOS, JSON.stringify({ members: next })); } catch { setNote('로고가 너무 커서 이 기기에 저장하지 못했어요.'); }
+  }
+  async function pickLogo(k, file) {
     if (!file) return;
     try {
       const d = await logoData(file);
-      const next = which === 'channel'
-        ? { ...logoData_, channel: d }
-        : { ...logoData_, members: logoData_.members.map((x, i) => (i === which ? d : x)) };
-      setLogoData(next);
-      try { localStorage.setItem(LOGOS, JSON.stringify(next)); } catch { setNote('로고가 너무 커서 이 기기에 저장하지 못했어요.'); }
+      keepCustom(custom.map((x, i) => (i === k ? d : x)));
     } catch (e) { setNote(e.message); }
   }
 
   // the details: from the original if there is one, else the first edit that still has them
   useEffect(() => {
     const source = [original, ...edits].find((x) => x && Object.keys(x.exif).length);
-    if (source) setLines(caption(source.exif));
+    if (source) {
+      const c = caption(source.exif);
+      setLines({ make: c.make, model: c.model, settings: c.settings });
+    }
   }, [original, edits]);
 
   async function read(file) {
@@ -109,25 +110,25 @@ export default function Client() {
     try { setOriginal(await read(file)); } catch (e) { setNote(e.message); }
   }
 
-  const ready = edits.map((e, k) => (e ? { ...e, k, name: members[k], logo: logos.members[k] } : null)).filter(Boolean);
-  const noExif = ready.length > 0 && !lines.camera && !lines.settings;
+  const ready = edits.map((e, k) => (e ? { ...e, k, name: members[k], logo: logos[k] } : null)).filter(Boolean);
+  const noExif = ready.length > 0 && !lines.make && !lines.model && !lines.settings;
 
   useEffect(() => {
     if (!ready.length) return;
     // every slide the size of the first edit's, so the carousel keeps one shape
     const L = layout(ready[0].img);
-    const base = { ...lines, shooter: members[shooter], channel, no };
+    const base = { ...lines, shooter: members[shooter] };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...base, editor: e.name, frameTag: 'ABC'[e.k] }, { shooter: logos.members[shooter], editor: e.logo, channel: logos.channel }, frame, L);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter }, { shooter: logos[shooter], editor: e.logo }, L);
     });
-    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos.members[shooter], channel: logos.channel }, frame, L);
+    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter] }, L);
   });
 
   async function saveAll() {
     setBusy(true);
     try {
-      const stamp = (lines.taken || new Date().toISOString().slice(0, 10)).replace(/[^\d]/g, '').slice(0, 8);
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const files = [];
       if (ready.length >= 2 && compare.current) files.push(await toFile(compare.current, `${stamp}-0-compare.jpg`));
       for (const e of ready) files.push(await toFile(frames.current[e.k], `${stamp}-${e.k + 1}.jpg`));
@@ -148,37 +149,29 @@ export default function Client() {
   const set = (k) => (e) => setLines((l) => ({ ...l, [k]: e.target.value }));
   return (
     <main className="ex">
-      <h1>{channel || '필름곳간'} 프레임</h1>
+      <h1>필름곳간 프레임</h1>
       <p className="ex-sub">한 사람이 찍고 세 사람이 보정한 사진을 한 번에 프레임에 넣어요. 사진은 이 기기 밖으로 나가지 않아요.</p>
 
       <section className="ex-sec">
         <h2>멤버</h2>
         <div className="ex-members">
           {members.map((m, k) => (
-            <input key={k} value={m} aria-label={`멤버 ${k + 1}`}
-                   onChange={(e) => setMembers((ms) => ms.map((x, i) => (i === k ? e.target.value : x)))} />
+            <div key={k} className="ex-member">
+              <label className="ex-logo">
+                <input type="file" accept="image/png,image/svg+xml,image/*" onChange={(e) => pickLogo(k, e.target.files?.[0])} />
+                <img src={logoSrc(k)} alt="" />
+              </label>
+              <input value={m} aria-label={`멤버 ${k + 1}`}
+                     onChange={(e) => setMembers((ms) => ms.map((x, i) => (i === k ? e.target.value : x)))} />
+              {custom[k] && <button className="ex-reset" onClick={() => keepCustom(custom.map((x, i) => (i === k ? null : x)))}>기본 로고로</button>}
+            </div>
           ))}
         </div>
-        <div className="ex-logos">
-          {members.map((m, k) => (
-            <label key={k} className="ex-logo">
-              <input type="file" accept="image/png,image/*" onChange={(e) => pickLogo(k, e.target.files?.[0])} />
-              {logoData_.members[k] ? <img src={logoData_.members[k]} alt="" /> : <i>{(m || '?').slice(0, 1).toUpperCase()}</i>}
-              <span>{m} 로고</span>
-            </label>
-          ))}
-          <label className="ex-logo">
-            <input type="file" accept="image/png,image/*" onChange={(e) => pickLogo('channel', e.target.files?.[0])} />
-            {logoData_.channel ? <img src={logoData_.channel} alt="" /> : <i>곳</i>}
-            <span>채널 로고</span>
-          </label>
-        </div>
-        <label className="ex-row">채널 이름<input value={channel} onChange={(e) => setChannel(e.target.value)} /></label>
+        <p className="ex-hint">로고를 누르면 다른 이미지로 바꿀 수 있어요.</p>
       </section>
 
       <section className="ex-sec">
         <h2>이번 사진</h2>
-        <label className="ex-row">게시물 번호<input value={no} onChange={(e) => setNo(e.target.value.slice(0, 4))} /></label>
         <div className="ex-choice" role="radiogroup" aria-label="촬영">
           <span>촬영</span>
           {members.map((m, k) => (
@@ -206,17 +199,13 @@ export default function Client() {
       {ready.length > 0 && (
         <>
           <section className="ex-sec">
-            <h2>촬영 정보</h2>
+            <h2>카메라</h2>
             <div className="ex-fields">
-              <label>카메라<input value={lines.camera} onChange={set('camera')} /></label>
-              <label>렌즈<input value={lines.lens} onChange={set('lens')} /></label>
-              <label>설정<input value={lines.settings} onChange={set('settings')} /></label>
-              <label>날짜<input value={lines.taken} onChange={set('taken')} /></label>
+              <label>제조사<input value={lines.make} onChange={set('make')} placeholder="FUJIFILM" /></label>
+              <label>기종<input value={lines.model} onChange={set('model')} placeholder="X100V" /></label>
+              <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  f/2  1/250s  ISO200" /></label>
             </div>
-            <div className="ex-choice">
-              <span>프레임</span>
-              {[['white', '흰색'], ['black', '검정']].map(([k, l]) => <button key={k} aria-checked={frame === k} onClick={() => setFrame(k)}>{l}</button>)}
-            </div>
+            <p className="ex-hint">설정값은 찍은 사람의 보정본에만 들어가요.</p>
           </section>
 
           <section className="ex-sec">
@@ -224,7 +213,7 @@ export default function Client() {
             <div className="ex-out">
               {ready.length >= 2 && <figure><canvas ref={compare} /><figcaption>비교 (첫 장)</figcaption></figure>}
               {ready.map((e) => (
-                <figure key={e.k}><canvas ref={(c) => { frames.current[e.k] = c; }} /><figcaption>{members[e.k]} 보정</figcaption></figure>
+                <figure key={e.k}><canvas ref={(c) => { frames.current[e.k] = c; }} /><figcaption>{members[e.k]} 보정{e.k === shooter ? ' (찍은 사람)' : ''}</figcaption></figure>
               ))}
             </div>
             <button className="ex-save" onClick={saveAll} disabled={busy}>{busy ? '만드는 중…' : `${ready.length + (ready.length >= 2 ? 1 : 0)}장 저장하기`}</button>

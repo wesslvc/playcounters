@@ -1,5 +1,7 @@
 /* plain on purpose: the look is still to be decided */
 .ex { max-width:760px; margin:0 auto; padding:32px 16px 64px; font-family:-apple-system, "Pretendard Variable", Pretendard, sans-serif; color:#111 }
+/* names like x1x0xn stay as typed: no contextual "1x0" -> "1×0" */
+.ex, .ex input, .ex button { font-variant-ligatures:none; font-feature-settings:"calt" 0 }
 .ex h1 { font-size:26px; font-weight:800; margin:0 0 6px }
 .ex h2 { font-size:15px; font-weight:700; margin:0 0 10px }
 .ex-sub { font-size:14px; color:#666; margin:0 0 22px }
@@ -7,8 +9,6 @@
 .ex input[type=file] { display:none }
 .ex-members { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:8px }
 .ex input:not([type]) { height:38px; padding:0 10px; border:1px solid #ddd; border-radius:8px; font:inherit; font-size:14px; color:#111; min-width:0 }
-.ex-row { display:flex; align-items:center; gap:10px; font-size:13px; color:#666 }
-.ex-row input { flex:1 }
 .ex-choice { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 12px; font-size:13px; color:#666 }
 .ex-choice span { margin-right:2px }
 .ex-choice span:not(:first-child) { margin-left:10px }
@@ -30,8 +30,10 @@
 .ex-out figcaption { font-size:12px; color:#666; margin-top:4px }
 .ex-save { padding:12px 20px; border-radius:10px; background:#111; color:#fff; font-size:14px; font-weight:600; border:none; cursor:pointer }
 .ex-save:disabled { opacity:.5 }
-.ex-logos { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin:0 0 10px }
-.ex-logo { display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; font-size:11.5px; color:#666; text-align:center }
-.ex-logo img, .ex-logo i { width:56px; height:56px; border-radius:50%; object-fit:contain; border:1px solid #ddd; background:#fff }
-.ex-logo i { display:grid; place-items:center; font-style:normal; font-weight:700; font-size:20px; color:#999 }
-.ex-row { margin-top:8px }
+.ex-member { display:flex; flex-direction:column; gap:6px; min-width:0 }
+.ex-member input { width:100%; box-sizing:border-box }
+/* the marks are made for black, as the frame is */
+.ex-logo { display:block; cursor:pointer }
+.ex-logo img { display:block; width:100%; max-width:128px; aspect-ratio:1; object-fit:contain; border-radius:10px; background:#000 }
+.ex-reset { align-self:flex-start; padding:0; border:none; background:none; font-size:12px; color:#666; text-decoration:underline; cursor:pointer }
+.ex-hint { font-size:12px; color:#888; margin:8px 0 0 }

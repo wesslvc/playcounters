@@ -1,12 +1,12 @@
 /**
- * The 필름곳간 frame, drawn on a canvas.
+ * The 필름곳간 frame, drawn on a canvas. Always black: the members' marks are
+ * glowing line drawings made for a dark ground.
  *
- * Tight white (or black) margins around the photo, film edge print along the
- * top margin the way a negative carries its stock name and frame number,
- * and one bar under the photo split in two by a hairline: on the left who
- * shot it, with the camera, lens and settings; on the right who edited it
- * and when it was taken. Each side leads with the member's logo. The
- * channel's own mark closes the bar on the right.
+ * Tight margins around the photo and one bar under it. On the left, who shot
+ * it and who edited it, each with their mark, big enough to read at a
+ * glance; on the shooter's own edit the two are one ("SHOT · EDITED BY").
+ * On the right, the camera: its maker as a wordmark and the model under it,
+ * and, on the shooter's own edit only, the settings.
  *
  * The canvas follows the photo instead of padding it out to a fixed shape:
  * as wide as Instagram allows (2160 px, twice 1080), as tall as the photo
@@ -16,172 +16,231 @@
  */
 
 export const W = 2160;
+const U = W / 100;
 const FONT = '"Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
-const EDGE = '#d9822b'; // the orange of film edge print
-
-export const palette = (frame) => (frame === 'black'
-  ? { bg: '#111111', ink: '#f3f1ec', soft: '#8f8b84', line: '#3a3835' }
-  : { bg: '#fbfaf7', ink: '#161514', soft: '#8a857d', line: '#dedad3' });
+const SERIF = 'Georgia, "Times New Roman", Times, serif';
+const C = { bg: '#000000', ink: '#F3F1EC', soft: '#8F8B84', line: '#34312E' };
 
 /** The canvas size for a photo of this shape, and where the photo goes. */
 export function layout(img) {
-  const m = Math.round(W * 0.032); // margin around the photo
-  const edge = Math.round(W * 0.028); // the edge-print strip above it
-  const bar = Math.round(W * 0.155);
+  const m = Math.round(W * 0.028); // margin around the photo
+  const bar = Math.round(W * 0.12);
   const aspect = img.naturalHeight / img.naturalWidth;
   let pw = W - m * 2;
   let ph = pw * aspect;
-  let h = edge + m + ph + bar;
+  let h = m + ph + bar;
   const maxH = Math.round(W * 1.25);
   const minH = Math.round(W / 1.91);
   if (h > maxH) { // a tall photo: shrink it to fit, centred
-    ph = maxH - edge - m - bar;
+    ph = maxH - m - bar;
     pw = ph / aspect;
     h = maxH;
   }
   h = Math.max(minH, Math.round(h));
   const px = (W - pw) / 2;
-  const py = edge + m + (h - edge - m - bar - ph) / 2;
-  return { w: W, h, m, edge, bar, photo: { x: px, y: py, w: pw, h: ph } };
+  const py = m + (h - m - bar - ph) / 2;
+  return { w: W, h, m, bar, photo: { x: px, y: py, w: pw, h: ph } };
 }
 
-function text(ctx, s, x, y, { size, weight = 500, color, align = 'left', font = FONT, track = 0 }) {
-  ctx.font = `${weight} ${Math.round(size)}px ${font}`;
+// fonts swap "1x0" for "1×0" (a contextual alternate meant for sizes); a zero-width
+// non-joiner after each letter keeps names and models exactly as typed
+const asTyped = (s) => (s || '').replace(/x/gi, (c) => `\u200C${c}\u200C`);
+
+// and large text gets the font's optional features switched on; keep them off
+function plain(ctx) {
+  if ('textRendering' in ctx) ctx.textRendering = 'optimizeSpeed';
+  if ('fontVariantLigatures' in ctx) ctx.fontVariantLigatures = 'none';
+}
+
+function text(ctx, s, x, y, { size, weight = 500, color = C.ink, align = 'left', font = FONT, track = 0, style = '' }) {
+  s = asTyped(s);
+  plain(ctx);
+  ctx.font = `${style} ${weight} ${Math.round(size)}px ${font}`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   if ('letterSpacing' in ctx) ctx.letterSpacing = `${track}px`;
   ctx.fillText(s || '', x, y);
+  const width = ctx.measureText(s || '').width;
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-  return ctx.measureText(s || '').width;
+  return width;
 }
 
-/** A member's logo in a circle; their initial when no logo was given. */
-function mark(ctx, logo, name, cx, cy, r, c) {
+function measure(ctx, s, o) {
+  s = asTyped(s);
+  plain(ctx);
+  ctx.font = `${o.style ?? ''} ${o.weight ?? 500} ${Math.round(o.size)}px ${o.font ?? FONT}`;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = `${o.track ?? 0}px`;
+  const w = ctx.measureText(s || '').width;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  return w;
+}
+
+/** The longest start of `s` that fits in `max`, with an ellipsis when cut. */
+function fit(ctx, s, max, o) {
+  if (!s || measure(ctx, s, o) <= max) return s;
+  let t = s;
+  while (t.length > 1 && measure(ctx, `${t}…`, o) > max) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
+/** A member's mark, whole, inside a square (no circle: the marks are long and low). */
+function mark(ctx, logo, name, x, cy, s) {
+  if (logo) {
+    const k = Math.min(s / logo.naturalWidth, s / logo.naturalHeight);
+    const w = logo.naturalWidth * k;
+    const h = logo.naturalHeight * k;
+    ctx.drawImage(logo, x + (s - w) / 2, cy - h / 2, w, h);
+    return;
+  }
   ctx.save();
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.closePath();
-  if (logo) {
-    ctx.clip();
-    const s = Math.min((r * 2) / logo.naturalWidth, (r * 2) / logo.naturalHeight);
-    ctx.drawImage(logo, cx - (logo.naturalWidth * s) / 2, cy - (logo.naturalHeight * s) / 2, logo.naturalWidth * s, logo.naturalHeight * s);
-  } else {
-    ctx.strokeStyle = c.line;
-    ctx.lineWidth = r * 0.08;
-    ctx.stroke();
-    text(ctx, (name || '?').slice(0, 1).toUpperCase(), cx, cy + r * 0.04, { size: r * 0.95, weight: 700, color: c.ink, align: 'center' });
-  }
+  ctx.arc(x + s / 2, cy, s * 0.4, 0, Math.PI * 2);
+  ctx.strokeStyle = C.line;
+  ctx.lineWidth = s * 0.03;
+  ctx.stroke();
   ctx.restore();
+  text(ctx, (name || '?').slice(0, 1).toUpperCase(), x + s / 2, cy + s * 0.02, { size: s * 0.38, weight: 700, align: 'center' });
 }
 
-/** Film edge print along the top margin: the stock, the post number, the frame. */
-function edgePrint(ctx, L, info, c) {
-  const y = L.edge * 0.62 + L.m * 0.35;
-  const size = W * 0.0105;
-  const o = { size, weight: 600, color: EDGE, font: MONO, track: size * 0.18 };
-  text(ctx, `FILM GOTGAN ${info.stock || '400'}`, L.photo.x, y, o);
-  text(ctx, `▸ ${info.no || '01'}${info.frameTag || ''}`, L.photo.x + L.photo.w, y, { ...o, align: 'right' });
-  text(ctx, info.taken ? info.taken.slice(0, 10).replace(/\./g, ' ') : '', W / 2, y, { ...o, align: 'center', color: c.soft });
+/** One credit: the mark, then a small label over the name. Returns its width. */
+function credit(ctx, x, cy, label, name, logo, scale = 1) {
+  const s = U * 5.2 * scale;
+  mark(ctx, logo, name, x, cy, s);
+  const tx = x + s + U * 1.0 * scale;
+  const lo = { size: U * 0.82 * scale, weight: 700, color: C.soft, track: U * 0.24 * scale };
+  const no = { size: U * 1.9 * scale, weight: 700 };
+  const lw = text(ctx, label, tx, cy - U * 1.05 * scale, lo);
+  const nw = text(ctx, name, tx, cy + U * 0.85 * scale, no);
+  return s + U * 1.0 * scale + Math.max(lw, nw);
 }
 
-/** One side of the credit: label, logo and name, then up to two lines of detail. */
-function credit(ctx, x, top, width, who, logo, label, lines, c) {
-  const u = W / 100;
-  text(ctx, label, x, top, { size: u * 0.95, weight: 700, color: c.soft, track: u * 0.22 });
-  const r = u * 1.75;
-  mark(ctx, logo, who, x + r, top + u * 3.3, r, c);
-  text(ctx, who, x + r * 2 + u * 1.1, top + u * 3.3, { size: u * 2.1, weight: 700, color: c.ink });
-  lines.filter(Boolean).slice(0, 2).forEach((l, k) => {
-    let s = l;
-    ctx.font = `500 ${Math.round(u * 1.45)}px ${FONT}`;
-    while (s.length > 1 && ctx.measureText(s).width > width) s = s.slice(0, -1);
-    if (s !== l) s = `${s.slice(0, -1)}…`;
-    text(ctx, s, x, top + u * (6.6 + k * 2.2), { size: u * 1.45, weight: 500, color: k === 0 ? c.ink : c.soft });
-  });
-}
-
-/** The channel's mark at the right end of the bar; its name when no logo was given. */
-function channelMark(ctx, logo, channel, right, cy, c) {
-  const u = W / 100;
-  if (logo) {
-    const h = u * 4.2;
-    const w = (logo.naturalWidth / logo.naturalHeight) * h;
-    ctx.drawImage(logo, right - w, cy - h / 2, w, h);
-    return w;
-  }
-  return text(ctx, channel, right, cy, { size: u * 1.6, weight: 800, color: c.ink, align: 'right', track: u * 0.05 });
+/** Who shot it and who edited it, from x. Returns where the credits end. */
+function credits(ctx, x, cy, info, logos, scale = 1) {
+  if (info.own) return x + credit(ctx, x, cy, 'SHOT · EDITED BY', info.shooter, logos.shooter, scale);
+  const a = credit(ctx, x, cy, 'SHOT BY', info.shooter, logos.shooter, scale);
+  const div = x + a + U * 2.2 * scale;
+  ctx.fillStyle = C.line;
+  ctx.fillRect(div, cy - U * 2.3 * scale, Math.max(2, U * 0.09), U * 4.6 * scale);
+  const b = credit(ctx, div + U * 2.2 * scale, cy, 'EDITED BY', info.editor, logos.editor, scale);
+  return div + U * 2.2 * scale + b;
 }
 
 /**
- * One edit framed. `info`: camera, lens, settings, taken, shooter, editor,
- * channel, no, stock; `logos`: { shooter, editor, channel } (Images or null).
+ * The camera maker as a wordmark: its name set the way the maker sets it
+ * (case, weight, slant, spacing), in plain type rather than the maker's artwork.
  */
-export function drawFrame(canvas, img, info, logos, frame, L = layout(img)) {
-  const c = palette(frame);
+const MAKERS = [
+  [/fuji/i, 'FUJIFILM', { weight: 800, track: 0.02 }],
+  [/canon/i, 'Canon', { weight: 700, style: 'italic', font: SERIF }],
+  [/nikon/i, 'Nikon', { weight: 800, style: 'italic' }],
+  [/sony/i, 'SONY', { weight: 700, font: SERIF, track: 0.16 }],
+  [/leica/i, 'Leica', { weight: 600, style: 'italic', font: SERIF }],
+  [/hasselblad/i, 'HASSELBLAD', { weight: 600, track: 0.2 }],
+  [/om digital|om system/i, 'OM SYSTEM', { weight: 700, track: 0.08 }],
+  [/olympus/i, 'OLYMPUS', { weight: 700, font: SERIF, track: 0.1 }],
+  [/panasonic|lumix/i, 'LUMIX', { weight: 800, track: 0.06 }],
+  [/ricoh/i, 'RICOH', { weight: 800, track: 0.08 }],
+  [/pentax/i, 'PENTAX', { weight: 800, track: 0.08 }],
+  [/minolta/i, 'MINOLTA', { weight: 700, track: 0.1 }],
+  [/contax/i, 'CONTAX', { weight: 600, font: SERIF, track: 0.14 }],
+  [/kodak/i, 'Kodak', { weight: 800 }],
+  [/sigma/i, 'SIGMA', { weight: 700, track: 0.14 }],
+  [/apple/i, 'Apple', { weight: 600 }],
+  [/samsung/i, 'SAMSUNG', { weight: 700, track: 0.16 }],
+  [/google/i, 'Google', { weight: 500 }],
+];
+
+export function wordmark(make) {
+  const m = (make || '').trim();
+  if (!m) return null;
+  const hit = MAKERS.find(([re]) => re.test(m));
+  if (hit) return { text: hit[1], ...hit[2] };
+  return { text: m.split(/\s+/)[0].toUpperCase(), weight: 700, track: 0.08 };
+}
+
+/** The camera at the right end of the bar: maker, model, and (if asked) the settings. */
+function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
+  const wm = wordmark(info.make);
+  const rows = [];
+  if (wm) {
+    const size = U * 1.75 * scale;
+    const o = { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size };
+    // a long maker name shrinks to fit rather than running into the credits
+    const w = measure(ctx, wm.text, o);
+    rows.push({ s: wm.text, o: w > room ? { ...o, size: size * (room / w) } : o, h: size * 1.25 });
+  }
+  if (info.model) {
+    const o = { size: U * 1.15 * scale, weight: 500, color: C.soft };
+    rows.push({ s: fit(ctx, info.model, room, o), o, h: U * 1.6 * scale });
+  }
+  if (withSettings && info.settings) {
+    const o = { size: U * 1.0 * scale, weight: 500, color: C.soft, font: MONO };
+    rows.push({ s: fit(ctx, info.settings, room, o), o, h: U * 1.5 * scale });
+  }
+  if (!rows.length) return;
+  const total = rows.reduce((a, r) => a + r.h, 0);
+  let y = cy - total / 2;
+  rows.forEach((r) => {
+    text(ctx, r.s, right, y + r.h / 2, { ...r.o, color: r.o.color ?? C.ink, align: 'right' });
+    y += r.h;
+  });
+}
+
+/**
+ * One edit framed. `info`: shooter, editor, own (the shooter's own edit),
+ * make, model, settings; `logos`: { shooter, editor } (Images or null).
+ */
+export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   canvas.width = L.w;
   canvas.height = L.h;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = c.bg;
+  ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, L.w, L.h);
-  edgePrint(ctx, L, info, c);
   const p = L.photo;
   ctx.drawImage(img, p.x, p.y, p.w, p.h);
 
-  // the bar: shot | edited, split by a hairline, the channel mark at the end
-  const u = W / 100;
-  const top = p.y + p.h + L.m * 0.95;
-  const left = p.x;
-  const right = p.x + p.w;
-  const brandW = (logos.channel ? (logos.channel.naturalWidth / logos.channel.naturalHeight) * u * 4.2 : u * 12) + u * 2.5;
-  const mid = left + (p.w - brandW) * 0.56;
-  ctx.fillStyle = c.line;
-  ctx.fillRect(mid, top - u * 0.3, Math.max(2, u * 0.08), u * 9.4);
-  credit(ctx, left, top, mid - left - u * 2, info.shooter, logos.shooter, 'SHOT BY',
-    [[info.camera, info.lens].filter(Boolean).join(' · '), info.settings], c);
-  credit(ctx, mid + u * 2, top, right - brandW - mid - u * 3, info.editor, logos.editor, 'EDITED BY',
-    [info.taken, ''], c);
-  channelMark(ctx, logos.channel, info.channel, right, top + u * 4.3, c);
+  const top = p.y + p.h;
+  const cy = top + (L.h - top) / 2 - U * 0.1;
+  const end = credits(ctx, p.x, cy, info, logos);
+  camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, info.own);
 }
 
-/** The first slide: the three edits together, each under its editor's mark, and who shot it. */
-export function drawCompare(canvas, edits, info, logos, frame, L) {
-  const c = palette(frame);
+/** The first slide: the edits together, each under its editor's mark, then who shot it and the camera. */
+export function drawCompare(canvas, edits, info, logos, L) {
   canvas.width = L.w;
   canvas.height = L.h;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = c.bg;
+  ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, L.w, L.h);
-  edgePrint(ctx, L, { ...info, frameTag: '' }, c);
-  const u = W / 100;
-  const label = u * 4.4;
-  const gap = u * 1.6;
+  const label = U * 4.4;
+  const gap = U * 1.6;
   const n = edits.length;
   const a = edits[0].img.naturalHeight / edits[0].img.naturalWidth;
-  const top = L.edge + L.m;
+  const top = L.m;
   const inner = { x: L.photo.x, w: L.photo.w };
 
   // three ways to lay them out; the one that shows the photos biggest wins.
   // in a row or a column the shooter goes in a line underneath; in a 2x2 grid
   // the shooter takes the fourth cell
-  const under = L.bar * 0.62;
-  const fit = (cols, rows, reserve) => {
+  const under = L.bar;
+  const fitTo = (cols, rows, reserve) => {
     const cw = (inner.w - gap * (cols - 1)) / cols;
-    const ch = (L.h - top - L.m - reserve - gap * (rows - 1)) / rows - label;
+    const ch = (L.h - top - reserve - gap * (rows - 1)) / rows - label;
     return Math.min(cw, ch / a);
   };
   const options = [
-    { kind: 'row', cols: n, rows: 1, pw: fit(n, 1, under) },
-    { kind: 'col', cols: 1, rows: n, pw: fit(1, n, under) },
-    ...(n === 3 ? [{ kind: 'grid', cols: 2, rows: 2, pw: fit(2, 2, 0) }] : []),
+    { kind: 'row', cols: n, rows: 1, pw: fitTo(n, 1, under) },
+    { kind: 'col', cols: 1, rows: n, pw: fitTo(1, n, under) },
+    ...(n === 3 ? [{ kind: 'grid', cols: 2, rows: 2, pw: fitTo(2, 2, L.m) }] : []),
   ];
   const best = options.reduce((x, y) => (y.pw > x.pw ? y : x));
   const pw = best.pw;
   const ph = pw * a;
   const cellW = (inner.w - gap * (best.cols - 1)) / best.cols;
   const blockH = (ph + label) * best.rows + gap * (best.rows - 1);
-  const room = L.h - top - L.m - (best.kind === 'grid' ? 0 : under);
+  const room = L.h - top - (best.kind === 'grid' ? L.m : under);
   const y0 = top + (room - blockH) / 2;
   const cell = (k) => ({
     x: inner.x + (k % best.cols) * (cellW + gap) + (cellW - pw) / 2,
@@ -191,33 +250,23 @@ export function drawCompare(canvas, edits, info, logos, frame, L) {
   edits.forEach((e, k) => {
     const { x, y } = cell(k);
     ctx.drawImage(e.img, x, y, pw, ph);
-    const r = u * 1.2;
+    const s = U * 2.6;
     const cy = y + ph + label * 0.5;
-    ctx.font = `700 ${Math.round(u * 1.5)}px ${FONT}`;
-    const nameW = ctx.measureText(e.name).width;
-    const startX = x + pw / 2 - (r * 2 + u * 0.8 + nameW) / 2;
-    mark(ctx, e.logo, e.name, startX + r, cy, r, c);
-    text(ctx, e.name, startX + r * 2 + u * 0.8, cy, { size: u * 1.5, weight: 700, color: c.ink });
+    const nw = measure(ctx, e.name, { size: U * 1.5, weight: 700 });
+    const startX = x + pw / 2 - (s + U * 0.7 + nw) / 2;
+    mark(ctx, e.logo, e.name, startX, cy, s);
+    text(ctx, e.name, startX + s + U * 0.7, cy, { size: U * 1.5, weight: 700 });
   });
 
+  // this slide carries every member's edit, so it credits only the shot
   if (best.kind === 'grid') {
-    // the fourth cell: who shot it, large, and the channel's mark
+    // the fourth cell: who shot it, large, and the camera under it
     const { x, y } = cell(3);
-    ctx.fillStyle = c.line;
-    ctx.fillRect(x, y, pw, Math.max(2, u * 0.08));
-    text(ctx, 'SHOT BY', x, y + ph * 0.22, { size: u * 1.1, weight: 700, color: c.soft, track: u * 0.25 });
-    const r = u * 2.4;
-    mark(ctx, logos.shooter, info.shooter, x + r, y + ph * 0.44, r, c);
-    text(ctx, info.shooter, x + r * 2 + u * 1.3, y + ph * 0.44, { size: u * 2.6, weight: 700, color: c.ink });
-    text(ctx, [info.camera, info.lens].filter(Boolean).join(' · '), x, y + ph * 0.66, { size: u * 1.4, weight: 500, color: c.ink });
-    text(ctx, info.settings, x, y + ph * 0.66 + u * 2.2, { size: u * 1.4, weight: 500, color: c.soft });
-    channelMark(ctx, logos.channel, info.channel, x + pw, y + ph + label * 0.5, c);
+    credit(ctx, x, y + ph * 0.38, 'SHOT BY', info.shooter, logos.shooter, 1.25);
+    camera(ctx, x + pw, y + ph * 0.8, info, pw, false, 1.15);
     return;
   }
-  const by = L.h - L.m - under * 0.45;
-  const r = u * 1.4;
-  text(ctx, 'SHOT BY', inner.x, by, { size: u * 0.95, weight: 700, color: c.soft, track: u * 0.22 });
-  mark(ctx, logos.shooter, info.shooter, inner.x + u * 9.6 + r, by, r, c);
-  text(ctx, info.shooter, inner.x + u * 9.6 + r * 2 + u * 0.9, by, { size: u * 1.7, weight: 700, color: c.ink });
-  channelMark(ctx, logos.channel, info.channel, inner.x + inner.w, by, c);
+  const cy = L.h - under / 2;
+  const end = inner.x + credit(ctx, inner.x, cy, 'SHOT BY', info.shooter, logos.shooter);
+  camera(ctx, inner.x + inner.w, cy, info, inner.x + inner.w - end - U * 3, false);
 }

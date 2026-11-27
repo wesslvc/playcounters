@@ -19,6 +19,8 @@ const KEEP = 'pc-exif-members';
 const LOGOS = 'pc-exif-logos';
 // the members' own marks, in the order of the default members
 const BUILT_IN = ['/exif/logos/magpie-small.svg', '/exif/logos/pencil-small.svg', '/exif/logos/rock-small.svg'];
+// 필름곳간's own mark, in the middle of the frame's bar
+const CHANNEL = '/exif/logos/gotgan-small.svg';
 
 const loadImage = (file) => new Promise((resolve, reject) => {
   const im = new Image();
@@ -48,6 +50,7 @@ export default function Client() {
   const [lines, setLines] = useState({ make: '', model: '', settings: '', lens: '', taken: '' });
   const [custom, setCustom] = useState([null, null, null]); // logos picked on this device, as data URLs
   const [logos, setLogos] = useState([null, null, null]);
+  const [channelLogo, setChannelLogo] = useState(null);
   const [makerLogo, setMakerLogo] = useState(null); // the camera maker's logo, when we have one
   const [place, setPlace] = useState(''); // where it was taken, typed by hand, for the first slide
   const [, setFontReady] = useState(false);
@@ -72,9 +75,11 @@ export default function Client() {
 
   // the frame's fonts come from the web: draw again once they have loaded
   useEffect(() => {
-    const faces = ['400 40px "Newsreader"', '600 40px "Inter Tight"', '500 40px "Inter Tight"', '500 40px "IBM Plex Mono"', '600 40px "Wanted Sans Variable"'];
+    const faces = ['400 40px "Newsreader"', '500 40px "Newsreader"', '600 40px "Newsreader"', '800 40px "Nanum Myeongjo"', '400 40px "Nanum Myeongjo"', '600 40px "Wanted Sans Variable"'];
     Promise.all(faces.map((f) => document.fonts?.load?.(f, 'Aa가1'))).then(() => setFontReady(true)).catch(() => setFontReady(true));
   }, []);
+
+  useEffect(() => { loadImage(CHANNEL).then(setChannelLogo).catch(() => {}); }, []);
 
   // each member's mark: the one picked on this device, else the built-in one
   const logoSrc = (k) => custom[k] || BUILT_IN[k];
@@ -137,7 +142,7 @@ export default function Client() {
     const base = { ...lines, shooter: members[shooter], makerLogo, place };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo }, L);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo, channel: channelLogo }, L);
     });
     if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter] }, L);
   });

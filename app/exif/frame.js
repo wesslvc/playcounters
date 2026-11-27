@@ -22,45 +22,79 @@ const U = W / 100;
 // All three are loaded by the page (see page.jsx) before the frame is drawn
 // (Newsreader: an elegant serif whose 1 never reads as l, which names like
 // x1x0xn and 1.slvc need)
-const DISPLAY = '"Newsreader", "Times New Roman", serif';
-const FONT = '"Inter Tight", "Wanted Sans Variable", "Wanted Sans", -apple-system, "Helvetica Neue", Arial, sans-serif';
-const MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+// every word on the frame is in one serif: Newsreader for Latin, Nanum
+// Myeongjo for Korean (a typed place), the way a printed photo book is set
+const DISPLAY = '"Newsreader", "Nanum Myeongjo", "Times New Roman", serif';
+const FONT = DISPLAY;
+const MONO = DISPLAY;
 const NAME = (k = 1) => ({ size: U * 2.3 * k, weight: 400, font: DISPLAY });
 const SERIF = 'Georgia, "Times New Roman", Times, serif';
 const C = { bg: '#000000', ink: '#F3F1EC', soft: '#8F8B84', line: '#34312E' };
 
 /**
- * The 필름곳간 touch: film's own edge print, small and faint in the top
- * margin, the way a negative carries its stock name and frame numbers in
- * orange along its rebate. The channel on the left, the frame on the right.
+ * The 필름곳간 frame is a strip of film. Across the top and the bottom runs
+ * film's rebate: a row of sprocket holes, and under the top row the edge
+ * print in film's orange (the channel and the frame number). The photo sits
+ * in the strip like a frame on a negative, and the bar under it carries the
+ * credits, the storehouse mark and the camera.
  */
-const EDGE = 'rgba(214, 128, 52, 0.78)';
-function edgePrint(ctx, L, left, right, frame) {
-  const y = L.m * 0.5;
-  const o = { size: U * 0.78, weight: 500, color: EDGE, font: MONO, track: U * 0.22 };
-  text(ctx, 'FILM GOTGAN', left, y, o);
+const EDGE = 'rgba(214, 128, 52, 0.85)';
+const HOLE = '#1E1C1A';
+const REBATE = U * 2.4; // the strip holding a row of holes
+const PRINT = U * 1.9; // the edge print under the top row
+
+function holes(ctx, y, w) {
+  // 35 mm perforations: rounded, a little taller than wide, evenly pitched
+  const hw = U * 0.95;
+  const hh = U * 1.25;
+  const pitch = U * 2.05;
+  const n = Math.floor((w - pitch * 0.5) / pitch);
+  const x0 = (w - (n - 1) * pitch) / 2;
+  ctx.fillStyle = HOLE;
+  for (let i = 0; i < n; i += 1) {
+    const x = x0 + i * pitch - hw / 2;
+    const r = U * 0.22;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + hw, y, x + hw, y + hh, r);
+    ctx.arcTo(x + hw, y + hh, x, y + hh, r);
+    ctx.arcTo(x, y + hh, x, y, r);
+    ctx.arcTo(x, y, x + hw, y, r);
+    ctx.fill();
+  }
+}
+
+function rebate(ctx, L, left, right, frame) {
+  holes(ctx, (REBATE - U * 1.25) / 2, L.w);
+  holes(ctx, L.h - REBATE + (REBATE - U * 1.25) / 2, L.w);
+  const y = REBATE + PRINT * 0.45;
+  const o = { size: U * 0.9, weight: 500, color: EDGE, track: U * 0.3 };
+  text(ctx, 'FILM GOTGAN  400', left, y, o);
+  text(ctx, '필름곳간', (left + right) / 2, y, { ...o, track: U * 0.4, align: 'center' });
   if (frame) text(ctx, `▸ ${frame}`, right, y, { ...o, align: 'right' });
 }
 
 /** The canvas size for a photo of this shape, and where the photo goes. */
 export function layout(img) {
-  const m = Math.round(W * 0.028); // margin around the photo
-  const bar = Math.round(W * 0.12);
+  const m = Math.round(W * 0.028); // margin beside the photo
+  const top = Math.round(REBATE + PRINT); // holes and edge print above it
+  const bottom = Math.round(REBATE); // holes at the very bottom
+  const bar = Math.round(U * 11);
   const aspect = img.naturalHeight / img.naturalWidth;
   let pw = W - m * 2;
   let ph = pw * aspect;
-  let h = m + ph + bar;
+  let h = top + ph + bar + bottom;
   const maxH = Math.round(W * 1.25);
   const minH = Math.round(W / 1.91);
   if (h > maxH) { // a tall photo: shrink it to fit, centred
-    ph = maxH - m - bar;
+    ph = maxH - top - bar - bottom;
     pw = ph / aspect;
     h = maxH;
   }
   h = Math.max(minH, Math.round(h));
   const px = (W - pw) / 2;
-  const py = m + (h - m - bar - ph) / 2;
-  return { w: W, h, m, bar, photo: { x: px, y: py, w: pw, h: ph } };
+  const py = top + (h - top - bar - bottom - ph) / 2;
+  return { w: W, h, m, top, bottom, bar, photo: { x: px, y: py, w: pw, h: ph } };
 }
 
 // fonts swap "1x0" for "1×0" (a contextual alternate meant for sizes); a zero-width
@@ -268,12 +302,40 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   ctx.fillRect(0, 0, L.w, L.h);
   const p = L.photo;
   ctx.drawImage(img, p.x, p.y, p.w, p.h);
-  edgePrint(ctx, L, p.x, p.x + p.w, info.frame);
+  rebate(ctx, L, p.x, p.x + p.w, info.frame);
 
   const top = p.y + p.h;
-  const cy = top + (L.h - top) / 2 - U * 0.1;
+  const cy = top + (L.h - L.bottom - top) / 2;
   const end = credits(ctx, p.x, cy, info, logos);
+  // the storehouse mark in the middle of the bar, when there is room for it
+  const camW = cameraWidth(ctx, info);
+  const mid = (p.x + p.w) / 2 + p.x / 2;
+  const half = storehouseWidth(ctx, logos.channel) / 2;
+  if (logos.channel && end + U * 3 < mid - half && mid + half + U * 3 < p.x + p.w - camW) storehouse(ctx, logos.channel, mid, cy);
   camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, true);
+}
+
+/** The 필름곳간 mark and name, centred on (cx, cy). */
+function storehouse(ctx, logo, cx, cy) {
+  const s = U * 4.4;
+  const nameO = { size: U * 1.35, weight: 800, color: C.ink, track: U * 0.18, font: '"Nanum Myeongjo", serif' };
+  const w = storehouseWidth(ctx, logo);
+  const x = cx - w / 2;
+  mark(ctx, logo, '곳', x, cy, s);
+  text(ctx, '필름곳간', x + s + U * 0.6, cy - U * 0.45, nameO);
+  text(ctx, 'FILM GOTGAN', x + s + U * 0.6, cy + U * 1.05, { size: U * 0.72, weight: 500, color: C.soft, track: U * 0.3 });
+}
+function storehouseWidth(ctx, logo) {
+  if (!logo) return 0;
+  const nameW = Math.max(measure(ctx, '필름곳간', { size: U * 1.35, weight: 800, track: U * 0.18, font: '"Nanum Myeongjo", serif' }),
+    measure(ctx, 'FILM GOTGAN', { size: U * 0.72, weight: 500, track: U * 0.3 }));
+  return U * 4.4 + U * 0.6 + nameW;
+}
+/** How wide the camera block will be (maker, model, settings), at scale 1. */
+function cameraWidth(ctx, info) {
+  return Math.max(makerSize(ctx, info, U * 1.75).w,
+    info.model ? measure(ctx, info.model, { size: U * 1.15, weight: 500 }) : 0,
+    info.settings ? measure(ctx, info.settings, { size: U * 1.0, weight: 500, font: MONO }) : 0);
 }
 
 /** The rows of the details table, leaving out the ones with nothing in them. */
@@ -385,14 +447,14 @@ export function drawCompare(canvas, edits, info, logos, L) {
   const gap = U * 1.6;
   const n = edits.length;
   const a = edits[0].img.naturalHeight / edits[0].img.naturalWidth;
-  const top = L.m;
+  const top = L.top;
   const inner = { x: L.photo.x, w: L.photo.w };
-  edgePrint(ctx, L, inner.x, inner.x + inner.w, '0');
+  rebate(ctx, L, inner.x, inner.x + inner.w, '0');
 
   // three ways to lay them out; the one that shows the photos biggest wins.
   // in a row or a column the details go in a band underneath; in a 2x2 grid
   // they take the fourth cell
-  const under = U * 13;
+  const under = U * 13 + L.bottom;
   const fitTo = (cols, rows, reserve) => {
     const cw = (inner.w - gap * (cols - 1)) / cols;
     const ch = (L.h - top - reserve - gap * (rows - 1)) / rows - label;
@@ -401,14 +463,14 @@ export function drawCompare(canvas, edits, info, logos, L) {
   const options = [
     { kind: 'row', cols: n, rows: 1, pw: fitTo(n, 1, under) },
     { kind: 'col', cols: 1, rows: n, pw: fitTo(1, n, under) },
-    ...(n === 3 ? [{ kind: 'grid', cols: 2, rows: 2, pw: fitTo(2, 2, L.m) }] : []),
+    ...(n === 3 ? [{ kind: 'grid', cols: 2, rows: 2, pw: fitTo(2, 2, L.bottom + U) }] : []),
   ];
   const best = options.reduce((x, y) => (y.pw > x.pw ? y : x));
   const pw = best.pw;
   const ph = pw * a;
   const cellW = (inner.w - gap * (best.cols - 1)) / best.cols;
   const blockH = (ph + label) * best.rows + gap * (best.rows - 1);
-  const room = L.h - top - (best.kind === 'grid' ? L.m : under);
+  const room = L.h - top - (best.kind === 'grid' ? L.bottom + U : under);
   const y0 = top + (room - blockH) / 2;
   const cell = (k) => ({
     x: inner.x + (k % best.cols) * (cellW + gap) + (cellW - pw) / 2,
@@ -434,5 +496,5 @@ export function drawCompare(canvas, edits, info, logos, L) {
   }
   // a band under the edits with who shot it and every detail
   const bandTop = L.h - under;
-  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w, under - U * 1.6, info, logos.shooter);
+  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w, under - L.bottom - U * 1.6, info, logos.shooter);
 }

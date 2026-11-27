@@ -36,7 +36,7 @@ const C = { bg: '#000000', ink: '#F3F1EC', soft: '#8F8B84', line: '#34312E' };
  * film's rebate: a row of sprocket holes, and under the top row the edge
  * print in film's orange (the channel and the frame number). The photo sits
  * in the strip like a frame on a negative, and the bar under it carries the
- * credits, the storehouse mark and the camera.
+ * credits and the camera. The storehouse mark is on the first slide only.
  */
 const EDGE = 'rgba(214, 128, 52, 0.85)';
 const HOLE = '#1E1C1A';
@@ -307,11 +307,6 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   const top = p.y + p.h;
   const cy = top + (L.h - L.bottom - top) / 2;
   const end = credits(ctx, p.x, cy, info, logos);
-  // the storehouse mark in the middle of the bar, when there is room for it
-  const camW = cameraWidth(ctx, info);
-  const mid = (p.x + p.w) / 2 + p.x / 2;
-  const half = storehouseWidth(ctx, logos.channel) / 2;
-  if (logos.channel && end + U * 3 < mid - half && mid + half + U * 3 < p.x + p.w - camW) storehouse(ctx, logos.channel, mid, cy);
   camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, true);
 }
 
@@ -330,12 +325,6 @@ function storehouseWidth(ctx, logo) {
   const nameW = Math.max(measure(ctx, '필름곳간', { size: U * 1.35, weight: 800, track: U * 0.18, font: '"Nanum Myeongjo", serif' }),
     measure(ctx, 'FILM GOTGAN', { size: U * 0.72, weight: 500, track: U * 0.3 }));
   return U * 4.4 + U * 0.6 + nameW;
-}
-/** How wide the camera block will be (maker, model, settings), at scale 1. */
-function cameraWidth(ctx, info) {
-  return Math.max(makerSize(ctx, info, U * 1.75).w,
-    info.model ? measure(ctx, info.model, { size: U * 1.15, weight: 500 }) : 0,
-    info.settings ? measure(ctx, info.settings, { size: U * 1.0, weight: 500, font: MONO }) : 0);
 }
 
 /** The rows of the details table, leaving out the ones with nothing in them. */
@@ -491,10 +480,16 @@ export function drawCompare(canvas, edits, info, logos, L) {
   if (best.kind === 'grid') {
     // the fourth cell: who shot it and every detail, filling the cell
     const { x, y } = cell(3);
-    infoBlock(ctx, x, y, pw, ph + label, info, logos.shooter);
+    // with the 필름곳간 mark at the foot of the cell: this slide is the post's
+    // cover, and the only one that carries it
+    const markH = logos.channel ? U * 6.5 : 0;
+    infoBlock(ctx, x, y, pw, ph + label - markH, info, logos.shooter);
+    if (logos.channel) storehouse(ctx, logos.channel, x + pw / 2, y + ph + label - markH / 2);
     return;
   }
   // a band under the edits with who shot it and every detail
   const bandTop = L.h - under;
-  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w, under - L.bottom - U * 1.6, info, logos.shooter);
+  const markW = logos.channel ? storehouseWidth(ctx, logos.channel) + U * 4 : 0;
+  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w - markW, under - L.bottom - U * 1.6, info, logos.shooter);
+  if (logos.channel) storehouse(ctx, logos.channel, inner.x + inner.w - markW / 2 + U * 2, bandTop + (under - L.bottom) / 2);
 }

@@ -19,7 +19,7 @@ const KEEP = 'pc-exif-members';
 const LOGOS = 'pc-exif-logos';
 // the members' own marks, in the order of the default members
 const BUILT_IN = ['/exif/logos/magpie-small.svg', '/exif/logos/pencil-small.svg', '/exif/logos/rock-small.svg'];
-// 필름곳간's own mark, in the middle of the frame's bar
+// 필름곳간's own mark, on the first slide (the one with every edit)
 const CHANNEL = '/exif/logos/gotgan-small.svg';
 
 const loadImage = (file) => new Promise((resolve, reject) => {
@@ -142,9 +142,9 @@ export default function Client() {
     const base = { ...lines, shooter: members[shooter], makerLogo, place };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo, channel: channelLogo }, L);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo }, L);
     });
-    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter] }, L);
+    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter], channel: channelLogo }, L);
   });
 
   async function saveAll() {

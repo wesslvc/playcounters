@@ -297,6 +297,18 @@ function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
 // apertures as F/2, also when typed as f/2
 const upperF = (info) => ({ ...info, settings: (info.settings || '').replace(/(^|\s)f\/(?=\d)/g, '$1F/') });
 
+/**
+ * Where an image goes inside a box, whole and undistorted, centred. The slides
+ * of a post share one canvas size (the first edit's), so an edit cropped to
+ * another shape is fitted into that box rather than stretched to it.
+ */
+function fitIn(img, x, y, w, h) {
+  const a = img.naturalHeight / img.naturalWidth;
+  const fw = Math.min(w, h / a);
+  const fh = fw * a;
+  return { x: x + (w - fw) / 2, y: y + (h - fh) / 2, w: fw, h: fh };
+}
+
 export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   info = upperF(info);
   canvas.width = L.w;
@@ -304,11 +316,11 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, L.w, L.h);
-  const p = L.photo;
+  const p = fitIn(img, L.photo.x, L.photo.y, L.photo.w, L.photo.h);
   ctx.drawImage(img, p.x, p.y, p.w, p.h);
   rebate(ctx, L, p.x, p.x + p.w, info.frame);
 
-  const top = p.y + p.h;
+  const top = L.photo.y + L.photo.h; // the bar stays put whatever the photo's shape
   const cy = top + (L.h - L.bottom - top) / 2;
   const end = credits(ctx, p.x, cy, info, logos);
   camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, true);
@@ -473,7 +485,8 @@ export function drawCompare(canvas, edits, info, logos, L) {
 
   edits.forEach((e, k) => {
     const { x, y } = cell(k);
-    ctx.drawImage(e.img, x, y, pw, ph);
+    const f = fitIn(e.img, x, y, pw, ph);
+    ctx.drawImage(e.img, f.x, f.y, f.w, f.h);
     const s = U * 2.6;
     const cy = y + ph + label * 0.5;
     const nw = measure(ctx, e.name, NAME(0.75));

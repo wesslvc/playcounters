@@ -49,6 +49,8 @@ export default function Client() {
   const [custom, setCustom] = useState([null, null, null]); // logos picked on this device, as data URLs
   const [logos, setLogos] = useState([null, null, null]);
   const [makerLogo, setMakerLogo] = useState(null); // the camera maker's logo, when we have one
+  const [place, setPlace] = useState(''); // where it was taken, typed by hand, for the first slide
+  const [, setFontReady] = useState(false);
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
   const frames = useRef([]);
@@ -67,6 +69,11 @@ export default function Client() {
   useEffect(() => {
     try { localStorage.setItem(KEEP, JSON.stringify({ members })); } catch { /* private mode */ }
   }, [members]);
+
+  // the frame is drawn in Pretendard: draw again once it has loaded
+  useEffect(() => {
+    document.fonts?.load?.('700 40px "Pretendard Variable"').then(() => setFontReady(true)).catch(() => {});
+  }, []);
 
   // each member's mark: the one picked on this device, else the built-in one
   const logoSrc = (k) => custom[k] || BUILT_IN[k];
@@ -126,7 +133,7 @@ export default function Client() {
     if (!ready.length) return;
     // every slide the size of the first edit's, so the carousel keeps one shape
     const L = layout(ready[0].img);
-    const base = { ...lines, shooter: members[shooter], makerLogo };
+    const base = { ...lines, shooter: members[shooter], makerLogo, place };
     ready.forEach((e) => {
       const c = frames.current[e.k];
       if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter }, { shooter: logos[shooter], editor: e.logo }, L);
@@ -157,12 +164,13 @@ export default function Client() {
 
   const set = (k) => (e) => setLines((l) => ({ ...l, [k]: e.target.value }));
   return (
+    <div className="ex-page">
     <main className="ex">
       <h1>필름곳간 프레임</h1>
       <p className="ex-sub">한 사람이 찍고 세 사람이 보정한 사진을 한 번에 프레임에 넣어요. 사진은 이 기기 밖으로 나가지 않아요.</p>
 
       <section className="ex-sec">
-        <h2>멤버</h2>
+        <h2><small>01</small>멤버</h2>
         <div className="ex-members">
           {members.map((m, k) => (
             <div key={k} className="ex-member">
@@ -180,7 +188,7 @@ export default function Client() {
       </section>
 
       <section className="ex-sec">
-        <h2>이번 사진</h2>
+        <h2><small>02</small>이번 사진</h2>
         <div className="ex-choice" role="radiogroup" aria-label="촬영">
           <span>촬영</span>
           {members.map((m, k) => (
@@ -189,7 +197,8 @@ export default function Client() {
         </div>
         <div className="ex-slots">
           {members.map((m, k) => (
-            <label key={k} className="ex-slot" data-filled={edits[k] ? '' : undefined}>
+            <label key={k} className="ex-slot" data-filled={edits[k] ? '' : undefined}
+                   style={edits[k] ? { backgroundImage: `url(${edits[k].img.src})` } : undefined}>
               <input type="file" accept="image/jpeg,image/*" onChange={(e) => pickEdit(k, e.target.files?.[0])} />
               <b>{m} 보정본</b>
               <span>{edits[k] ? '바꾸기' : '고르기'}</span>
@@ -208,19 +217,20 @@ export default function Client() {
       {ready.length > 0 && (
         <>
           <section className="ex-sec">
-            <h2>카메라</h2>
+            <h2><small>03</small>촬영 정보</h2>
             <div className="ex-fields">
               <label>제조사<input value={lines.make} onChange={set('make')} placeholder="FUJIFILM" /></label>
               <label>기종<input value={lines.model} onChange={set('model')} placeholder="X100V" /></label>
               <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  f/2  1/250s  ISO200" /></label>
               <label>렌즈<input value={lines.lens} onChange={set('lens')} placeholder="(선택)" /></label>
               <label>날짜<input value={lines.taken} onChange={set('taken')} placeholder="2026.11.27 14:03" /></label>
+              <label className="ex-wide">장소<input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="예: 서울 성수동, 제주 협재해변" /></label>
             </div>
-            <p className="ex-hint">보정본에는 카메라와 기종만, 설정값은 찍은 사람의 보정본에만 들어가요. 첫 장(세 장 비교)에는 렌즈와 날짜까지 전부 들어가요.</p>
+            <p className="ex-hint">보정본마다 카메라, 기종, 설정값이 들어가요. 첫 장(세 장 모음)에는 장소, 렌즈, 날짜까지 전부 들어가요.</p>
           </section>
 
           <section className="ex-sec">
-            <h2>미리보기</h2>
+            <h2><small>04</small>미리보기</h2>
             <div className="ex-out">
               {ready.length >= 2 && <figure><canvas ref={compare} /><figcaption>비교 (첫 장)</figcaption></figure>}
               {ready.map((e) => (
@@ -232,5 +242,6 @@ export default function Client() {
         </>
       )}
     </main>
+    </div>
   );
 }

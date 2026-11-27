@@ -5,8 +5,8 @@
  * Tight margins around the photo and one bar under it. On the left, who shot
  * it and who edited it, each with their mark, big enough to read at a
  * glance; on the shooter's own edit the two are one ("SHOT · EDITED BY").
- * On the right, the camera: its maker as a wordmark and the model under it,
- * and, on the shooter's own edit only, the settings.
+ * On the right, the camera: its maker's logo (or wordmark), the model under
+ * it, and the settings.
  *
  * The canvas follows the photo instead of padding it out to a fixed shape:
  * as wide as Instagram allows (2160 px, twice 1080), as tall as the photo
@@ -252,11 +252,12 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   const top = p.y + p.h;
   const cy = top + (L.h - top) / 2 - U * 0.1;
   const end = credits(ctx, p.x, cy, info, logos);
-  camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, info.own);
+  camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, true);
 }
 
 /** The rows of the details table, leaving out the ones with nothing in them. */
 const specRows = (info) => [
+  ['PLACE', info.place],
   ['CAMERA', info.make || info.model ? 'camera' : null],
   ['LENS', info.lens],
   ['SETTINGS', info.settings],
@@ -278,8 +279,8 @@ function valueWidth(ctx, info, label, v) {
 }
 
 /**
- * Everything about the shot, as a table: the camera (maker's wordmark and
- * model), lens, settings and when it was taken. `stacked` puts each label
+ * Everything about the shot, as a table: where (typed by hand), the camera
+ * (maker's logo and model), lens, settings and when it was taken. `stacked` puts each label
  * above its value (for narrow spaces) instead of beside it.
  */
 function specs(ctx, x, y, w, info, scale = 1, stacked = false) {

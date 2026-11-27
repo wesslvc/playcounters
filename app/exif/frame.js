@@ -11,8 +11,8 @@
  * The canvas follows the photo instead of padding it out to a fixed shape:
  * as wide as Instagram allows (2160 px, twice 1080), as tall as the photo
  * needs, held between Instagram's 1.91:1 and 4:5 so nothing gets cropped.
- * Every slide of a post comes out the same size, since a carousel takes its
- * shape from the first.
+ * Each slide takes its own photo's shape; the first slide arranges the edits
+ * in whatever rows show them largest.
  */
 
 export const W = 2160;
@@ -229,9 +229,22 @@ export function makerLogoFile(make, model) {
  * a limit so a round badge does not tower over the text.
  */
 function logoBox(img, size) {
+  // sized against the capital letters of the text beside it (size is that
+  // text's font size): a wordmark logo as tall as the capitals, a badge or
+  // symbol logo a little taller, so both weigh the same as the words
+  const cap = size * CAP;
   const aspect = img.naturalWidth / img.naturalHeight;
-  const h = Math.min(size * 1.25, Math.max(size * 0.6, size * Math.sqrt(3.3 / aspect)));
+  const h = aspect > 2.2 ? cap * 1.08 : cap * 1.7;
   return { w: h * aspect, h };
+}
+const CAP = 0.66; // Newsreader's capital height, as a share of its size
+
+/** Where the capitals of text set at (y, middle baseline) sit: their middle. */
+function capMiddle(ctx, y, o) {
+  ctx.font = `${o.style ?? ''} ${o.weight ?? 500} ${Math.round(o.size)}px ${o.font ?? FONT}`;
+  ctx.textBaseline = 'middle';
+  const m = ctx.measureText('H');
+  return y + (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2;
 }
 
 /** The maker at (x, cy): its logo if we have one, else the wordmark. Returns the width. */
@@ -239,7 +252,9 @@ function maker(ctx, info, x, cy, size, align = 'left', maxW = Infinity) {
   if (info.makerLogo) {
     let { w, h } = logoBox(info.makerLogo, size);
     if (w > maxW) { h *= maxW / w; w = maxW; }
-    ctx.drawImage(info.makerLogo, align === 'right' ? x - w : x, cy - h / 2, w, h);
+    // centred on the capitals of text at the same line, not on its em box
+    const mid = capMiddle(ctx, cy, { size, weight: 500 });
+    ctx.drawImage(info.makerLogo, align === 'right' ? x - w : x, mid - h / 2, w, h);
     return w;
   }
   const wm = wordmark(info.make);
@@ -268,17 +283,19 @@ export function wordmark(make) {
 /** The camera at the right end of the bar: maker, model, and (if asked) the settings. */
 function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
   const rows = [];
-  const size = U * 1.75 * scale;
+  // the maker's logo as tall as large capitals; the model under it in full
+  // ink; the settings smaller and softer. Even line spacing, right-aligned
+  const size = U * 2.2 * scale;
   const mk = makerSize(ctx, info, size);
   // a long maker name shrinks to fit rather than running into the credits
-  if (mk.w) rows.push({ maker: true, h: Math.max(size, mk.h * Math.min(1, room / mk.w)) * 1.25 });
+  if (mk.w) rows.push({ maker: true, h: U * 2.2 * scale });
   if (info.model) {
-    const o = { size: U * 1.15 * scale, weight: 500, color: C.soft };
-    rows.push({ s: fit(ctx, info.model, room, o), o, h: U * 1.6 * scale });
+    const o = { size: U * 1.25 * scale, weight: 500 };
+    rows.push({ s: fit(ctx, info.model, room, o), o, h: U * 1.9 * scale });
   }
   if (withSettings && info.settings) {
-    const o = { size: U * 1.0 * scale, weight: 500, color: C.soft, font: MONO };
-    rows.push({ s: fit(ctx, info.settings, room, o), o, h: U * 1.5 * scale });
+    const o = { size: U * 1.05 * scale, weight: 500, color: C.soft, font: MONO };
+    rows.push({ s: fit(ctx, info.settings, room, o), o, h: U * 1.7 * scale });
   }
   if (!rows.length) return;
   const total = rows.reduce((a, r) => a + r.h, 0);
@@ -298,9 +315,7 @@ function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
 const upperF = (info) => ({ ...info, settings: (info.settings || '').replace(/(^|\s)f\/(?=\d)/g, '$1F/') });
 
 /**
- * Where an image goes inside a box, whole and undistorted, centred. The slides
- * of a post share one canvas size (the first edit's), so an edit cropped to
- * another shape is fitted into that box rather than stretched to it.
+ * Where an image goes inside a box, whole and undistorted, centred.
  */
 function fitIn(img, x, y, w, h) {
   const a = img.naturalHeight / img.naturalWidth;
@@ -362,7 +377,7 @@ const LABEL_COL = 7.2;
 /** How wide one row's value is at scale 1. */
 function valueWidth(ctx, info, label, v) {
   if (v !== 'camera') return measure(ctx, v, label === 'SETTINGS' ? SETTING(1) : VALUE(1));
-  const mw = makerSize(ctx, info, U * 1.45).w;
+  const mw = makerSize(ctx, info, U * 1.3).w;
   return (mw ? mw + U * 0.9 : 0) + (info.model ? measure(ctx, info.model, VALUE(1)) : 0);
 }
 
@@ -382,9 +397,9 @@ function specs(ctx, x, y, w, info, scale = 1, stacked = false) {
     text(ctx, label, x, stacked ? top + U * 0.75 * scale : vy, LABEL(scale));
     const vx = x + labelW;
     if (v === 'camera') {
-      let used = maker(ctx, info, vx, vy, U * 1.45 * scale, 'left', room);
+      let used = maker(ctx, info, vx, vy, U * 1.3 * scale, 'left', room);
       if (used) used += U * 0.9 * scale;
-      if (info.model) text(ctx, fit(ctx, info.model, room - used, vo), vx + used, vy, { ...vo, color: C.soft });
+      if (info.model) text(ctx, fit(ctx, info.model, room - used, vo), vx + used, vy, vo);
       return;
     }
     const o = label === 'SETTINGS' ? SETTING(scale) : vo;
@@ -442,72 +457,95 @@ function infoBlock(ctx, x, y, w, h, info, logo) {
  * then everything else in full: who shot it, the camera, lens, settings and
  * the date.
  */
-export function drawCompare(canvas, edits, info, logos, L) {
+export function drawCompare(canvas, edits, info, logos) {
   info = upperF(info);
-  canvas.width = L.w;
-  canvas.height = L.h;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, L.w, L.h);
-  const label = U * 4.4;
+  const label = U * 4.4; // a member's mark and name under each edit
   const gap = U * 1.6;
-  const n = edits.length;
-  const a = edits[0].img.naturalHeight / edits[0].img.naturalWidth;
-  const top = L.top;
-  const inner = { x: L.photo.x, w: L.photo.w };
+  const m = Math.round(W * 0.028);
+  const top = Math.round(REBATE + PRINT);
+  const bottom = Math.round(REBATE);
+  const inner = { x: m, w: W - m * 2 };
+  const maxH = Math.round(W * 1.25);
+  const minH = Math.round(W / 1.91);
+  const band = U * 15; // the details as a band across the foot
+  const INFO = 1.05; // the details' box, sharing a row with photos: about square
+
+  // the edits keep their own shapes. Every way of splitting them, in order,
+  // into rows is tried, with the details either sharing the last row or as a
+  // band of their own underneath; each row is set at the one height that fills
+  // the width (as a justified photo row is). The arrangement that shows the
+  // photos largest, and most evenly, inside Instagram's 4:5 wins
+  const items = edits.map((e) => ({ e, r: e.img.naturalWidth / e.img.naturalHeight }));
+  const splits = [];
+  const n = items.length;
+  for (let mask = 0; mask < 1 << (n - 1); mask += 1) {
+    const rows = [[items[0]]];
+    for (let i = 1; i < n; i += 1) {
+      if (mask & (1 << (i - 1))) rows.push([items[i]]);
+      else rows[rows.length - 1].push(items[i]);
+    }
+    splits.push({ rows, infoIn: true });
+    splits.push({ rows, infoIn: false });
+  }
+  const plan = (sp) => {
+    // image height of each row at full width
+    const rows = sp.rows.map((row, i) => {
+      const last = i === sp.rows.length - 1;
+      const rs = row.map((it) => it.r).concat(last && sp.infoIn ? [INFO] : []);
+      const free = inner.w - gap * (rs.length - 1);
+      return { row, rs, h: free / rs.reduce((x, y) => x + y, 0), info: last && sp.infoIn };
+    });
+    const fixed = top + bottom + U + gap * (rows.length - 1) + label * rows.length + (sp.infoIn ? 0 : band + gap);
+    const want = rows.reduce((x, r) => x + r.h, 0);
+    const k = Math.min(1, (maxH - fixed) / want); // shrink to fit 4:5 if need be
+    const areas = rows.flatMap((r) => r.row.map((it) => (r.h * k) ** 2 * it.r));
+    const infoArea = sp.infoIn ? (rows.at(-1).h * k) ** 2 * INFO : 1e9;
+    // largest photos, evened out (sum of square roots), and room for the details
+    const score = areas.reduce((x, y) => x + Math.sqrt(y), 0) - (infoArea < (U * 26) ** 2 ? 1e6 : 0);
+    return { ...sp, rows, k, fixed, want, score };
+  };
+  const best = splits.map(plan).reduce((x, y) => (y.score > x.score ? y : x));
+  const H = Math.max(minH, Math.round(best.fixed + best.want * best.k));
+  canvas.width = W;
+  canvas.height = H;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  const L = { w: W, h: H, m, top, bottom };
   rebate(ctx, L, inner.x, inner.x + inner.w, '0');
 
-  // three ways to lay them out; the one that shows the photos biggest wins.
-  // in a row or a column the details go in a band underneath; in a 2x2 grid
-  // they take the fourth cell
-  const under = U * 13 + L.bottom;
-  const fitTo = (cols, rows, reserve) => {
-    const cw = (inner.w - gap * (cols - 1)) / cols;
-    const ch = (L.h - top - reserve - gap * (rows - 1)) / rows - label;
-    return Math.min(cw, ch / a);
-  };
-  const options = [
-    { kind: 'row', cols: n, rows: 1, pw: fitTo(n, 1, under) },
-    { kind: 'col', cols: 1, rows: n, pw: fitTo(1, n, under) },
-    ...(n === 3 ? [{ kind: 'grid', cols: 2, rows: 2, pw: fitTo(2, 2, L.bottom + U) }] : []),
-  ];
-  const best = options.reduce((x, y) => (y.pw > x.pw ? y : x));
-  const pw = best.pw;
-  const ph = pw * a;
-  const cellW = (inner.w - gap * (best.cols - 1)) / best.cols;
-  const blockH = (ph + label) * best.rows + gap * (best.rows - 1);
-  const room = L.h - top - (best.kind === 'grid' ? L.bottom + U : under);
-  const y0 = top + (room - blockH) / 2;
-  const cell = (k) => ({
-    x: inner.x + (k % best.cols) * (cellW + gap) + (cellW - pw) / 2,
-    y: y0 + Math.floor(k / best.cols) * (ph + label + gap),
+  const contentH = best.fixed - top - bottom - U + best.want * best.k;
+  let y = top + (H - top - bottom - contentH) / 2;
+  best.rows.forEach((r) => {
+    const h = r.h * best.k;
+    const rowW = h * r.rs.reduce((a, b) => a + b, 0) + gap * (r.rs.length - 1);
+    let x = inner.x + (inner.w - rowW) / 2;
+    r.row.forEach((it) => {
+      const w = h * it.r;
+      ctx.drawImage(it.e.img, x, y, w, h);
+      const s = U * 2.6;
+      const cy = y + h + label * 0.5;
+      const nw = measure(ctx, it.e.name, NAME(0.75));
+      const sx = x + w / 2 - (s + U * 0.7 + nw) / 2;
+      mark(ctx, it.e.logo, it.e.name, sx, cy, s);
+      text(ctx, it.e.name, sx + s + U * 0.7, cy, NAME(0.75));
+      x += w + gap;
+    });
+    if (r.info) {
+      // the details in the rest of the row, the 필름곳간 mark at their foot
+      // (this slide is the post's cover, and the only one that carries it)
+      const w = inner.x + inner.w - x;
+      const boxH = h + label;
+      const markH = logos.channel ? U * 6.5 : 0;
+      infoBlock(ctx, x, y, w, boxH - markH, info, logos.shooter);
+      if (logos.channel) storehouse(ctx, logos.channel, x + w / 2, y + boxH - markH / 2);
+    }
+    y += h + label + gap;
   });
-
-  edits.forEach((e, k) => {
-    const { x, y } = cell(k);
-    const f = fitIn(e.img, x, y, pw, ph);
-    ctx.drawImage(e.img, f.x, f.y, f.w, f.h);
-    const s = U * 2.6;
-    const cy = y + ph + label * 0.5;
-    const nw = measure(ctx, e.name, NAME(0.75));
-    const startX = x + pw / 2 - (s + U * 0.7 + nw) / 2;
-    mark(ctx, e.logo, e.name, startX, cy, s);
-    text(ctx, e.name, startX + s + U * 0.7, cy, NAME(0.75));
-  });
-
-  if (best.kind === 'grid') {
-    // the fourth cell: who shot it and every detail, filling the cell
-    const { x, y } = cell(3);
-    // with the 필름곳간 mark at the foot of the cell: this slide is the post's
-    // cover, and the only one that carries it
-    const markH = logos.channel ? U * 6.5 : 0;
-    infoBlock(ctx, x, y, pw, ph + label - markH, info, logos.shooter);
-    if (logos.channel) storehouse(ctx, logos.channel, x + pw / 2, y + ph + label - markH / 2);
-    return;
+  if (!best.infoIn) {
+    // the details as a band across the foot, the 필름곳간 mark at its end
+    const markW = logos.channel ? storehouseWidth(ctx, logos.channel) + U * 4 : 0;
+    infoBlock(ctx, inner.x, y, inner.w - markW, band, info, logos.shooter);
+    if (logos.channel) storehouse(ctx, logos.channel, inner.x + inner.w - markW / 2 + U * 2, y + band / 2);
   }
-  // a band under the edits with who shot it and every detail
-  const bandTop = L.h - under;
-  const markW = logos.channel ? storehouseWidth(ctx, logos.channel) + U * 4 : 0;
-  infoBlock(ctx, inner.x, bandTop + U * 0.8, inner.w - markW, under - L.bottom - U * 1.6, info, logos.shooter);
-  if (logos.channel) storehouse(ctx, logos.channel, inner.x + inner.w - markW / 2 + U * 2, bandTop + (under - L.bottom) / 2);
 }

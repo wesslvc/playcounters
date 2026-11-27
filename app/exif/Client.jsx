@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { readExif, caption } from './exif';
-import { drawFrame, drawCompare, layout, makerLogoFile } from './frame';
+import { drawFrame, drawCompare, makerLogoFile } from './frame';
 
 /**
  * 필름곳간: one person shoots, all three edit the same photo, and the three
@@ -137,14 +137,13 @@ export default function Client() {
 
   useEffect(() => {
     if (!ready.length) return;
-    // every slide the size of the first edit's, so the carousel keeps one shape
-    const L = layout(ready[0].img);
+    // each slide takes its own photo's shape
     const base = { ...lines, shooter: members[shooter], makerLogo, place };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo }, L);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo });
     });
-    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter], channel: channelLogo }, L);
+    if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter], channel: channelLogo });
   });
 
   async function saveAll() {

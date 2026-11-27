@@ -45,7 +45,7 @@ export default function Client() {
   const [shooter, setShooter] = useState(0);
   const [edits, setEdits] = useState([null, null, null]); // { img, exif }
   const [original, setOriginal] = useState(null);
-  const [lines, setLines] = useState({ make: '', model: '', settings: '' });
+  const [lines, setLines] = useState({ make: '', model: '', settings: '', lens: '', taken: '' });
   const [custom, setCustom] = useState([null, null, null]); // logos picked on this device, as data URLs
   const [logos, setLogos] = useState([null, null, null]);
   const [note, setNote] = useState(null);
@@ -89,7 +89,7 @@ export default function Client() {
     const source = [original, ...edits].find((x) => x && Object.keys(x.exif).length);
     if (source) {
       const c = caption(source.exif);
-      setLines({ make: c.make, model: c.model, settings: c.settings });
+      setLines({ make: c.make, model: c.model, settings: c.settings, lens: c.lens, taken: c.taken });
     }
   }, [original, edits]);
 
@@ -111,7 +111,7 @@ export default function Client() {
   }
 
   const ready = edits.map((e, k) => (e ? { ...e, k, name: members[k], logo: logos[k] } : null)).filter(Boolean);
-  const noExif = ready.length > 0 && !lines.make && !lines.model && !lines.settings;
+  const noExif = ready.length > 0 && !lines.make && !lines.model && !lines.settings && !lines.lens;
 
   useEffect(() => {
     if (!ready.length) return;
@@ -204,8 +204,10 @@ export default function Client() {
               <label>제조사<input value={lines.make} onChange={set('make')} placeholder="FUJIFILM" /></label>
               <label>기종<input value={lines.model} onChange={set('model')} placeholder="X100V" /></label>
               <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  f/2  1/250s  ISO200" /></label>
+              <label>렌즈<input value={lines.lens} onChange={set('lens')} placeholder="(선택)" /></label>
+              <label>날짜<input value={lines.taken} onChange={set('taken')} placeholder="2026.11.27 14:03" /></label>
             </div>
-            <p className="ex-hint">설정값은 찍은 사람의 보정본에만 들어가요.</p>
+            <p className="ex-hint">보정본에는 카메라와 기종만, 설정값은 찍은 사람의 보정본에만 들어가요. 첫 장(세 장 비교)에는 렌즈와 날짜까지 전부 들어가요.</p>
           </section>
 
           <section className="ex-sec">

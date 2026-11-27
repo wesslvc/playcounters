@@ -207,7 +207,48 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   camera(ctx, p.x + p.w, cy, info, p.x + p.w - end - U * 3, info.own);
 }
 
-/** The first slide: the edits together, each under its editor's mark, then who shot it and the camera. */
+/**
+ * Everything about the shot, as a small table: the camera (maker's wordmark
+ * and model), lens, settings and when it was taken. Rows with nothing in
+ * them are left out. Drawn from (x, y) down; returns the height used.
+ */
+function specs(ctx, x, y, w, info, scale = 1) {
+  const rowH = U * 2.5 * scale;
+  const labelW = U * 7.2 * scale;
+  const lo = { size: U * 0.78 * scale, weight: 700, color: C.soft, track: U * 0.22 * scale };
+  const vo = { size: U * 1.25 * scale, weight: 500 };
+  const room = w - labelW;
+  const rows = [
+    ['CAMERA', info.make || info.model ? 'camera' : null],
+    ['LENS', info.lens],
+    ['SETTINGS', info.settings],
+    ['DATE', info.taken],
+  ].filter(([, v]) => v);
+  rows.forEach(([label, v], i) => {
+    const cy = y + rowH * (i + 0.5);
+    text(ctx, label, x, cy, lo);
+    const vx = x + labelW;
+    if (v === 'camera') {
+      const wm = wordmark(info.make);
+      let used = 0;
+      if (wm) {
+        const size = U * 1.45 * scale;
+        used = text(ctx, wm.text, vx, cy, { size, weight: wm.weight, style: wm.style ?? '', font: wm.font ?? FONT, track: (wm.track ?? 0) * size }) + U * 0.9 * scale;
+      }
+      if (info.model) text(ctx, fit(ctx, info.model, room - used, vo), vx + used, cy, { ...vo, color: C.soft });
+      return;
+    }
+    const o = label === 'SETTINGS' ? { ...vo, font: MONO, size: vo.size * 0.92 } : vo;
+    text(ctx, fit(ctx, v, room, o), vx, cy, o);
+  });
+  return rowH * rows.length;
+}
+
+/**
+ * The first slide: the edits together, each under its editor's mark, and
+ * then everything else in full: who shot it, the camera, lens, settings and
+ * the date.
+ */
 export function drawCompare(canvas, edits, info, logos, L) {
   canvas.width = L.w;
   canvas.height = L.h;
@@ -222,9 +263,9 @@ export function drawCompare(canvas, edits, info, logos, L) {
   const inner = { x: L.photo.x, w: L.photo.w };
 
   // three ways to lay them out; the one that shows the photos biggest wins.
-  // in a row or a column the shooter goes in a line underneath; in a 2x2 grid
-  // the shooter takes the fourth cell
-  const under = L.bar;
+  // in a row or a column the details go in a band underneath; in a 2x2 grid
+  // they take the fourth cell
+  const under = U * 13;
   const fitTo = (cols, rows, reserve) => {
     const cw = (inner.w - gap * (cols - 1)) / cols;
     const ch = (L.h - top - reserve - gap * (rows - 1)) / rows - label;
@@ -258,15 +299,24 @@ export function drawCompare(canvas, edits, info, logos, L) {
     text(ctx, e.name, startX + s + U * 0.7, cy, { size: U * 1.5, weight: 700 });
   });
 
-  // this slide carries every member's edit, so it credits only the shot
   if (best.kind === 'grid') {
-    // the fourth cell: who shot it, large, and the camera under it
+    // the fourth cell: who shot it, a hairline, then the details
     const { x, y } = cell(3);
-    credit(ctx, x, y + ph * 0.38, 'SHOT BY', info.shooter, logos.shooter, 1.25);
-    camera(ctx, x + pw, y + ph * 0.8, info, pw, false, 1.15);
+    const scale = Math.min(1.25, ph / (U * 22));
+    const credY = y + U * 3.2 * scale;
+    credit(ctx, x, credY, 'SHOT BY', info.shooter, logos.shooter, scale);
+    const lineY = credY + U * 4.2 * scale;
+    ctx.fillStyle = C.line;
+    ctx.fillRect(x, lineY, pw, Math.max(2, U * 0.08));
+    specs(ctx, x, lineY + U * 1.4 * scale, pw, info, scale);
     return;
   }
-  const cy = L.h - under / 2;
-  const end = inner.x + credit(ctx, inner.x, cy, 'SHOT BY', info.shooter, logos.shooter);
-  camera(ctx, inner.x + inner.w, cy, info, inner.x + inner.w - end - U * 3, false);
+  // a band under the edits: who shot it on the left, the details on the right
+  const bandTop = L.h - under;
+  ctx.fillStyle = C.line;
+  ctx.fillRect(inner.x, bandTop + U * 0.6, inner.w, Math.max(2, U * 0.08));
+  const end = inner.x + credit(ctx, inner.x, bandTop + under / 2, 'SHOT BY', info.shooter, logos.shooter);
+  const sx = Math.max(end + U * 4, inner.x + inner.w * 0.42);
+  const rows = ['make', 'lens', 'settings', 'taken'].filter((k) => info[k] || (k === 'make' && info.model)).length;
+  specs(ctx, sx, bandTop + under / 2 - (U * 2.5 * rows) / 2 + U * 0.3, inner.x + inner.w - sx, info);
 }

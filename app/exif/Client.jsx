@@ -70,9 +70,10 @@ export default function Client() {
     try { localStorage.setItem(KEEP, JSON.stringify({ members })); } catch { /* private mode */ }
   }, [members]);
 
-  // the frame is drawn in Pretendard: draw again once it has loaded
+  // the frame's fonts come from the web: draw again once they have loaded
   useEffect(() => {
-    document.fonts?.load?.('700 40px "Pretendard Variable"').then(() => setFontReady(true)).catch(() => {});
+    const faces = ['400 40px "Newsreader"', '600 40px "Inter Tight"', '500 40px "Inter Tight"', '500 40px "IBM Plex Mono"', '600 40px "Wanted Sans Variable"'];
+    Promise.all(faces.map((f) => document.fonts?.load?.(f, 'Aa가1'))).then(() => setFontReady(true)).catch(() => setFontReady(true));
   }, []);
 
   // each member's mark: the one picked on this device, else the built-in one
@@ -136,7 +137,7 @@ export default function Client() {
     const base = { ...lines, shooter: members[shooter], makerLogo, place };
     ready.forEach((e) => {
       const c = frames.current[e.k];
-      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter }, { shooter: logos[shooter], editor: e.logo }, L);
+      if (c) drawFrame(c, e.img, { ...base, editor: e.name, own: e.k === shooter, frame: `${e.k + 1}A` }, { shooter: logos[shooter], editor: e.logo }, L);
     });
     if (compare.current && ready.length >= 2) drawCompare(compare.current, ready, base, { shooter: logos[shooter] }, L);
   });
@@ -166,7 +167,7 @@ export default function Client() {
   return (
     <div className="ex-page">
     <main className="ex">
-      <h1>필름곳간 프레임</h1>
+      <h1>필름곳간<em>frame</em></h1>
       <p className="ex-sub">한 사람이 찍고 세 사람이 보정한 사진을 한 번에 프레임에 넣어요. 사진은 이 기기 밖으로 나가지 않아요.</p>
 
       <section className="ex-sec">

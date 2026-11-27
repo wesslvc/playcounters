@@ -17,10 +17,30 @@
 
 export const W = 2160;
 const U = W / 100;
-const FONT = '"Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, sans-serif';
-const MONO = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+// type: names in a slim display serif, everything else in a compact sans
+// (Korean, as in a typed place, falls to Wanted Sans), settings in a mono.
+// All three are loaded by the page (see page.jsx) before the frame is drawn
+// (Newsreader: an elegant serif whose 1 never reads as l, which names like
+// x1x0xn and 1.slvc need)
+const DISPLAY = '"Newsreader", "Times New Roman", serif';
+const FONT = '"Inter Tight", "Wanted Sans Variable", "Wanted Sans", -apple-system, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const NAME = (k = 1) => ({ size: U * 2.3 * k, weight: 400, font: DISPLAY });
 const SERIF = 'Georgia, "Times New Roman", Times, serif';
 const C = { bg: '#000000', ink: '#F3F1EC', soft: '#8F8B84', line: '#34312E' };
+
+/**
+ * The 필름곳간 touch: film's own edge print, small and faint in the top
+ * margin, the way a negative carries its stock name and frame numbers in
+ * orange along its rebate. The channel on the left, the frame on the right.
+ */
+const EDGE = 'rgba(214, 128, 52, 0.78)';
+function edgePrint(ctx, L, left, right, frame) {
+  const y = L.m * 0.5;
+  const o = { size: U * 0.78, weight: 500, color: EDGE, font: MONO, track: U * 0.22 };
+  text(ctx, 'FILM GOTGAN', left, y, o);
+  if (frame) text(ctx, `▸ ${frame}`, right, y, { ...o, align: 'right' });
+}
 
 /** The canvas size for a photo of this shape, and where the photo goes. */
 export function layout(img) {
@@ -110,7 +130,7 @@ function credit(ctx, x, cy, label, name, logo, scale = 1) {
   mark(ctx, logo, name, x, cy, s);
   const tx = x + s + U * 1.0 * scale;
   const lo = { size: U * 0.82 * scale, weight: 700, color: C.soft, track: U * 0.24 * scale };
-  const no = { size: U * 1.9 * scale, weight: 700 };
+  const no = NAME(scale);
   const lw = text(ctx, label, tx, cy - U * 1.05 * scale, lo);
   const nw = text(ctx, name, tx, cy + U * 0.85 * scale, no);
   return s + U * 1.0 * scale + Math.max(lw, nw);
@@ -248,6 +268,7 @@ export function drawFrame(canvas, img, info, logos, L = layout(img)) {
   ctx.fillRect(0, 0, L.w, L.h);
   const p = L.photo;
   ctx.drawImage(img, p.x, p.y, p.w, p.h);
+  edgePrint(ctx, L, p.x, p.x + p.w, info.frame);
 
   const top = p.y + p.h;
   const cy = top + (L.h - top) / 2 - U * 0.1;
@@ -314,7 +335,7 @@ function specs(ctx, x, y, w, info, scale = 1, stacked = false) {
  */
 function infoBlock(ctx, x, y, w, h, info, logo) {
   const s = U * 5.2;
-  const creditW = s + U * 1.0 + Math.max(measure(ctx, 'SHOT BY', LABEL(1)), measure(ctx, info.shooter, { size: U * 1.9, weight: 700 }));
+  const creditW = s + U * 1.0 + Math.max(measure(ctx, 'SHOT BY', LABEL(1)), measure(ctx, info.shooter, NAME()));
   const creditH = U * 5.6;
   const rows = specRows(info);
   const values = rows.map(([label, v]) => valueWidth(ctx, info, label, v));
@@ -366,6 +387,7 @@ export function drawCompare(canvas, edits, info, logos, L) {
   const a = edits[0].img.naturalHeight / edits[0].img.naturalWidth;
   const top = L.m;
   const inner = { x: L.photo.x, w: L.photo.w };
+  edgePrint(ctx, L, inner.x, inner.x + inner.w, '0');
 
   // three ways to lay them out; the one that shows the photos biggest wins.
   // in a row or a column the details go in a band underneath; in a 2x2 grid
@@ -398,10 +420,10 @@ export function drawCompare(canvas, edits, info, logos, L) {
     ctx.drawImage(e.img, x, y, pw, ph);
     const s = U * 2.6;
     const cy = y + ph + label * 0.5;
-    const nw = measure(ctx, e.name, { size: U * 1.5, weight: 700 });
+    const nw = measure(ctx, e.name, NAME(0.75));
     const startX = x + pw / 2 - (s + U * 0.7 + nw) / 2;
     mark(ctx, e.logo, e.name, startX, cy, s);
-    text(ctx, e.name, startX + s + U * 0.7, cy, { size: U * 1.5, weight: 700 });
+    text(ctx, e.name, startX + s + U * 0.7, cy, NAME(0.75));
   });
 
   if (best.kind === 'grid') {

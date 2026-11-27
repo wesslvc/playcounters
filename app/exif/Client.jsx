@@ -227,7 +227,7 @@ export default function Client() {
             <div className="ex-fields">
               <label>제조사<input value={lines.make} onChange={set('make')} placeholder="FUJIFILM" /></label>
               <label>기종<input value={lines.model} onChange={set('model')} placeholder="X100V" /></label>
-              <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  f/2  1/250s  ISO200" /></label>
+              <label>설정<input value={lines.settings} onChange={set('settings')} placeholder="23mm  F/2  1/250s  ISO200" /></label>
               <label>렌즈<input value={lines.lens} onChange={set('lens')} placeholder="(선택)" /></label>
               <label>날짜<input value={lines.taken} onChange={set('taken')} placeholder="2026.11.27 14:03" /></label>
               <label className="ex-wide">장소<input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Seongsu, Seoul" /></label>

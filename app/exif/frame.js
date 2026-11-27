@@ -294,7 +294,11 @@ function camera(ctx, right, cy, info, room, withSettings, scale = 1) {
  * One edit framed. `info`: shooter, editor, own (the shooter's own edit),
  * make, model, settings; `logos`: { shooter, editor } (Images or null).
  */
+// apertures as F/2, also when typed as f/2
+const upperF = (info) => ({ ...info, settings: (info.settings || '').replace(/(^|\s)f\/(?=\d)/g, '$1F/') });
+
 export function drawFrame(canvas, img, info, logos, L = layout(img)) {
+  info = upperF(info);
   canvas.width = L.w;
   canvas.height = L.h;
   const ctx = canvas.getContext('2d');
@@ -427,6 +431,7 @@ function infoBlock(ctx, x, y, w, h, info, logo) {
  * the date.
  */
 export function drawCompare(canvas, edits, info, logos, L) {
+  info = upperF(info);
   canvas.width = L.w;
   canvas.height = L.h;
   const ctx = canvas.getContext('2d');

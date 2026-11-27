@@ -95,7 +95,7 @@ export function caption(x) {
     : null;
   const settings = [
     x.focal35 ? `${x.focal35}mm` : x.focal ? `${trimZero(x.focal)}mm` : null,
-    x.fnumber ? `f/${trimZero(x.fnumber)}` : null,
+    x.fnumber ? `F/${trimZero(x.fnumber)}` : null,
     shutter,
     x.iso ? `ISO${x.iso}` : null,
   ].filter(Boolean).join('  ');
